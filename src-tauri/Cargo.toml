@@ -23,6 +23,7 @@ rusqlite = { version = "0.32.1", features = ["bundled"] }
 
 # Utility dependencies (minimal)
 uuid = { version = "1.11.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.

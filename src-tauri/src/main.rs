@@ -4,6 +4,7 @@
 use tauri::Manager;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use chrono::Utc;
 
 // Simple in-memory storage for now (will be replaced with SQLite later)
 static PROBLEMS: Mutex<Option<HashMap<String, serde_json::Value>>> = Mutex::new(None);
@@ -156,6 +157,59 @@ fn create_card(request: serde_json::Value) -> Result<serde_json::Value, String> 
     Ok(new_card)
 }
 
+// Update an existing card
+#[tauri::command]
+fn update_card(
+    card_id: String,
+    code: Option<String>,
+    notes: Option<String>,
+    language: Option<String>,
+) -> Result<serde_json::Value, String> {
+    println!("Updating card {} with code: {}, notes: {}, language: {:?}", 
+             card_id, 
+             code.as_ref().map(|c| c.len()).unwrap_or(0), 
+             notes.as_ref().map(|n| n.len()).unwrap_or(0),
+             language);
+    
+    let mut cards = CARDS.lock().unwrap();
+    
+    match cards.as_mut() {
+        Some(data) => {
+            match data.get_mut(&card_id) {
+                Some(card) => {
+                    // Update fields if provided
+                    if let Some(new_code) = code {
+                        card["code"] = serde_json::Value::String(new_code);
+                    }
+                    if let Some(new_notes) = notes {
+                        card["notes"] = serde_json::Value::String(new_notes);
+                    }
+                    if let Some(new_language) = language {
+                        card["language"] = serde_json::Value::String(new_language);
+                    }
+                    
+                    // Update timestamp
+                    let now = Utc::now();
+                    card["last_modified"] = serde_json::Value::String(now.to_rfc3339());
+                    
+                    println!("Card updated successfully: {}", card_id);
+                    Ok(card.clone())
+                }
+                None => {
+                    let error = format!("Card with id {} not found", card_id);
+                    println!("Error: {}", error);
+                    Err(error)
+                }
+            }
+        }
+        None => {
+            let error = "Database not initialized".to_string();
+            println!("Error: {}", error);
+            Err(error)
+        }
+    }
+}
+
 // Simple greet command for testing
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -171,7 +225,8 @@ fn main() {
             get_problems,
             get_problem_by_id,
             get_cards_for_problem,
-            create_card
+            create_card,
+            update_card
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { 
@@ -6,9 +6,15 @@ import {
   ArrowRightIcon, 
   PlayIcon, 
   StopIcon,
-  MicrophoneIcon
+  MicrophoneIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import { Problem, Card } from '../types';
+import { MonacoEditor } from '../components/MonacoEditor';
+import { QuillEditor } from '../components/QuillEditor';
+import { LanguageSelector } from '../components/LanguageSelector';
+import { useAutoSave } from '../hooks/useAutoSave';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -20,6 +26,81 @@ export default function ProblemCard() {
   const [error, setError] = useState<string | null>(null);
   const [timerState, setTimerState] = useState({ isRunning: false, elapsedTime: 0 });
   const [recordingState, setRecordingState] = useState({ isRecording: false });
+
+  // Editor state
+  const [code, setCode] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
+  const [language, setLanguage] = useState<string>('javascript');
+  const [isDark, setIsDark] = useState<boolean>(false);
+
+  // Detect dark mode from document
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains('dark'));
+    
+    // Listen for theme changes
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Save functions
+  const saveCard = useCallback(async () => {
+    if (!currentCard) return;
+    
+    try {
+      const updatedCard = await invoke<Card>('update_card', {
+        cardId: currentCard.id,
+        code: code !== currentCard.code ? code : null,
+        notes: notes !== currentCard.notes ? notes : null,
+        language: language !== currentCard.language ? language : null,
+      });
+      
+      // Update the current card and cards array
+      setCurrentCard(updatedCard);
+      setCards(prev => prev.map(card => 
+        card.id === updatedCard.id ? updatedCard : card
+      ));
+      
+    } catch (err) {
+      console.error('Failed to save card:', err);
+      throw err;
+    }
+  }, [currentCard, code, notes, language]);
+
+  // Auto-save hooks
+  const codeAutoSave = useAutoSave(code, async () => {
+    if (currentCard && code !== currentCard.code) {
+      await saveCard();
+    }
+  }, { delay: 3000, enabled: !!currentCard });
+
+  const notesAutoSave = useAutoSave(notes, async () => {
+    if (currentCard && notes !== currentCard.notes) {
+      await saveCard();
+    }
+  }, { delay: 3000, enabled: !!currentCard });
+
+  const languageAutoSave = useAutoSave(language, async () => {
+    if (currentCard && language !== currentCard.language) {
+      await saveCard();
+    }
+  }, { delay: 1000, enabled: !!currentCard }); // Faster save for language changes
+
+  // Manual save function
+  const handleManualSave = useCallback(async () => {
+    try {
+      await saveCard();
+    } catch (err) {
+      // Error handling is done in the saveCard function
+    }
+  }, [saveCard]);
 
   useEffect(() => {
     if (problemId) {
@@ -35,6 +116,15 @@ export default function ProblemCard() {
       setCurrentCard(cards[0]);
     }
   }, [cardId, cards]);
+
+  // Sync editor state when current card changes
+  useEffect(() => {
+    if (currentCard) {
+      setCode(currentCard.code || '');
+      setNotes(currentCard.notes || '');
+      setLanguage(currentCard.language || 'javascript');
+    }
+  }, [currentCard]);
 
   const loadProblem = async () => {
     try {
@@ -193,29 +283,65 @@ export default function ProblemCard() {
           </div>
 
           {/* Controls */}
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-3">
+            {/* Language Selector */}
+            <div className="flex flex-col items-end">
+              <LanguageSelector
+                value={language}
+                onChange={setLanguage}
+                className="w-32"
+              />
+            </div>
+
+            {/* Save Indicators */}
+            <div className="flex items-center space-x-1">
+              {(codeAutoSave.isLoading || notesAutoSave.isLoading || languageAutoSave.isLoading) && (
+                <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
+                  <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
+                  <span className="text-xs">Saving...</span>
+                </div>
+              )}
+              
+              {(codeAutoSave.isSaved && notesAutoSave.isSaved && languageAutoSave.isSaved && 
+                !codeAutoSave.isLoading && !notesAutoSave.isLoading && !languageAutoSave.isLoading) && (
+                <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
+                  <CheckCircleIcon className="h-3 w-3" />
+                  <span className="text-xs">Saved</span>
+                </div>
+              )}
+              
+              {(codeAutoSave.error || notesAutoSave.error || languageAutoSave.error) && (
+                <div className="flex items-center space-x-1 text-red-600 dark:text-red-400">
+                  <ExclamationCircleIcon className="h-3 w-3" />
+                  <span className="text-xs">Error</span>
+                </div>
+              )}
+            </div>
+
             {/* Card Navigation */}
-            <button
-              onClick={() => navigateToCard('prev')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              disabled={cards.length <= 1}
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-            </button>
-            
-            <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-              {currentCard?.card_number || 1} / {cards.length}
-            </span>
-            
-            <button
-              onClick={() => navigateToCard('next')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <ArrowRightIcon className="h-4 w-4" />
-            </button>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => navigateToCard('prev')}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                disabled={cards.length <= 1}
+              >
+                <ArrowLeftIcon className="h-4 w-4" />
+              </button>
+              
+              <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
+                {currentCard?.card_number || 1} / {cards.length}
+              </span>
+              
+              <button
+                onClick={() => navigateToCard('next')}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <ArrowRightIcon className="h-4 w-4" />
+              </button>
+            </div>
 
             {/* Timer */}
-            <div className="flex items-center space-x-2 px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
+            <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <button
                 onClick={toggleTimer}
                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
@@ -278,32 +404,60 @@ export default function ProblemCard() {
 
         {/* Editor and Notes */}
         <div className="flex-1 flex flex-col">
-          {/* Code Editor Placeholder */}
-          <div className="flex-1 bg-gray-50 dark:bg-gray-900">
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-gray-500 dark:text-gray-400 mb-4">
-                  Monaco Editor will be integrated here
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
-                  Code: {currentCard?.code || 'No code yet'}
-                </p>
+          {/* Monaco Code Editor */}
+          <div className="flex-1 bg-gray-50 dark:bg-gray-900 relative">
+            <div className="absolute top-2 right-2 z-10">
+              <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                <span>Code Editor</span>
+                <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
               </div>
             </div>
+            {currentCard ? (
+              <MonacoEditor
+                value={code}
+                language={language}
+                theme={isDark ? 'vs-dark' : 'vs-light'}
+                onChange={setCode}
+                onSave={handleManualSave}
+                className="h-full"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Select a card to start coding
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Notes Section Placeholder */}
-          <div className="h-1/3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <div className="h-full flex items-center justify-center">
-              <div className="text-center">
-                <p className="text-gray-500 dark:text-gray-400 mb-4">
-                  QuillJS Rich Text Editor will be integrated here
-                </p>
-                <p className="text-sm text-gray-400 dark:text-gray-500">
-                  Notes: {currentCard?.notes || 'No notes yet'}
-                </p>
+          {/* QuillJS Rich Text Editor */}
+          <div className="h-1/3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 relative">
+            <div className="absolute top-2 right-2 z-10">
+              <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                <span>Notes</span>
+                <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
               </div>
             </div>
+            {currentCard ? (
+              <QuillEditor
+                value={notes}
+                theme={isDark ? 'dark' : 'light'}
+                onChange={setNotes}
+                onSave={handleManualSave}
+                placeholder="Write your notes, observations, and thoughts here..."
+                className="h-full"
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Select a card to start taking notes
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
