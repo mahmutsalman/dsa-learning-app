@@ -1,0 +1,32 @@
+[package]
+name = "dsa-learning-app"
+version = "0.1.0"
+description = "A card-based learning management system for practicing DSA problems"
+authors = ["you"]
+license = ""
+repository = ""
+default-run = "dsa-learning-app"
+edition = "2021"
+rust-version = "1.70"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2", features = [ "protocol-asset"] }
+tauri-plugin-shell = "2"
+
+# Database dependencies (minimal features for now)
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+
+# Utility dependencies (minimal)
+uuid = { version = "1.11.0", features = ["v4"] }
+
+[features]
+# This feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
+# If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.
+default = ["custom-protocol"]
+# DO NOT remove this
+custom-protocol = ["tauri/custom-protocol"]

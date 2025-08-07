@@ -1,0 +1,193 @@
+// Core entity types based on the database schema
+
+export type Difficulty = 'Easy' | 'Medium' | 'Hard';
+export type CardStatus = 'In Progress' | 'Completed' | 'Paused';
+export type ConnectionType = 'related' | 'prerequisite' | 'similar' | 'builds-upon';
+export type TagCategory = 'algorithm' | 'data-structure' | 'pattern' | 'custom';
+
+export interface Problem {
+  id: string;
+  title: string;
+  description: string;
+  difficulty: Difficulty;
+  category: string[];
+  tags: string[];
+  created_at: string;
+  leetcode_url?: string;
+  constraints: string[];
+  examples: object[];
+  hints: string[];
+}
+
+export interface Card {
+  id: string;
+  problem_id: string;
+  card_number: number;
+  code: string;
+  language: string;
+  notes: string;
+  status: CardStatus;
+  total_duration: number; // in seconds
+  created_at: string;
+  last_modified: string;
+  parent_card_id?: string;
+}
+
+export interface TimeSession {
+  id: string;
+  card_id: string;
+  start_time: string;
+  end_time?: string;
+  duration?: number; // in seconds
+  date: string;
+  is_active: boolean;
+  notes?: string;
+}
+
+export interface Recording {
+  id: string;
+  card_id: string;
+  time_session_id?: string;
+  audio_url: string;
+  duration?: number;
+  transcript?: string;
+  created_at: string;
+  filename: string;
+  filepath: string;
+  file_size?: number;
+}
+
+export interface Connection {
+  id: string;
+  source_card_id: string;
+  target_card_id: string;
+  connection_type: ConnectionType;
+  notes?: string;
+  created_at: string;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  category: TagCategory;
+}
+
+// Frontend-specific types
+export interface ProblemWithCards extends Problem {
+  cards: Card[];
+  total_time: number;
+  last_worked_at?: string;
+}
+
+export interface CardWithDetails extends Card {
+  problem: Problem;
+  time_sessions: TimeSession[];
+  recordings: Recording[];
+  connections: Connection[];
+  tags: Tag[];
+}
+
+export interface TimerState {
+  isRunning: boolean;
+  isPaused: boolean;
+  currentSessionId?: string;
+  sessionStartTime?: Date;
+  elapsedTime: number; // in seconds
+}
+
+export interface RecordingState {
+  isRecording: boolean;
+  isPaused: boolean;
+  currentRecordingId?: string;
+  recordingStartTime?: Date;
+  elapsedRecordingTime: number; // in seconds
+}
+
+export interface AudioPlayerState {
+  isVisible: boolean;
+  recording: Recording | null;
+  isPlaying: boolean;
+  isPaused: boolean;
+  savedPosition: number;
+  audioUrl: string;
+  isLoading: boolean;
+  error: string;
+  shouldAutoPlay: boolean;
+  playbackSpeed: number;
+}
+
+export interface AppSettings {
+  theme: 'light' | 'dark' | 'system';
+  defaultLanguage: string;
+  autoSave: boolean;
+  autoSaveInterval: number; // in milliseconds
+  showLineNumbers: boolean;
+  fontFamily: string;
+  fontSize: number;
+  recordingQuality: 'low' | 'medium' | 'high';
+  shortcuts: Record<string, string>;
+}
+
+// API Response types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// Recording info returned from Tauri
+export interface RecordingInfo {
+  filename: string;
+  filepath: string;
+}
+
+// Analytics types
+export interface StudyAnalytics {
+  totalProblems: number;
+  completedProblems: number;
+  totalStudyTime: number; // in seconds
+  averageSessionTime: number; // in seconds
+  problemsByDifficulty: Record<Difficulty, number>;
+  studyStreakDays: number;
+  mostProductiveHour: number;
+  weeklyProgress: {
+    date: string;
+    studyTime: number;
+    problemsSolved: number;
+  }[];
+  topTags: {
+    tag: string;
+    count: number;
+    successRate: number;
+  }[];
+}
+
+// Filter and sort types
+export interface ProblemFilter {
+  difficulty?: Difficulty[];
+  tags?: string[];
+  status?: CardStatus[];
+  dateRange?: {
+    start: Date;
+    end: Date;
+  };
+  hasRecordings?: boolean;
+  minTime?: number; // minimum time spent in seconds
+  maxTime?: number; // maximum time spent in seconds
+}
+
+export type ProblemSort = 
+  | 'recent'
+  | 'timeSpent'
+  | 'difficulty'
+  | 'title'
+  | 'created'
+  | 'sessions';
+
+export interface SearchOptions {
+  query: string;
+  filter: ProblemFilter;
+  sort: ProblemSort;
+  sortDirection: 'asc' | 'desc';
+}
