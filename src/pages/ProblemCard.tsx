@@ -11,7 +11,7 @@ import {
   ExclamationCircleIcon
 } from '@heroicons/react/24/outline';
 import { Problem, Card } from '../types';
-import { MonacoEditor } from '../components/MonacoEditor';
+import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { useAutoSave } from '../hooks/useAutoSave';
@@ -405,7 +405,7 @@ export default function ProblemCard() {
         {/* Editor and Notes */}
         <div className="flex-1 flex flex-col">
           {/* Monaco Code Editor */}
-          <div className="flex-1 bg-gray-50 dark:bg-gray-900 relative">
+          <div className="bg-gray-50 dark:bg-gray-900 relative">
             <div className="absolute top-2 right-2 z-10">
               <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>Code Editor</span>
@@ -413,13 +413,15 @@ export default function ProblemCard() {
               </div>
             </div>
             {currentCard ? (
-              <MonacoEditor
+              <ResizableMonacoEditor
                 value={code}
                 language={language}
                 theme={isDark ? 'vs-dark' : 'vs-light'}
                 onChange={setCode}
                 onSave={handleManualSave}
-                className="h-full"
+                initialHeight={400}
+                minHeight={200}
+                maxHeight={window.innerHeight * 0.8}
               />
             ) : (
               <div className="h-full flex items-center justify-center">
