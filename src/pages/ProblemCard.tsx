@@ -405,7 +405,7 @@ export default function ProblemCard() {
         {/* Editor and Notes */}
         <div className="flex-1 flex flex-col">
           {/* Monaco Code Editor */}
-          <div className="bg-gray-50 dark:bg-gray-900 relative">
+          <div className="bg-gray-50 dark:bg-gray-900 relative min-h-0">
             <div className="absolute top-2 right-2 z-10">
               <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>Code Editor</span>
@@ -435,7 +435,7 @@ export default function ProblemCard() {
           </div>
 
           {/* QuillJS Rich Text Editor */}
-          <div className="h-1/3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 relative">
+          <div className="flex-1 min-h-[300px] border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 relative">
             <div className="absolute top-2 right-2 z-10">
               <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                 <span>Notes</span>

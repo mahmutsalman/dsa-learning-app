@@ -61,31 +61,47 @@ export function QuillEditor({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  const [useFallback, setUseFallback] = useState(false);
+  const [useFallback, setUseFallback] = useState(true); // Default to fallback until Quill is fixed
   
   console.log('🔍 Current state:', { isReady, error, isInitializing, useFallback });
   const isUpdating = useRef(false);
+  const initializationLock = useRef(false);
 
   // Initialize Quill instance with proper DOM readiness check
   useEffect(() => {
+    // Skip Quill initialization - using fallback editor
+    console.log('🔧 QuillEditor useEffect - skipping Quill initialization, using fallback');
+    return () => {
+      console.log('🧹 QuillEditor cleanup - no Quill instance to clean');
+    };
+    
+    /* DISABLED QUILL INITIALIZATION
     console.log('🔧 QuillEditor useEffect triggered');
     console.log('🔧 quillRef.current:', !!quillRef.current);
     console.log('🔧 quillInstance.current:', !!quillInstance.current);
     console.log('🔧 isInitializing:', isInitializing);
+    console.log('🔧 initializationLock:', initializationLock.current);
     
-    if (quillInstance.current || isInitializing) {
+    if (quillInstance.current || isInitializing || initializationLock.current) {
       console.log('🔧 Early return - already initializing or initialized');
       return;
     }
     
-    // Wait for DOM element to be available with retry mechanism
-    const checkAndInitialize = () => {
+    // Set initialization lock
+    initializationLock.current = true;
+    
+    // Simple DOM element check
+    const checkDOMReady = () => {
       console.log('🔍 Checking DOM element availability...');
       if (!quillRef.current) {
-        console.log('🔧 DOM element not ready yet, will retry...');
+        console.log('🔧 DOM element not ready');
         return false;
       }
-      console.log('✅ DOM element is ready, proceeding with initialization');
+      if (!document.contains(quillRef.current)) {
+        console.log('🔧 DOM element not in document');
+        return false;
+      }
+      console.log('✅ DOM element is ready');
       return true;
     };
 
@@ -116,21 +132,17 @@ export function QuillEditor({
           console.log('📦 Strategy 1: Dynamic import...');
           const quillModule = await import('quill');
           console.log('📦 Import result:', quillModule);
-          QuillClass = quillModule.default || quillModule;
+          QuillClass = quillModule.default;
+          
+          // If default is not available, try the module itself
+          if (!QuillClass && typeof quillModule === 'function') {
+            QuillClass = quillModule;
+          }
+          
           console.log('📦 QuillClass:', QuillClass);
         } catch (importError) {
           console.error('❌ Dynamic import failed:', importError);
-          
-          // Strategy 2: Try named import
-          try {
-            console.log('📦 Strategy 2: Named import...');
-            const { Quill } = await import('quill');
-            QuillClass = Quill;
-            console.log('📦 Named import successful:', QuillClass);
-          } catch (namedImportError) {
-            console.error('❌ Named import failed:', namedImportError);
-            throw new Error(`Failed to import Quill: ${importError.message}`);
-          }
+          throw new Error(`Failed to import Quill: ${importError.message}`);
         }
         
         if (!QuillClass) {
@@ -210,89 +222,67 @@ export function QuillEditor({
         console.log('❌ Setting error state:', errorMessage);
         setError(errorMessage);
         
-        // Auto-fallback after 3 seconds of showing error
+        // Auto-fallback after 1 second of showing error
         console.log('⏰ Setting auto-fallback timer...');
         setTimeout(() => {
           console.log('⏰ Auto-fallback triggered');
           setUseFallback(true);
-        }, 3000);
+        }, 1000);
       } finally {
         console.log('🏁 Quill initialization process finished');
         setIsInitializing(false);
+        initializationLock.current = false; // Release lock
       }
     };
 
-    // Retry mechanism to wait for DOM element
-    let retryCount = 0;
-    const maxRetries = 20; // Max 2 seconds (20 * 100ms)
-    
-    const attemptInitialization = () => {
-      console.log(`🔄 Initialization attempt ${retryCount + 1}/${maxRetries}`);
-      
-      if (checkAndInitialize()) {
-        initializeQuill();
+    // Simple initialization - check DOM and initialize immediately or use fallback
+    const startInitialization = () => {
+      if (!checkDOMReady()) {
+        console.error('❌ DOM element not available');
+        setError('Rich text editor failed to load');
+        initializationLock.current = false;
+        setTimeout(() => setUseFallback(true), 500);
         return;
       }
       
-      retryCount++;
-      if (retryCount < maxRetries) {
-        console.log(`⏱️ Retrying in 100ms... (${retryCount}/${maxRetries})`);
-        setTimeout(attemptInitialization, 100);
-      } else {
-        console.error('❌ Max retries reached - DOM element never became available');
-        setError('Editor failed to initialize: DOM element not available');
-      }
+      // Initialize immediately if DOM is ready
+      initializeQuill();
     };
     
-    console.log('🚀 Starting initialization attempt...');
-    attemptInitialization();
+    // Use a small timeout to ensure DOM is ready
+    const initTimer = setTimeout(() => {
+      console.log('🚀 Starting initialization...');
+      startInitialization();
+    }, 100);
     
     return () => {
       console.log('🧹 QuillEditor cleanup function called');
+      clearTimeout(initTimer);
       if (quillInstance.current) {
         console.log('🧹 Cleaning up Quill instance');
+        // Remove all event listeners
+        quillInstance.current.off('text-change');
         quillInstance.current = null;
       }
+      // Reset all state
+      initializationLock.current = false;
+      setIsReady(false);
+      setError(null);
+      setIsInitializing(false);
     };
+    END DISABLED QUILL INITIALIZATION */
   }, [onChange, onSave, placeholder]);
 
-  // Update content when value changes externally
+  // Update content when value changes externally - DISABLED (using fallback editor)
   useEffect(() => {
-    if (!quillInstance.current || !isReady) return;
-
-    const currentContent = quillInstance.current.root.innerHTML;
-    const newContent = value || '';
-    
-    // Only update if content is actually different
-    if (currentContent !== newContent && (newContent !== '<p><br></p>' || currentContent !== '')) {
-      isUpdating.current = true;
-      
-      if (newContent === '') {
-        quillInstance.current.setText('');
-      } else {
-        quillInstance.current.root.innerHTML = newContent;
-      }
-      
-      isUpdating.current = false;
-    }
+    // Skip content update - using fallback editor
+    console.log('🔧 Skipping Quill content update - using fallback editor');
   }, [value, isReady]);
 
-  // Apply dark theme styles
+  // Apply dark theme styles - DISABLED (using fallback editor)
   useEffect(() => {
-    if (!quillRef.current) return;
-
-    const editorContainer = quillRef.current.closest('.ql-container');
-    const toolbar = quillRef.current.parentElement?.querySelector('.ql-toolbar');
-
-    if (theme === 'dark') {
-      // Add dark theme classes
-      editorContainer?.classList.add('dark-theme');
-      toolbar?.classList.add('dark-theme');
-    } else {
-      // Remove dark theme classes
-      editorContainer?.classList.remove('dark-theme');
-      toolbar?.classList.remove('dark-theme');
-    }
+    // Skip theme application - using fallback editor
+    console.log('🔧 Skipping Quill theme application - using fallback editor');
   }, [theme]);
 
   // Show error state if initialization failed
@@ -309,23 +299,26 @@ export function QuillEditor({
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{error}</p>
           <div className="flex space-x-2">
             <button
+              onClick={() => setUseFallback(true)}
+              className="px-3 py-1 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
+            >
+              Use Plain Text Editor
+            </button>
+            <button
               onClick={() => {
                 setError(null);
                 setIsReady(false);
+                setIsInitializing(false);
+                initializationLock.current = false; // Reset lock for retry
                 // Trigger re-initialization
                 if (quillInstance.current) {
+                  quillInstance.current.off('text-change');
                   quillInstance.current = null;
                 }
               }}
-              className="px-3 py-1 text-sm bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors"
-            >
-              Retry
-            </button>
-            <button
-              onClick={() => setUseFallback(true)}
               className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
             >
-              Use Plain Text
+              Retry Rich Text
             </button>
           </div>
         </div>
@@ -352,9 +345,10 @@ export function QuillEditor({
       {/* Always render the Quill container div so the ref can attach */}
       <div 
         ref={quillRef} 
-        className="h-full"
+        className="h-full w-full"
         style={{ 
           height: '100%',
+          minHeight: '200px',
           display: 'block',
           visibility: isReady ? 'visible' : 'hidden'
         }}
