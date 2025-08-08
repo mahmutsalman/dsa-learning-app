@@ -88,18 +88,29 @@ pub async fn get_card_by_id(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<Option<Card>, String> {
-    // TODO: Implement get_card_by_id in DatabaseManager
-    Ok(None)
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_card_by_id(&id).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn update_card(
     state: State<'_, AppState>,
-    request: UpdateCardRequest,
-) -> Result<String, String> {
+    card_id: String,
+    code: Option<String>,
+    notes: Option<String>,
+    language: Option<String>,
+    status: Option<String>,
+) -> Result<Option<Card>, String> {
+    let request = UpdateCardRequest {
+        id: card_id,
+        code,
+        notes,
+        language,
+        status,
+    };
+    
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
-    db.update_card(request).map_err(|e| e.to_string())?;
-    Ok("Card updated successfully".to_string())
+    db.update_card(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

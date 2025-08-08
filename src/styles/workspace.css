@@ -1,0 +1,398 @@
+/* Unified Workspace Styles */
+
+/* CSS Variables for consistent theming */
+.unified-workspace {
+  --workspace-border-color: rgba(0, 0, 0, 0.1);
+  --workspace-border-color-hover: rgba(0, 0, 0, 0.2);
+  --workspace-resize-handle-color: #007acc;
+  --workspace-resize-handle-hover-color: #005a9e;
+  --workspace-transition-speed: 200ms;
+  --workspace-border-radius: 4px;
+  --workspace-spacing: 0px;
+}
+
+/* Dark mode variables */
+.dark .unified-workspace {
+  --workspace-border-color: rgba(255, 255, 255, 0.1);
+  --workspace-border-color-hover: rgba(255, 255, 255, 0.2);
+  --workspace-resize-handle-color: #0078d4;
+  --workspace-resize-handle-hover-color: #106ebe;
+}
+
+/* Main workspace container */
+.unified-workspace {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+  position: relative;
+  user-select: none; /* Prevent text selection during resize */
+}
+
+/* Workspace panels */
+.workspace-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--workspace-border-color);
+  margin: var(--workspace-spacing);
+  background: inherit;
+  transition: border-color var(--workspace-transition-speed) ease;
+}
+
+/* Remove default margins and create seamless borders */
+.workspace-panel:not(:first-child) {
+  margin-left: -1px;
+}
+
+.workspace-panel:not(.workspace-panel:first-of-type) {
+  margin-top: -1px;
+}
+
+/* Panel content container */
+.workspace-panel-content {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Specific panel styles */
+.workspace-panel-problem {
+  border-right: 1px solid var(--workspace-border-color);
+  border-bottom: none;
+  border-top: none;
+  border-left: none;
+}
+
+.workspace-panel-code {
+  border-bottom: 1px solid var(--workspace-border-color);
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.workspace-panel-notes {
+  border: none;
+}
+
+/* Resize handles */
+.workspace-resize-handle {
+  background: transparent;
+  transition: all var(--workspace-transition-speed) ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace-resize-handle:hover {
+  background-color: var(--workspace-resize-handle-color);
+  opacity: 0.3;
+}
+
+/* Vertical resize handle */
+.workspace-resize-handle-vertical {
+  cursor: col-resize;
+}
+
+.workspace-resize-handle-vertical:hover {
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--workspace-resize-handle-color) 50%,
+    transparent 100%
+  );
+}
+
+/* Horizontal resize handle */
+.workspace-resize-handle-horizontal {
+  cursor: row-resize;
+}
+
+.workspace-resize-handle-horizontal:hover {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--workspace-resize-handle-color) 50%,
+    transparent 100%
+  );
+}
+
+/* Resize handle indicators */
+.resize-handle-indicator {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.resize-handle-dots-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+.resize-handle-dots-horizontal {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  align-items: center;
+}
+
+.resize-handle-dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background-color: var(--workspace-border-color-hover);
+  opacity: 0.5;
+  transition: all var(--workspace-transition-speed) ease;
+}
+
+.workspace-resize-handle:hover .resize-handle-dot {
+  background-color: white;
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+/* Focus and interaction states */
+.workspace-resize-handle:focus {
+  outline: 2px solid var(--workspace-resize-handle-color);
+  outline-offset: -1px;
+}
+
+.workspace-resize-handle:active {
+  background-color: var(--workspace-resize-handle-hover-color);
+  opacity: 0.5;
+}
+
+/* Panel hover states */
+.workspace-panel:hover {
+  border-color: var(--workspace-border-color-hover);
+}
+
+/* Smooth transitions for resize operations */
+.unified-workspace:not(.resizing) .workspace-panel,
+.unified-workspace:not(.resizing) .workspace-panel-content {
+  transition: all var(--workspace-transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Disable transitions during active resize */
+.unified-workspace.resizing * {
+  transition: none !important;
+  pointer-events: none;
+}
+
+.unified-workspace.resizing .workspace-resize-handle {
+  pointer-events: all;
+}
+
+/* Mobile and touch device improvements */
+@media (hover: none) and (pointer: coarse) {
+  .workspace-resize-handle {
+    width: 8px !important;
+    height: 8px !important;
+  }
+  
+  .workspace-resize-handle-vertical {
+    width: 8px !important;
+  }
+  
+  .workspace-resize-handle-horizontal {
+    height: 8px !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .unified-workspace {
+    --workspace-border-color: rgba(0, 0, 0, 0.5);
+    --workspace-border-color-hover: rgba(0, 0, 0, 0.8);
+  }
+  
+  .dark .unified-workspace {
+    --workspace-border-color: rgba(255, 255, 255, 0.5);
+    --workspace-border-color-hover: rgba(255, 255, 255, 0.8);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .unified-workspace {
+    --workspace-transition-speed: 0ms;
+  }
+  
+  .workspace-panel,
+  .workspace-panel-content,
+  .workspace-resize-handle,
+  .resize-handle-dot {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Print styles */
+@media print {
+  .workspace-resize-handle {
+    display: none;
+  }
+  
+  .workspace-panel {
+    border: 1px solid black !important;
+    break-inside: avoid;
+  }
+}
+
+/* Ensure proper stacking context */
+.unified-workspace {
+  isolation: isolate;
+}
+
+.workspace-resize-handle {
+  z-index: 10;
+}
+
+.workspace-panel {
+  z-index: 1;
+}
+
+/* Animation for panel collapse/expand */
+@keyframes panel-collapse {
+  from {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+  to {
+    opacity: 0.8;
+    transform: scaleX(0.1);
+  }
+}
+
+@keyframes panel-expand {
+  from {
+    opacity: 0.8;
+    transform: scaleX(0.1);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.workspace-panel.collapsing {
+  animation: panel-collapse var(--workspace-transition-speed) ease-in-out;
+}
+
+.workspace-panel.expanding {
+  animation: panel-expand var(--workspace-transition-speed) ease-in-out;
+}
+
+/* Integration with Monaco Editor */
+.workspace-panel-code .monaco-editor {
+  border: none !important;
+}
+
+.workspace-panel-code .monaco-editor .overflow-guard {
+  border-radius: 0 !important;
+}
+
+/* Integration with Quill Editor */
+.workspace-panel-notes .ql-container {
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.workspace-panel-notes .ql-toolbar {
+  border: none !important;
+  border-bottom: 1px solid var(--workspace-border-color) !important;
+  border-radius: 0 !important;
+}
+
+/* Workspace-integrated Problem Panel Overrides */
+.workspace-integrated .resizable-problem-panel-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.workspace-integrated .resizable-problem-panel-container > div {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* Remove borders from workspace-integrated problem panel since workspace handles them */
+.unified-workspace .workspace-panel-problem .resizable-problem-panel-container > div > div {
+  border-right: none !important;
+  border-radius: 0 !important;
+}
+
+/* Ensure problem panel content fills workspace-allocated space */
+.unified-workspace .workspace-panel-problem .resizable-problem-panel-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+/* Responsive text adjustments for narrow widths */
+.unified-workspace .workspace-panel-problem .problem-title-responsive {
+  word-wrap: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
+}
+
+.unified-workspace .workspace-panel-problem .problem-description-content {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
+}
+
+/* Adjust header padding for very narrow problem panels */
+.unified-workspace .workspace-panel-problem[data-width="narrow"] h2 {
+  font-size: 1rem;
+}
+
+.unified-workspace .workspace-panel-problem[data-width="narrow"] h3 {
+  font-size: 1.125rem;
+}
+
+/* Ensure consistent spacing in workspace mode */
+.unified-workspace .workspace-panel-problem .prose {
+  max-width: none !important;
+}
+
+/* Handle transition between collapsed and expanded states */
+.unified-workspace .workspace-panel-problem .transition-all {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Override individual resizable component styles when in workspace */
+.unified-workspace .resizable-monaco-container,
+.unified-workspace .resizable-problem-panel-container {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.unified-workspace .resizable-monaco-box,
+.unified-workspace .resizable-problem-panel-box {
+  height: 100% !important;
+  width: 100% !important;
+  position: static !important;
+}
+
+.unified-workspace .react-resizable-handle {
+  display: none !important;
+}
+
+/* Accessibility improvements */
+.workspace-resize-handle[aria-label] {
+  /* Screen readers will announce the purpose */
+}
+
+.workspace-resize-handle:focus-visible {
+  outline: 2px solid var(--workspace-resize-handle-color);
+  outline-offset: 2px;
+}
