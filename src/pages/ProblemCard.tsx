@@ -8,7 +8,8 @@ import {
   StopIcon,
   MicrophoneIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import { Problem, Card } from '../types';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
@@ -17,6 +18,7 @@ import { LanguageSelector } from '../components/LanguageSelector';
 // import ResizableProblemDescriptionPanel from '../components/ResizableProblemDescriptionPanel';
 import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
 import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
+import DeleteCardModal from '../components/DeleteCardModal';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { logDatabaseAnalysis, getSiblingCards } from '../utils/databaseAnalysis';
 
@@ -30,6 +32,7 @@ export default function ProblemCard() {
   const [error, setError] = useState<string | null>(null);
   const [timerState, setTimerState] = useState({ isRunning: false, elapsedTime: 0 });
   const [recordingState, setRecordingState] = useState({ isRecording: false });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
 
   // Editor state
   const [code, setCode] = useState<string>('');
@@ -211,6 +214,52 @@ export default function ProblemCard() {
       navigate(`/problem/${problemId}/card/${newCard.id}`);
     } catch (err) {
       console.error('Failed to create child card:', err);
+    }
+  };
+
+  const deleteCard = async () => {
+    if (!currentCard || !currentCard.parent_card_id) {
+      console.error('Cannot delete main card or no card selected');
+      return;
+    }
+
+    try {
+      setDeleteModal(prev => ({ ...prev, isDeleting: true }));
+
+      // Call backend to delete the card
+      await invoke('delete_card', { id: currentCard.id });
+
+      // Update local state - remove the deleted card
+      const updatedCards = cards.filter(card => card.id !== currentCard.id);
+      setCards(updatedCards);
+
+      // Navigate to appropriate card after deletion
+      if (updatedCards.length > 0) {
+        const allProblemCards = updatedCards
+          .filter(card => card.problem_id === currentCard.problem_id)
+          .sort((a, b) => a.card_number - b.card_number);
+
+        if (allProblemCards.length > 0) {
+          // Navigate to the first available card for this problem
+          const targetCard = allProblemCards[0];
+          setCurrentCard(targetCard);
+          navigate(`/problem/${problemId}/card/${targetCard.id}`);
+        } else {
+          // No cards left for this problem, go back to dashboard
+          navigate('/');
+        }
+      } else {
+        // No cards left at all, go back to dashboard
+        navigate('/');
+      }
+
+      // Close modal
+      setDeleteModal({ isOpen: false, isDeleting: false });
+      
+    } catch (err) {
+      console.error('Failed to delete card:', err);
+      setDeleteModal(prev => ({ ...prev, isDeleting: false }));
+      // Modal stays open on error so user can try again
     }
   };
 
@@ -417,6 +466,17 @@ export default function ProblemCard() {
               </button>
             </div>
 
+            {/* Delete Button - Only show for child cards */}
+            {currentCard?.parent_card_id && (
+              <button
+                onClick={() => setDeleteModal({ isOpen: true, isDeleting: false })}
+                className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
+                title="Delete child card"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            )}
+
             {/* Timer */}
             <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <button
@@ -525,6 +585,15 @@ export default function ProblemCard() {
           }}
         />
       </div>
+      
+      {/* Delete Card Modal */}
+      <DeleteCardModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, isDeleting: false })}
+        onConfirm={deleteCard}
+        card={currentCard}
+        isDeleting={deleteModal.isDeleting}
+      />
     </div>
   );
 }
