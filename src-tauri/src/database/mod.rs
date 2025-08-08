@@ -347,6 +347,64 @@ impl DatabaseManager {
         self.get_card_by_id(&req.id)
     }
 
+    pub fn delete_card(&mut self, card_id: &str) -> anyhow::Result<()> {
+        // First, verify the card exists
+        let card = self.get_card_by_id(card_id)?;
+        if card.is_none() {
+            return Err(anyhow::anyhow!("Card with id '{}' not found", card_id));
+        }
+
+        let card = card.unwrap();
+
+        // Safety check: Only allow deletion of child cards for now
+        // (Main cards should be kept to preserve problem structure)
+        if card.parent_card_id.is_none() || card.parent_card_id.as_ref().map_or(true, |s| s.is_empty()) {
+            return Err(anyhow::anyhow!(
+                "Cannot delete main cards. Only child cards can be deleted for safety."
+            ));
+        }
+
+        // Begin transaction for atomic deletion
+        let tx = self.connection.unchecked_transaction()?;
+
+        // Delete associated data in correct order (child tables first)
+        
+        // 1. Delete any time sessions for this card
+        // Note: These tables might not exist yet, so we use IF EXISTS
+        tx.execute(
+            "DELETE FROM time_sessions WHERE card_id = ?1",
+            [card_id],
+        ).unwrap_or(0); // Ignore errors if table doesn't exist
+        
+        // 2. Delete any recordings for this card
+        tx.execute(
+            "DELETE FROM recordings WHERE card_id = ?1", 
+            [card_id],
+        ).unwrap_or(0); // Ignore errors if table doesn't exist
+        
+        // 3. Delete any connections where this card is source or target
+        tx.execute(
+            "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
+            [card_id],
+        ).unwrap_or(0); // Ignore errors if table doesn't exist
+
+        // 4. Finally, delete the card itself
+        let rows_affected = tx.execute(
+            "DELETE FROM cards WHERE id = ?1",
+            [card_id],
+        )?;
+
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Failed to delete card - no rows affected"));
+        }
+
+        // Commit the transaction
+        tx.commit()?;
+
+        println!("Successfully deleted card '{}' and associated data", card_id);
+        Ok(())
+    }
+
     // Timer session operations (disabled until time_sessions table is added)
     #[allow(dead_code)]
     pub fn start_timer_session(&mut self, card_id: &str) -> anyhow::Result<TimeSession> {
