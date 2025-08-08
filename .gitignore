@@ -51,3 +51,9 @@ recordings/
 
 # Backup files from previous implementation
 localResources_backup/
+
+# Development and testing utilities
+add-sample-data.js
+check-database-status.js
+test-database.js
+test-sample-data.js
