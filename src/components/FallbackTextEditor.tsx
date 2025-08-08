@@ -55,10 +55,15 @@ export function FallbackTextEditor({
             }
             font-sans text-sm leading-relaxed
             focus:ring-0 focus:outline-none
+            text-wrap-responsive
+            min-w-0
           `}
           style={{
             minHeight: '100%',
-            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+            fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            wordWrap: 'break-word',
+            overflowWrap: 'anywhere',
+            whiteSpace: 'pre-wrap'
           }}
         />
         

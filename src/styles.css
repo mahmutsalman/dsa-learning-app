@@ -5,6 +5,9 @@
 /* Quill Editor Styles - Import before custom styles */
 @import 'quill/dist/quill.snow.css';
 
+/* Unified Workspace Styles */
+@import './styles/workspace.css';
+
 /* Ensure Quill toolbar is visible and properly styled */
 .ql-toolbar {
   border: 1px solid #ccc !important;
@@ -294,11 +297,166 @@
   cursor: ns-resize !important;
 }
 
-/* Ensure Monaco editor fills resizable container */
+/* Ensure Monaco editor fills resizable container and responds to layout changes */
 .resizable-monaco-box .monaco-editor {
   height: 100% !important;
+  width: 100% !important;
 }
 
 .resizable-monaco-box .monaco-editor .overflow-guard {
   height: 100% !important;
+  width: 100% !important;
+}
+
+/* Ensure editor containers are responsive to parent changes */
+.monaco-editor {
+  transition: none !important; /* Disable transitions for instant layout updates */
+}
+
+/* Resizable Problem Description Panel Styles */
+.resizable-problem-panel-container {
+  position: relative;
+  height: 100%;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.resizable-problem-panel-box {
+  position: relative;
+  height: 100% !important;
+  flex-shrink: 0;
+}
+
+.resizable-problem-panel-box .react-resizable-handle {
+  position: absolute;
+  height: 100%;
+  width: 6px;
+  right: -3px;
+  top: 0;
+  cursor: ew-resize;
+  background: transparent;
+  z-index: 1000;
+}
+
+.resize-handle-right {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 1000;
+}
+
+.resize-handle-right:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.resize-handle-grip-vertical {
+  height: 40px;
+  width: 2px;
+  background: #d1d5db;
+  border-radius: 1px;
+  transition: all 0.2s ease;
+}
+
+.resize-handle-right:hover .resize-handle-grip-vertical {
+  background: #3b82f6;
+  height: 60px;
+  width: 3px;
+}
+
+/* Dark theme for horizontal resize handle */
+.dark .resize-handle-grip-vertical {
+  background: #4b5563;
+}
+
+.dark .resize-handle-right:hover {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.dark .resize-handle-right:hover .resize-handle-grip-vertical {
+  background: #60a5fa;
+}
+
+/* Override react-resizable default styles for horizontal handle */
+.react-resizable-handle-e {
+  right: -3px !important;
+  width: 6px !important;
+  cursor: ew-resize !important;
+}
+
+/* Responsive text utilities */
+@layer utilities {
+  .hyphens-auto {
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    -ms-hyphens: auto;
+  }
+  
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  
+  .text-wrap-responsive {
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    -ms-hyphens: auto;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Problem description panel responsive text */
+.problem-description-content {
+  word-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.problem-title-responsive {
+  word-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
+  overflow-wrap: anywhere;
+}
+
+/* Responsive textarea utilities */
+.textarea-responsive {
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  border: none;
+}
+
+.textarea-responsive:focus {
+  outline: none;
+  ring: 0;
+}
+
+/* Ensure textareas are properly responsive */
+textarea.text-wrap-responsive {
+  word-wrap: break-word !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: pre-wrap !important;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -ms-hyphens: auto;
 }

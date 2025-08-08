@@ -43,6 +43,10 @@ const EDITOR_OPTIONS = {
   lineHeight: 20,
   letterSpacing: 0.5,
   wordWrap: 'on' as const,
+  wordWrapColumn: 80,
+  wordWrapMinified: true,
+  wrappingIndent: 'indent' as const,
+  wrappingStrategy: 'advanced' as const,
   contextmenu: true,
   copyWithSyntaxHighlighting: true,
   multiCursorModifier: 'ctrlCmd' as const,
@@ -91,6 +95,27 @@ export function MonacoEditor({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       onSave();
     });
+
+    // Enhanced layout responsiveness
+    const handleResize = () => {
+      // Force layout recalculation with a small delay to ensure container has resized
+      setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.layout();
+        }
+      }, 50);
+    };
+
+    // Listen for window resize events (including those triggered by panel resizing)
+    window.addEventListener('resize', handleResize);
+    
+    // Cleanup on unmount
+    const cleanup = () => {
+      window.removeEventListener('resize', handleResize);
+    };
+    
+    // Store cleanup function for later use
+    editor._cleanupResize = cleanup;
 
     // Language-specific configurations
     if (language === 'typescript' || language === 'javascript') {
@@ -150,6 +175,14 @@ export function MonacoEditor({
     editor.focus();
   };
 
+  // Cleanup effect for Monaco Editor
+  const handleEditorWillUnmount = (editor: any) => {
+    // Clean up resize listener if it exists
+    if (editor._cleanupResize) {
+      editor._cleanupResize();
+    }
+  };
+
   const handleEditorChange = (newValue: string | undefined) => {
     onChange(newValue || '');
   };
@@ -166,6 +199,7 @@ export function MonacoEditor({
         theme={theme}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
+        onUnmount={handleEditorWillUnmount}
         options={EDITOR_OPTIONS}
         loading={
           <div className="flex items-center justify-center h-full">

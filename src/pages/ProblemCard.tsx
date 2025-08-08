@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { 
@@ -14,8 +14,11 @@ import { Problem, Card } from '../types';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
 import { LanguageSelector } from '../components/LanguageSelector';
+// import ResizableProblemDescriptionPanel from '../components/ResizableProblemDescriptionPanel';
+import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
+import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
 import { useAutoSave } from '../hooks/useAutoSave';
-import { logDatabaseAnalysis, analyzeCards, getSiblingCards } from '../utils/databaseAnalysis';
+import { logDatabaseAnalysis, getSiblingCards } from '../utils/databaseAnalysis';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -33,6 +36,20 @@ export default function ProblemCard() {
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
   const [isDark, setIsDark] = useState<boolean>(false);
+
+  // Ref for the main content container to help calculate dynamic constraints
+  const contentContainerRef = useRef<HTMLDivElement>(null);
+
+  // Legacy state - kept for compatibility but not used in workspace mode
+  // const [isProblemPanelCollapsed, setIsProblemPanelCollapsed] = useState(false);
+  // const toggleProblemPanel = useCallback(() => {
+  //   setIsProblemPanelCollapsed(prev => !prev);
+  // }, []);
+  // const handleProblemPanelWidthChange = useCallback((newWidth: number) => {
+  //   setTimeout(() => {
+  //     window.dispatchEvent(new Event('resize'));
+  //   }, 100);
+  // }, []);
 
   // Detect dark mode from document
   useEffect(() => {
@@ -56,18 +73,20 @@ export default function ProblemCard() {
     if (!currentCard) return;
     
     try {
-      const updatedCard = await invoke<Card>('update_card', {
+      const updatedCard = await invoke<Card | null>('update_card', {
         cardId: currentCard.id,
         code: code !== currentCard.code ? code : null,
         notes: notes !== currentCard.notes ? notes : null,
         language: language !== currentCard.language ? language : null,
       });
       
-      // Update the current card and cards array
-      setCurrentCard(updatedCard);
-      setCards(prev => prev.map(card => 
-        card.id === updatedCard.id ? updatedCard : card
-      ));
+      // Update the current card and cards array if we got a card back
+      if (updatedCard) {
+        setCurrentCard(updatedCard);
+        setCards(prev => prev.map(card => 
+          card.id === updatedCard.id ? updatedCard : card
+        ));
+      }
       
     } catch (err) {
       console.error('Failed to save card:', err);
@@ -246,15 +265,6 @@ export default function ProblemCard() {
     }
   };
 
-  const updateTimer = async () => {
-    // TODO: Implement when timer backend is ready
-    // try {
-    //   const state = await invoke<{isRunning: boolean; elapsedTime: number}>('get_timer_state');
-    //   setTimerState(state);
-    // } catch (err) {
-    //   console.error('Failed to update timer:', err);
-    // }
-  };
 
   const toggleRecording = async () => {
     try {
@@ -313,7 +323,7 @@ export default function ProblemCard() {
             </button>
             
             {/* Developer Debug Button - remove in production */}
-            {process.env.NODE_ENV === 'development' && (
+            {(import.meta as any).env?.MODE === 'development' && (
               <button
                 onClick={logDatabaseAnalysis}
                 className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -442,95 +452,78 @@ export default function ProblemCard() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Content - Unified Workspace */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Problem Description */}
-        <div className="w-1/3 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-auto">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Problem Description
-            </h2>
-            <div className="prose dark:prose-invert max-w-none">
-              <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                {problem.description}
-              </p>
-            </div>
-            
-            {problem.leetcode_url && (
-              <div className="mt-6">
-                <a
-                  href={problem.leetcode_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary-600 dark:text-primary-400 hover:underline text-sm"
-                >
-                  View on LeetCode →
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Editor and Notes */}
-        <div className="flex-1 flex flex-col">
-          {/* Monaco Code Editor */}
-          <div className="bg-gray-50 dark:bg-gray-900 relative min-h-0">
-            <div className="absolute top-2 right-2 z-10">
-              <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                <span>Code Editor</span>
-                <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-              </div>
-            </div>
-            {currentCard ? (
-              <ResizableMonacoEditor
-                value={code}
-                language={language}
-                theme={isDark ? 'vs-dark' : 'vs-light'}
-                onChange={setCode}
-                onSave={handleManualSave}
-                initialHeight={400}
-                minHeight={200}
-                maxHeight={window.innerHeight * 0.8}
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-gray-500 dark:text-gray-400">
-                    Select a card to start coding
-                  </p>
+        <ResizableWorkspace
+          problemPanel={
+            <WorkspaceProblemPanel problem={problem} />
+          }
+          codeEditor={
+            <div className="bg-gray-50 dark:bg-gray-900 relative h-full">
+              <div className="absolute top-2 right-2 z-10">
+                <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>Code Editor</span>
+                  <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* QuillJS Rich Text Editor */}
-          <div className="flex-1 min-h-[300px] border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 relative">
-            <div className="absolute top-2 right-2 z-10">
-              <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                <span>Notes</span>
-                <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-              </div>
+              {currentCard ? (
+                <ResizableMonacoEditor
+                  value={code}
+                  language={language}
+                  theme={isDark ? 'vs-dark' : 'vs-light'}
+                  onChange={setCode}
+                  onSave={handleManualSave}
+                  initialHeight={400}
+                  minHeight={200}
+                  maxHeight={window.innerHeight * 0.8}
+                  containerRef={contentContainerRef}
+                  siblingMinHeight={300}
+                  useWorkspace={true}
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Select a card to start coding
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            {currentCard ? (
-              <QuillEditor
-                value={notes}
-                theme={isDark ? 'dark' : 'light'}
-                onChange={setNotes}
-                onSave={handleManualSave}
-                placeholder="Write your notes, observations, and thoughts here..."
-                className="h-full"
-              />
-            ) : (
-              <div className="h-full flex items-center justify-center">
-                <div className="text-center">
-                  <p className="text-gray-500 dark:text-gray-400">
-                    Select a card to start taking notes
-                  </p>
+          }
+          notesEditor={
+            <div className="bg-white dark:bg-gray-800 relative h-full">
+              <div className="absolute top-2 right-2 z-10">
+                <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                  <span>Notes</span>
+                  <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
+              {currentCard ? (
+                <QuillEditor
+                  value={notes}
+                  theme={isDark ? 'dark' : 'light'}
+                  onChange={setNotes}
+                  onSave={handleManualSave}
+                  placeholder="Write your notes, observations, and thoughts here..."
+                  className="h-full"
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      Select a card to start taking notes
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          }
+          onLayoutChange={(layout) => {
+            // Optional: handle layout changes for debugging or analytics
+            console.debug('Workspace layout changed:', layout);
+          }}
+        />
       </div>
     </div>
   );

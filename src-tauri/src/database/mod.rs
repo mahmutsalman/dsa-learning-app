@@ -280,18 +280,71 @@ impl DatabaseManager {
         Ok(cards)
     }
     
-    pub fn update_card(&mut self, req: UpdateCardRequest) -> anyhow::Result<()> {
-        let now = Utc::now();
+    pub fn get_card_by_id(&self, card_id: &str) -> anyhow::Result<Option<Card>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id 
+             FROM cards WHERE id = ?1"
+        )?;
         
-        // Simple update - in a real implementation you'd build dynamic queries
-        if let Some(code) = &req.code {
+        let card_iter = stmt.query_map([card_id], |row| {
+            Ok(Card {
+                id: row.get(0)?,
+                problem_id: row.get(1)?,
+                card_number: row.get(2)?,
+                code: row.get(3)?,
+                language: row.get(4)?,
+                notes: row.get(5)?,
+                status: row.get(6)?,
+                total_duration: row.get(7)?,
+                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
+                last_modified: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                parent_card_id: row.get(10)?,
+            })
+        })?;
+        
+        let mut cards = Vec::new();
+        for card in card_iter {
+            cards.push(card?);
+        }
+        
+        Ok(cards.into_iter().next())
+    }
+    
+    pub fn update_card(&mut self, req: UpdateCardRequest) -> anyhow::Result<Option<Card>> {
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+        
+        // Build query to update only provided fields
+        if let Some(ref code) = req.code {
             self.connection.execute(
                 "UPDATE cards SET code = ?1, last_modified = ?2 WHERE id = ?3",
-                params![code, &now.to_rfc3339(), &req.id],
+                params![code, &now_str, &req.id],
             )?;
         }
         
-        Ok(())
+        if let Some(ref notes) = req.notes {
+            self.connection.execute(
+                "UPDATE cards SET notes = ?1, last_modified = ?2 WHERE id = ?3",
+                params![notes, &now_str, &req.id],
+            )?;
+        }
+        
+        if let Some(ref language) = req.language {
+            self.connection.execute(
+                "UPDATE cards SET language = ?1, last_modified = ?2 WHERE id = ?3",
+                params![language, &now_str, &req.id],
+            )?;
+        }
+        
+        if let Some(ref status) = req.status {
+            self.connection.execute(
+                "UPDATE cards SET status = ?1, last_modified = ?2 WHERE id = ?3",
+                params![status, &now_str, &req.id],
+            )?;
+        }
+        
+        // Return the updated card
+        self.get_card_by_id(&req.id)
     }
 
     // Timer session operations (disabled until time_sessions table is added)
