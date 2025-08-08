@@ -11,35 +11,35 @@ export interface QuillEditorProps {
   className?: string;
 }
 
-const TOOLBAR_OPTIONS = [
-  [{ 'header': [1, 2, 3, false] }],
-  ['bold', 'italic', 'underline', 'strike'],
-  [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-  ['blockquote', 'code-block'],
-  ['link'],
-  [{ 'align': [] }],
-  [{ 'color': [] }, { 'background': [] }],
-  ['clean']
-];
+// const TOOLBAR_OPTIONS = [
+//   [{ 'header': [1, 2, 3, false] }],
+//   ['bold', 'italic', 'underline', 'strike'],
+//   [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+//   ['blockquote', 'code-block'],
+//   ['link'],
+//   [{ 'align': [] }],
+//   [{ 'color': [] }, { 'background': [] }],
+//   ['clean']
+// ];
 
-const QUILL_MODULES = {
-  toolbar: TOOLBAR_OPTIONS,
-  keyboard: {
-    bindings: {
-      // We'll add custom bindings in the component
-    }
-  }
-};
+// const QUILL_MODULES = {
+//   toolbar: TOOLBAR_OPTIONS,
+//   keyboard: {
+//     bindings: {
+//       // We'll add custom bindings in the component
+//     }
+//   }
+// };
 
-const QUILL_FORMATS = [
-  'header',
-  'bold', 'italic', 'underline', 'strike',
-  'list',
-  'blockquote', 'code-block',
-  'link',
-  'align',
-  'color', 'background'
-];
+// const QUILL_FORMATS = [
+//   'header',
+//   'bold', 'italic', 'underline', 'strike',
+//   'list',
+//   'blockquote', 'code-block',
+//   'link',
+//   'align',
+//   'color', 'background'
+// ];
 
 export function QuillEditor({
   value,
@@ -64,7 +64,6 @@ export function QuillEditor({
   const [useFallback, setUseFallback] = useState(true); // Default to fallback until Quill is fixed
   
   console.log('🔍 Current state:', { isReady, error, isInitializing, useFallback });
-  const isUpdating = useRef(false);
   const initializationLock = useRef(false);
 
   // Initialize Quill instance with proper DOM readiness check

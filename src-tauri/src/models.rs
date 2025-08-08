@@ -6,6 +6,7 @@ use crate::database::DatabaseManager;
 // App state shared across Tauri commands
 pub struct AppState {
     pub db: Arc<Mutex<DatabaseManager>>,
+    pub current_timer: Arc<Mutex<Option<TimerSession>>>,
 }
 
 // Database models matching the frontend types
@@ -133,4 +134,28 @@ pub struct Recording {
     pub filename: String,
     pub filepath: String,
     pub file_size: Option<i64>,
+}
+
+// Timer-specific models for in-memory timer state
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TimerState {
+    #[serde(rename = "isRunning")]
+    pub is_running: bool,
+    #[serde(rename = "isPaused")]
+    pub is_paused: bool,
+    #[serde(rename = "currentSessionId")]
+    pub current_session_id: Option<String>,
+    #[serde(rename = "sessionStartTime")]
+    pub session_start_time: Option<DateTime<Utc>>,
+    #[serde(rename = "elapsedTime")]
+    pub elapsed_time: i32, // in seconds
+}
+
+#[derive(Debug, Clone)]
+pub struct TimerSession {
+    pub id: String,
+    pub card_id: String,
+    pub start_time: DateTime<Utc>,
+    pub is_paused: bool,
+    pub pause_duration: i32, // in seconds
 }

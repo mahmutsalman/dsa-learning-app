@@ -141,7 +141,15 @@ export function MonacoEditor({
     // Configure Python language features
     if (language === 'python') {
       monaco.languages.registerCompletionItemProvider('python', {
-        provideCompletionItems: () => {
+        provideCompletionItems: (model, position) => {
+          const word = model.getWordUntilPosition(position);
+          const range = {
+            startLineNumber: position.lineNumber,
+            endLineNumber: position.lineNumber,
+            startColumn: word.startColumn,
+            endColumn: word.endColumn
+          };
+          
           return {
             suggestions: [
               {
@@ -149,21 +157,24 @@ export function MonacoEditor({
                 kind: monaco.languages.CompletionItemKind.Keyword,
                 insertText: 'def ${1:function_name}(${2:args}):\n\t${3:pass}',
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: 'Define a function'
+                documentation: 'Define a function',
+                range: range
               },
               {
                 label: 'class',
                 kind: monaco.languages.CompletionItemKind.Keyword,
                 insertText: 'class ${1:ClassName}:\n\t${2:pass}',
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: 'Define a class'
+                documentation: 'Define a class',
+                range: range
               },
               {
                 label: 'if __name__ == "__main__"',
                 kind: monaco.languages.CompletionItemKind.Snippet,
                 insertText: 'if __name__ == "__main__":\n\t${1:main()}',
                 insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: 'Main guard'
+                documentation: 'Main guard',
+                range: range
               }
             ]
           };
@@ -176,12 +187,12 @@ export function MonacoEditor({
   };
 
   // Cleanup effect for Monaco Editor
-  const handleEditorWillUnmount = (editor: any) => {
-    // Clean up resize listener if it exists
-    if (editor._cleanupResize) {
-      editor._cleanupResize();
-    }
-  };
+  // const handleEditorWillUnmount = (editor: any) => {
+  //   // Clean up resize listener if it exists
+  //   if (editor._cleanupResize) {
+  //     editor._cleanupResize();
+  //   }
+  // };
 
   const handleEditorChange = (newValue: string | undefined) => {
     onChange(newValue || '');
@@ -199,7 +210,6 @@ export function MonacoEditor({
         theme={theme}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
-        onUnmount={handleEditorWillUnmount}
         options={EDITOR_OPTIONS}
         loading={
           <div className="flex items-center justify-center h-full">

@@ -27,6 +27,7 @@ async fn main() {
     
     let app_state = AppState {
         db: Arc::new(Mutex::new(db_manager)),
+        current_timer: Arc::new(Mutex::new(None)),
     };
 
     tauri::Builder::default()
@@ -48,7 +49,13 @@ async fn main() {
             commands::database::delete_card,
             commands::database::get_database_stats,
             commands::database::get_card_hierarchy,
-            commands::database::get_cards_per_problem
+            commands::database::get_cards_per_problem,
+            // Timer commands
+            commands::timer::start_timer_session,
+            commands::timer::stop_timer_session,
+            commands::timer::pause_timer_session,
+            commands::timer::resume_timer_session,
+            commands::timer::get_timer_state
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

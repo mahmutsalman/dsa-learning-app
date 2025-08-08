@@ -5,6 +5,7 @@ use anyhow::Context;
 use chrono::Utc;
 use uuid::Uuid;
 use crate::models::*;
+use schema::{CREATE_TABLES_SQL, CREATE_INDEXES_SQL};
 
 pub struct DatabaseManager {
     connection: Connection,
@@ -40,12 +41,15 @@ impl DatabaseManager {
     }
     
     pub async fn connect_existing() -> anyhow::Result<Self> {
-        // Connect to existing database without initializing schema
+        println!("🔧 [Database] Attempting to connect to existing database...");
+        
         let app_data_dir = std::env::current_dir()
             .context("Failed to get current directory")?
             .join("data");
         
         let db_path = app_data_dir.join("database.db");
+        
+        println!("🔧 [Database] Database path: {:?}", db_path);
         
         // Check if database file exists
         if !db_path.exists() {
@@ -59,54 +63,242 @@ impl DatabaseManager {
         let _: i32 = connection.query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0)).unwrap_or(0);
         let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap_or_else(|_| "delete".to_string());
         
-        let db_manager = Self { connection };
+        let mut db_manager = Self { connection };
         
+        // CRITICAL: Always check and run migration for existing databases
+        println!("🔧 [Database] Checking if migration is needed...");
+        db_manager.init_schema()
+            .await
+            .context("Failed to initialize/migrate database schema")?;
+        
+        println!("🔧 [Database] Connected to existing database with schema validation complete");
         Ok(db_manager)
     }
     
     async fn init_schema(&mut self) -> anyhow::Result<()> {
-        // Start with just the essential tables first
+        println!("🔧 [Database] Initializing comprehensive database schema...");
         
-        println!("Creating problems table...");
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS problems (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT,
-                difficulty TEXT,
-                category TEXT,
-                leetcode_url TEXT,
-                constraints TEXT,
-                examples TEXT,
-                hints TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )",
+        // Check if this is a migration from old schema
+        let needs_migration = self.check_migration_needed().await?;
+        println!("🔧 [Database] Migration needed: {}", needs_migration);
+        
+        if needs_migration {
+            println!("🔧 [Database] Existing database detected - performing safe migration...");
+            self.migrate_database().await?;
+        } else {
+            println!("🔧 [Database] Creating fresh database with complete schema...");
+            self.create_fresh_schema().await?;
+        }
+        
+        // Verify time_sessions table exists after migration/creation
+        let time_sessions_exists = self.verify_time_sessions_table().await?;
+        println!("🔧 [Database] time_sessions table exists: {}", time_sessions_exists);
+        
+        if !time_sessions_exists {
+            println!("❌ [Database] CRITICAL: time_sessions table missing after migration!");
+            return Err(anyhow::anyhow!("time_sessions table was not created successfully"));
+        }
+        
+        println!("✅ [Database] Schema initialization completed successfully!");
+        Ok(())
+    }
+    
+    async fn verify_time_sessions_table(&self) -> anyhow::Result<bool> {
+        let count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
             [],
+            |row| row.get(0)
         )?;
-
-        println!("Creating cards table...");
-        self.connection.execute(
-            "CREATE TABLE IF NOT EXISTS cards (
+        Ok(count > 0)
+    }
+    
+    async fn check_migration_needed(&self) -> anyhow::Result<bool> {
+        println!("🔍 [Database] Checking migration status...");
+        
+        // Check if problems table exists (indicates existing database)
+        let problems_exists: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'",
+            [],
+            |row| row.get(0)
+        )?;
+        println!("🔍 [Database] problems table exists: {}", problems_exists > 0);
+        
+        // Check if time_sessions table exists (indicates complete schema)
+        let time_sessions_exists: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
+            [],
+            |row| row.get(0)
+        )?;
+        println!("🔍 [Database] time_sessions table exists: {}", time_sessions_exists > 0);
+        
+        // List all existing tables for debugging
+        let tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+            .query_map([], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+        println!("🔍 [Database] Existing tables: {:?}", tables);
+        
+        // Migration needed if problems exist but time_sessions don't
+        let migration_needed = problems_exists > 0 && time_sessions_exists == 0;
+        println!("🔍 [Database] Migration logic: problems={} AND time_sessions_missing={} = migration_needed={}", 
+                 problems_exists > 0, 
+                 time_sessions_exists == 0, 
+                 migration_needed);
+        
+        Ok(migration_needed)
+    }
+    
+    async fn create_fresh_schema(&mut self) -> anyhow::Result<()> {
+        println!("🏗️ [Database] Executing complete table creation...");
+        
+        // Execute all table creation statements
+        match self.connection.execute_batch(CREATE_TABLES_SQL) {
+            Ok(_) => println!("✅ [Database] Tables created successfully"),
+            Err(e) => {
+                println!("❌ [Database] Failed to create tables: {}", e);
+                return Err(anyhow::anyhow!("Failed to create tables: {}", e));
+            }
+        }
+        
+        println!("🏗️ [Database] Creating performance indexes...");
+        
+        // Execute all index creation statements
+        match self.connection.execute_batch(CREATE_INDEXES_SQL) {
+            Ok(_) => println!("✅ [Database] Indexes created successfully"),
+            Err(e) => {
+                println!("❌ [Database] Failed to create indexes: {}", e);
+                return Err(anyhow::anyhow!("Failed to create indexes: {}", e));
+            }
+        }
+        
+        println!("✅ [Database] Fresh schema creation completed");
+        Ok(())
+    }
+    
+    async fn migrate_database(&mut self) -> anyhow::Result<()> {
+        println!("🔄 [Database Migration] Starting comprehensive migration process...");
+        
+        // First, verify what tables currently exist
+        let existing_tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+            .query_map([], |row| Ok(row.get::<_, String>(0)?))
+            .context("Failed to query existing tables")?
+            .collect::<Result<Vec<String>, _>>()?;
+        println!("🔄 [Database Migration] Current tables before migration: {:?}", existing_tables);
+        
+        // Add missing tables one by one with error handling
+        let missing_tables = [
+            ("time_sessions", "CREATE TABLE IF NOT EXISTS time_sessions (
                 id TEXT PRIMARY KEY,
-                problem_id TEXT NOT NULL,
-                card_number INTEGER NOT NULL,
-                code TEXT,
-                language TEXT DEFAULT 'javascript',
+                card_id TEXT NOT NULL,
+                start_time DATETIME NOT NULL,
+                end_time DATETIME,
+                duration INTEGER,
+                date DATE,
+                is_active INTEGER DEFAULT 0,
                 notes TEXT,
-                status TEXT DEFAULT 'In Progress',
-                total_duration INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                last_modified TEXT DEFAULT CURRENT_TIMESTAMP,
-                parent_card_id TEXT
-            )",
-            [],
-        )?;
-
-        println!("Creating basic indexes...");
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_cards_problem_id ON cards(problem_id)", [])?;
-        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_cards_parent_id ON cards(parent_card_id)", [])?;
+                FOREIGN KEY (card_id) REFERENCES cards(id)
+            )"),
+            ("recordings", "CREATE TABLE IF NOT EXISTS recordings (
+                id TEXT PRIMARY KEY,
+                card_id TEXT NOT NULL,
+                time_session_id TEXT,
+                audio_url TEXT NOT NULL,
+                duration INTEGER,
+                transcript TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                filename TEXT NOT NULL,
+                filepath TEXT NOT NULL,
+                file_size INTEGER,
+                FOREIGN KEY (card_id) REFERENCES cards(id),
+                FOREIGN KEY (time_session_id) REFERENCES time_sessions(id)
+            )"),
+            ("connections", "CREATE TABLE IF NOT EXISTS connections (
+                id TEXT PRIMARY KEY,
+                source_card_id TEXT NOT NULL,
+                target_card_id TEXT NOT NULL,
+                connection_type TEXT CHECK(connection_type IN ('related', 'prerequisite', 'similar', 'builds-upon')),
+                notes TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (source_card_id) REFERENCES cards(id),
+                FOREIGN KEY (target_card_id) REFERENCES cards(id)
+            )"),
+            ("tags", "CREATE TABLE IF NOT EXISTS tags (
+                id TEXT PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                color TEXT,
+                category TEXT CHECK(category IN ('algorithm', 'data-structure', 'pattern', 'custom'))
+            )"),
+            ("problem_tags", "CREATE TABLE IF NOT EXISTS problem_tags (
+                problem_id TEXT,
+                tag_id TEXT,
+                PRIMARY KEY (problem_id, tag_id),
+                FOREIGN KEY (problem_id) REFERENCES problems(id),
+                FOREIGN KEY (tag_id) REFERENCES tags(id)
+            )"),
+            ("card_tags", "CREATE TABLE IF NOT EXISTS card_tags (
+                card_id TEXT,
+                tag_id TEXT,
+                PRIMARY KEY (card_id, tag_id),
+                FOREIGN KEY (card_id) REFERENCES cards(id),
+                FOREIGN KEY (tag_id) REFERENCES tags(id)
+            )")
+        ];
         
-        println!("Database schema initialized successfully!");
+        for (table_name, create_sql) in missing_tables.iter() {
+            println!("🔄 [Database Migration] Processing table: {}", table_name);
+            println!("🔄 [Database Migration] SQL: {}", create_sql.chars().take(100).collect::<String>() + "...");
+            
+            match self.connection.execute(create_sql, []) {
+                Ok(rows_affected) => {
+                    println!("✅ [Database Migration] Successfully processed table: {} (rows affected: {})", table_name, rows_affected);
+                },
+                Err(e) => {
+                    println!("❌ [Database Migration] Failed to create table {}: {}", table_name, e);
+                    return Err(anyhow::anyhow!("Migration failed for table {}: {}", table_name, e));
+                }
+            }
+        }
+        
+        // Add missing indexes
+        println!("🔄 [Database Migration] Adding performance indexes...");
+        let missing_indexes = [
+            "CREATE INDEX IF NOT EXISTS idx_time_sessions_card_id ON time_sessions(card_id)",
+            "CREATE INDEX IF NOT EXISTS idx_time_sessions_date ON time_sessions(date)",
+            "CREATE INDEX IF NOT EXISTS idx_recordings_card_id ON recordings(card_id)",
+            "CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id)",
+            "CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id)"
+        ];
+        
+        for (i, index_sql) in missing_indexes.iter().enumerate() {
+            println!("🔄 [Database Migration] Adding index {}/{}: {}", i+1, missing_indexes.len(), index_sql.chars().take(80).collect::<String>() + "...");
+            match self.connection.execute(index_sql, []) {
+                Ok(rows_affected) => println!("✅ [Database Migration] Index added successfully (rows affected: {})", rows_affected),
+                Err(e) => {
+                    println!("⚠️ [Database Migration] Index creation warning: {}", e);
+                    // Don't fail on index errors, they might already exist
+                }
+            }
+        }
+        
+        // Verify tables exist after migration
+        let final_tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+            .query_map([], |row| Ok(row.get::<_, String>(0)?))
+            .context("Failed to verify tables after migration")?
+            .collect::<Result<Vec<String>, _>>()?;
+        println!("🔄 [Database Migration] Tables after migration: {:?}", final_tables);
+        
+        // Check specifically for time_sessions table
+        let time_sessions_count: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
+            [],
+            |row| row.get(0)
+        )?;
+        println!("🔄 [Database Migration] time_sessions table check: {} (should be 1)", time_sessions_count);
+        
+        if time_sessions_count == 0 {
+            return Err(anyhow::anyhow!("CRITICAL: time_sessions table was not created during migration!"));
+        }
+        
+        println!("✅ [Database Migration] Migration completed successfully!");
         Ok(())
     }
 
