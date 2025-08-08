@@ -54,10 +54,10 @@ export function analyzeCards(cards: Card[]): {
   return { mainCards, childCards, cardsByParent };
 }
 
-// Get sibling cards (same parent)
+// Get all cards for the same problem (for pagination)
 export function getSiblingCards(currentCard: Card, allCards: Card[]): Card[] {
   return allCards
-    .filter(card => card.parent_card_id === currentCard.parent_card_id)
+    .filter(card => card.problem_id === currentCard.problem_id)
     .sort((a, b) => a.card_number - b.card_number);
 }
 

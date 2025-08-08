@@ -217,28 +217,28 @@ export default function ProblemCard() {
   const navigateToCard = (direction: 'prev' | 'next') => {
     if (!currentCard) return;
     
-    // Use utility function to get sibling cards
-    const siblingCards = getSiblingCards(currentCard, cards);
-    const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+    // Get all cards for this problem (now that getSiblingCards returns all cards)
+    const allProblemCards = getSiblingCards(currentCard, cards);
+    const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
     
     if (direction === 'prev') {
       if (currentIndex > 0) {
-        // Navigate to previous sibling
-        const targetCard = siblingCards[currentIndex - 1];
+        // Navigate to previous card
+        const targetCard = allProblemCards[currentIndex - 1];
         setCurrentCard(targetCard);
         navigate(`/problem/${problemId}/card/${targetCard.id}`);
       }
-      // If at first sibling, do nothing (or could navigate to parent)
+      // If at first card, do nothing
     } else {
       // direction === 'next'
-      if (currentIndex < siblingCards.length - 1) {
-        // Navigate to next sibling
-        const targetCard = siblingCards[currentIndex + 1];
+      if (currentIndex < allProblemCards.length - 1) {
+        // Navigate to next card
+        const targetCard = allProblemCards[currentIndex + 1];
         setCurrentCard(targetCard);
         navigate(`/problem/${problemId}/card/${targetCard.id}`);
       } else {
-        // At last sibling, create new child card
-        createChildCard();
+        // At last card, create new card
+        createNewCard();
       }
     }
   };
@@ -339,11 +339,11 @@ export default function ProblemCard() {
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {currentCard ? (() => {
-                  const siblingCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+                  const allProblemCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
                   const cardType = currentCard.parent_card_id ? 'Child Card' : 'Main Card';
                   
-                  return `${cardType} ${currentIndex + 1} / ${siblingCards.length}`;
+                  return `${cardType} ${currentIndex + 1} / ${allProblemCards.length}`;
                 })() : 'Card 1 / 1'}
               </p>
             </div>
@@ -391,9 +391,9 @@ export default function ProblemCard() {
                 onClick={() => navigateToCard('prev')}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={currentCard ? (() => {
-                  const siblingCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
-                  return currentIndex === 0; // Disabled if at first sibling
+                  const allProblemCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
+                  return currentIndex === 0; // Disabled if at first card
                 })() : true}
               >
                 <ArrowLeftIcon className="h-4 w-4" />
@@ -401,17 +401,17 @@ export default function ProblemCard() {
               
               <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
                 {currentCard ? (() => {
-                  const siblingCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+                  const allProblemCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
                   
-                  return `${currentIndex + 1} / ${siblingCards.length}`;
+                  return `${currentIndex + 1} / ${allProblemCards.length}`;
                 })() : '1 / 1'}
               </span>
               
               <button
                 onClick={() => navigateToCard('next')}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                title="Navigate to next card or create new child card"
+                title="Navigate to next card or create new card"
               >
                 <ArrowRightIcon className="h-4 w-4" />
               </button>
