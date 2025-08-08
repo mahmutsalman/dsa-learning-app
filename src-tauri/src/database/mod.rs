@@ -1,7 +1,6 @@
 mod schema;
 
 use rusqlite::{Connection, params};
-use std::path::PathBuf;
 use anyhow::Context;
 use chrono::Utc;
 use uuid::Uuid;
@@ -26,9 +25,9 @@ impl DatabaseManager {
         let connection = Connection::open(&db_path)
             .context("Failed to open database connection")?;
         
-        // Enable foreign keys and WAL mode
-        connection.execute("PRAGMA foreign_keys = ON;", [])?;
-        connection.execute("PRAGMA journal_mode = WAL;", [])?;
+        // Enable foreign keys and WAL mode (using query_row to handle potential return values)
+        let _: i32 = connection.query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0)).unwrap_or(0);
+        let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap_or_else(|_| "delete".to_string());
         
         let mut db_manager = Self { connection };
         
@@ -40,11 +39,74 @@ impl DatabaseManager {
         Ok(db_manager)
     }
     
-    async fn init_schema(&mut self) -> anyhow::Result<()> {
-        // Execute schema creation SQL
-        self.connection.execute_batch(schema::CREATE_TABLES_SQL)?;
-        self.connection.execute_batch(schema::CREATE_INDEXES_SQL)?;
+    pub async fn connect_existing() -> anyhow::Result<Self> {
+        // Connect to existing database without initializing schema
+        let app_data_dir = std::env::current_dir()
+            .context("Failed to get current directory")?
+            .join("data");
         
+        let db_path = app_data_dir.join("database.db");
+        
+        // Check if database file exists
+        if !db_path.exists() {
+            return Err(anyhow::anyhow!("Database file does not exist. Run initialization first."));
+        }
+        
+        let connection = Connection::open(&db_path)
+            .context("Failed to open database connection")?;
+        
+        // Enable foreign keys and WAL mode (using query_row to handle potential return values)
+        let _: i32 = connection.query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0)).unwrap_or(0);
+        let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap_or_else(|_| "delete".to_string());
+        
+        let db_manager = Self { connection };
+        
+        Ok(db_manager)
+    }
+    
+    async fn init_schema(&mut self) -> anyhow::Result<()> {
+        // Start with just the essential tables first
+        
+        println!("Creating problems table...");
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS problems (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                difficulty TEXT,
+                category TEXT,
+                leetcode_url TEXT,
+                constraints TEXT,
+                examples TEXT,
+                hints TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        println!("Creating cards table...");
+        self.connection.execute(
+            "CREATE TABLE IF NOT EXISTS cards (
+                id TEXT PRIMARY KEY,
+                problem_id TEXT NOT NULL,
+                card_number INTEGER NOT NULL,
+                code TEXT,
+                language TEXT DEFAULT 'javascript',
+                notes TEXT,
+                status TEXT DEFAULT 'In Progress',
+                total_duration INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_modified TEXT DEFAULT CURRENT_TIMESTAMP,
+                parent_card_id TEXT
+            )",
+            [],
+        )?;
+
+        println!("Creating basic indexes...");
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_cards_problem_id ON cards(problem_id)", [])?;
+        self.connection.execute("CREATE INDEX IF NOT EXISTS idx_cards_parent_id ON cards(parent_card_id)", [])?;
+        
+        println!("Database schema initialized successfully!");
         Ok(())
     }
 
@@ -232,7 +294,8 @@ impl DatabaseManager {
         Ok(())
     }
 
-    // Timer session operations
+    // Timer session operations (disabled until time_sessions table is added)
+    #[allow(dead_code)]
     pub fn start_timer_session(&mut self, card_id: &str) -> anyhow::Result<TimeSession> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -256,6 +319,7 @@ impl DatabaseManager {
         })
     }
     
+    #[allow(dead_code)]
     pub fn end_timer_session(&mut self, session_id: &str) -> anyhow::Result<()> {
         let now = Utc::now();
         
@@ -290,7 +354,8 @@ impl DatabaseManager {
         Ok(())
     }
 
-    // Recording operations
+    // Recording operations (disabled until recordings table is added)
+    #[allow(dead_code)]
     pub fn save_recording(&mut self, card_id: &str, filename: &str, filepath: &str, duration: Option<i32>) -> anyhow::Result<Recording> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -329,6 +394,7 @@ impl DatabaseManager {
         })
     }
     
+    #[allow(dead_code)]
     pub fn get_recordings(&self) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, card_id, time_session_id, audio_url, duration, transcript, created_at, filename, filepath, file_size 
@@ -356,5 +422,104 @@ impl DatabaseManager {
         }
         
         Ok(recordings)
+    }
+
+    // Database analysis functions
+    pub fn get_database_stats(&self) -> anyhow::Result<DatabaseStats> {
+        // Count problems
+        let problem_count: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problems",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Count total cards
+        let total_cards: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM cards",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Count main cards (parent_card_id IS NULL)
+        let main_cards: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM cards WHERE parent_card_id IS NULL OR parent_card_id = ''",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Count child cards (parent_card_id IS NOT NULL)
+        let child_cards: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM cards WHERE parent_card_id IS NOT NULL AND parent_card_id != ''",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(DatabaseStats {
+            problem_count,
+            total_cards,
+            main_cards,
+            child_cards,
+        })
+    }
+
+    pub fn get_card_hierarchy(&self) -> anyhow::Result<Vec<CardHierarchy>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT 
+                c.id, c.problem_id, c.card_number, c.parent_card_id,
+                p.title as problem_title,
+                (SELECT COUNT(*) FROM cards WHERE parent_card_id = c.id) as child_count
+             FROM cards c
+             JOIN problems p ON c.problem_id = p.id
+             ORDER BY p.title, c.card_number"
+        )?;
+
+        let hierarchy_iter = stmt.query_map([], |row| {
+            Ok(CardHierarchy {
+                card_id: row.get(0)?,
+                problem_id: row.get(1)?,
+                problem_title: row.get(4)?,
+                card_number: row.get(2)?,
+                parent_card_id: row.get(3)?,
+                child_count: row.get(5)?,
+            })
+        })?;
+
+        let mut hierarchies = Vec::new();
+        for hierarchy in hierarchy_iter {
+            hierarchies.push(hierarchy?);
+        }
+
+        Ok(hierarchies)
+    }
+
+    pub fn get_cards_per_problem(&self) -> anyhow::Result<Vec<CardCountPerProblem>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT 
+                p.id, p.title,
+                COUNT(c.id) as total_cards,
+                COUNT(CASE WHEN c.parent_card_id IS NULL OR c.parent_card_id = '' THEN 1 END) as main_cards,
+                COUNT(CASE WHEN c.parent_card_id IS NOT NULL AND c.parent_card_id != '' THEN 1 END) as child_cards
+             FROM problems p
+             LEFT JOIN cards c ON p.id = c.problem_id
+             GROUP BY p.id, p.title
+             ORDER BY p.title"
+        )?;
+
+        let count_iter = stmt.query_map([], |row| {
+            Ok(CardCountPerProblem {
+                problem_id: row.get(0)?,
+                problem_title: row.get(1)?,
+                total_cards: row.get(2)?,
+                main_cards: row.get(3)?,
+                child_cards: row.get(4)?,
+            })
+        })?;
+
+        let mut counts = Vec::new();
+        for count in count_iter {
+            counts.push(count?);
+        }
+
+        Ok(counts)
     }
 }

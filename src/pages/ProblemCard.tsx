@@ -15,6 +15,7 @@ import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { useAutoSave } from '../hooks/useAutoSave';
+import { logDatabaseAnalysis, analyzeCards, getSiblingCards } from '../utils/databaseAnalysis';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -171,65 +172,104 @@ export default function ProblemCard() {
     }
   };
 
+  const createChildCard = async () => {
+    if (!problemId || !currentCard) return;
+    
+    try {
+      // Determine parent card ID - if current card is already a child, use its parent
+      const parentCardId = currentCard.parent_card_id || currentCard.id;
+      
+      const newCard = await invoke<Card>('create_card', {
+        request: {
+          problem_id: problemId,
+          language: currentCard.language, // Inherit language from current card
+          parent_card_id: parentCardId
+        }
+      });
+      
+      setCards(prev => [...prev, newCard]);
+      setCurrentCard(newCard);
+      navigate(`/problem/${problemId}/card/${newCard.id}`);
+    } catch (err) {
+      console.error('Failed to create child card:', err);
+    }
+  };
+
   const navigateToCard = (direction: 'prev' | 'next') => {
     if (!currentCard) return;
     
-    const currentIndex = cards.findIndex(c => c.id === currentCard.id);
-    let targetIndex: number;
+    // Use utility function to get sibling cards
+    const siblingCards = getSiblingCards(currentCard, cards);
+    const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
     
     if (direction === 'prev') {
-      targetIndex = currentIndex > 0 ? currentIndex - 1 : cards.length - 1;
+      if (currentIndex > 0) {
+        // Navigate to previous sibling
+        const targetCard = siblingCards[currentIndex - 1];
+        setCurrentCard(targetCard);
+        navigate(`/problem/${problemId}/card/${targetCard.id}`);
+      }
+      // If at first sibling, do nothing (or could navigate to parent)
     } else {
-      targetIndex = currentIndex < cards.length - 1 ? currentIndex + 1 : 0;
+      // direction === 'next'
+      if (currentIndex < siblingCards.length - 1) {
+        // Navigate to next sibling
+        const targetCard = siblingCards[currentIndex + 1];
+        setCurrentCard(targetCard);
+        navigate(`/problem/${problemId}/card/${targetCard.id}`);
+      } else {
+        // At last sibling, create new child card
+        createChildCard();
+      }
     }
-    
-    if (targetIndex === cards.length && direction === 'next') {
-      // Create new card
-      createNewCard();
-      return;
-    }
-    
-    const targetCard = cards[targetIndex];
-    setCurrentCard(targetCard);
-    navigate(`/problem/${problemId}/card/${targetCard.id}`);
   };
 
   const toggleTimer = async () => {
     try {
       if (!currentCard) return;
       
-      if (timerState.isRunning) {
-        await invoke('stop_timer_session');
-        setTimerState({ isRunning: false, elapsedTime: 0 });
-      } else {
-        await invoke('start_timer_session', { cardId: currentCard.id });
-        setTimerState({ isRunning: true, elapsedTime: 0 });
-        // Start timer update interval
-        setInterval(updateTimer, 1000);
-      }
+      console.warn('Timer functionality not implemented yet');
+      // For now, just toggle local state
+      setTimerState(prev => ({
+        isRunning: !prev.isRunning,
+        elapsedTime: prev.isRunning ? 0 : prev.elapsedTime
+      }));
+      
+      // TODO: Implement when timer backend is ready
+      // if (timerState.isRunning) {
+      //   await invoke('stop_timer_session');
+      // } else {
+      //   await invoke('start_timer_session', { cardId: currentCard.id });
+      // }
     } catch (err) {
       console.error('Timer error:', err);
     }
   };
 
   const updateTimer = async () => {
-    try {
-      const state = await invoke<{isRunning: boolean; elapsedTime: number}>('get_timer_state');
-      setTimerState(state);
-    } catch (err) {
-      console.error('Failed to update timer:', err);
-    }
+    // TODO: Implement when timer backend is ready
+    // try {
+    //   const state = await invoke<{isRunning: boolean; elapsedTime: number}>('get_timer_state');
+    //   setTimerState(state);
+    // } catch (err) {
+    //   console.error('Failed to update timer:', err);
+    // }
   };
 
   const toggleRecording = async () => {
     try {
-      if (recordingState.isRecording) {
-        await invoke('stop_recording');
-        setRecordingState({ isRecording: false });
-      } else {
-        await invoke('start_recording');
-        setRecordingState({ isRecording: true });
-      }
+      console.warn('Recording functionality not implemented yet');
+      // For now, just toggle local state
+      setRecordingState(prev => ({
+        isRecording: !prev.isRecording
+      }));
+      
+      // TODO: Implement when audio backend is ready
+      // if (recordingState.isRecording) {
+      //   await invoke('stop_recording');
+      // } else {
+      //   await invoke('start_recording');
+      // }
     } catch (err) {
       console.error('Recording error:', err);
     }
@@ -272,12 +312,29 @@ export default function ProblemCard() {
               <ArrowLeftIcon className="h-5 w-5" />
             </button>
             
+            {/* Developer Debug Button - remove in production */}
+            {process.env.NODE_ENV === 'development' && (
+              <button
+                onClick={logDatabaseAnalysis}
+                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                title="Analyze database structure (check console)"
+              >
+                DB Analysis
+              </button>
+            )}
+            
             <div>
               <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
                 {problem.title}
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Card {currentCard?.card_number || 1} of {cards.length}
+                {currentCard ? (() => {
+                  const siblingCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+                  const cardType = currentCard.parent_card_id ? 'Child Card' : 'Main Card';
+                  
+                  return `${cardType} ${currentIndex + 1} / ${siblingCards.length}`;
+                })() : 'Card 1 / 1'}
               </p>
             </div>
           </div>
@@ -322,19 +379,29 @@ export default function ProblemCard() {
             <div className="flex items-center space-x-1">
               <button
                 onClick={() => navigateToCard('prev')}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                disabled={cards.length <= 1}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={currentCard ? (() => {
+                  const siblingCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+                  return currentIndex === 0; // Disabled if at first sibling
+                })() : true}
               >
                 <ArrowLeftIcon className="h-4 w-4" />
               </button>
               
               <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-                {currentCard?.card_number || 1} / {cards.length}
+                {currentCard ? (() => {
+                  const siblingCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = siblingCards.findIndex(c => c.id === currentCard.id);
+                  
+                  return `${currentIndex + 1} / ${siblingCards.length}`;
+                })() : '1 / 1'}
               </span>
               
               <button
                 onClick={() => navigateToCard('next')}
                 className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                title="Navigate to next card or create new child card"
               >
                 <ArrowRightIcon className="h-4 w-4" />
               </button>
@@ -345,6 +412,7 @@ export default function ProblemCard() {
               <button
                 onClick={toggleTimer}
                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                title="Timer (UI only - backend integration pending)"
               >
                 {timerState.isRunning ? (
                   <StopIcon className="h-4 w-4 text-red-500" />
@@ -366,6 +434,7 @@ export default function ProblemCard() {
                   ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                   : 'hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
+              title="Recording (UI only - backend integration pending)"
             >
               <MicrophoneIcon className="h-4 w-4" />
             </button>

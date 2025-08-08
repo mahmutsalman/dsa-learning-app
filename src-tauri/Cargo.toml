@@ -5,7 +5,6 @@ description = "A card-based learning management system for practicing DSA proble
 authors = ["you"]
 license = ""
 repository = ""
-default-run = "dsa-learning-app"
 edition = "2021"
 rust-version = "1.70"
 
@@ -24,6 +23,8 @@ rusqlite = { version = "0.32.1", features = ["bundled"] }
 # Utility dependencies (minimal)
 uuid = { version = "1.11.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [features]
 # This feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.

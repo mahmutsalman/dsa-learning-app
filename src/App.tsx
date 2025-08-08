@@ -14,9 +14,9 @@ function App() {
     // Initialize app and check for dark mode preference
     const initApp = async () => {
       try {
-        console.log("Initializing database...");
-        const result = await invoke("init_database");
-        console.log("Database initialized:", result);
+        console.log("Connecting to database...");
+        const result = await invoke("connect_database");
+        console.log("Database connection:", result);
         
         // Check system dark mode preference
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -52,8 +52,8 @@ function App() {
       }`}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold mb-2">Initializing DSA Learning App</h2>
-          <p className="text-gray-600 dark:text-gray-400">Setting up your learning environment...</p>
+          <h2 className="text-xl font-semibold mb-2">Connecting to DSA Learning App</h2>
+          <p className="text-gray-600 dark:text-gray-400">Loading your learning environment...</p>
         </div>
       </div>
     );
