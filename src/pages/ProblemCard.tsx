@@ -20,6 +20,7 @@ import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
 import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
 import DeleteCardModal from '../components/DeleteCardModal';
 import { useAutoSave } from '../hooks/useAutoSave';
+import { useTimer } from '../hooks/useTimer';
 import { logDatabaseAnalysis, getSiblingCards } from '../utils/databaseAnalysis';
 
 export default function ProblemCard() {
@@ -30,9 +31,58 @@ export default function ProblemCard() {
   const [currentCard, setCurrentCard] = useState<Card | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timerState, setTimerState] = useState({ isRunning: false, elapsedTime: 0 });
   const [recordingState, setRecordingState] = useState({ isRecording: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
+  
+  // Timer functionality - integrated with backend
+  const timer = useTimer(currentCard?.id);
+
+  // Helper function to format time display with validation
+  const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
+    console.log(`🕐 [Format Debug] Input seconds: ${seconds}, showSeconds: ${showSeconds}`);
+    
+    // Input validation and sanitization
+    if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
+      console.log(`🕐 [Format Debug] Invalid seconds input: ${seconds}, returning fallback`);
+      return showSeconds ? '0s' : '00:00';
+    }
+    
+    // Ensure integer seconds
+    const safeSeconds = Math.floor(Math.abs(seconds));
+    
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const secs = safeSeconds % 60;
+    
+    console.log(`🕐 [Format Debug] Calculated - hours: ${hours}, minutes: ${minutes}, secs: ${secs}`);
+    
+    // Validate calculated values
+    if (isNaN(hours) || isNaN(minutes) || isNaN(secs)) {
+      console.log(`🕐 [Format Debug] NaN detected in calculations, returning fallback`);
+      return showSeconds ? '0s' : '00:00';
+    }
+    
+    if (showSeconds) {
+      if (hours > 0) {
+        const result = `${hours}h ${minutes}m ${secs}s`;
+        console.log(`🕐 [Format Debug] Long format result: ${result}`);
+        return result;
+      } else if (minutes > 0) {
+        const result = `${minutes}m ${secs}s`;
+        console.log(`🕐 [Format Debug] Medium format result: ${result}`);
+        return result;
+      } else {
+        const result = `${secs}s`;
+        console.log(`🕐 [Format Debug] Short format result: ${result}`);
+        return result;
+      }
+    } else {
+      // For timer display, always show MM:SS format
+      const result = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      console.log(`🕐 [Format Debug] Timer format result: ${result}`);
+      return result;
+    }
+  };
 
   // Editor state
   const [code, setCode] = useState<string>('');
@@ -194,28 +244,6 @@ export default function ProblemCard() {
     }
   };
 
-  const createChildCard = async () => {
-    if (!problemId || !currentCard) return;
-    
-    try {
-      // Determine parent card ID - if current card is already a child, use its parent
-      const parentCardId = currentCard.parent_card_id || currentCard.id;
-      
-      const newCard = await invoke<Card>('create_card', {
-        request: {
-          problem_id: problemId,
-          language: currentCard.language, // Inherit language from current card
-          parent_card_id: parentCardId
-        }
-      });
-      
-      setCards(prev => [...prev, newCard]);
-      setCurrentCard(newCard);
-      navigate(`/problem/${problemId}/card/${newCard.id}`);
-    } catch (err) {
-      console.error('Failed to create child card:', err);
-    }
-  };
 
   const deleteCard = async () => {
     if (!currentCard || !currentCard.parent_card_id) {
@@ -296,19 +324,11 @@ export default function ProblemCard() {
     try {
       if (!currentCard) return;
       
-      console.warn('Timer functionality not implemented yet');
-      // For now, just toggle local state
-      setTimerState(prev => ({
-        isRunning: !prev.isRunning,
-        elapsedTime: prev.isRunning ? 0 : prev.elapsedTime
-      }));
-      
-      // TODO: Implement when timer backend is ready
-      // if (timerState.isRunning) {
-      //   await invoke('stop_timer_session');
-      // } else {
-      //   await invoke('start_timer_session', { cardId: currentCard.id });
-      // }
+      if (timer.timerState.isRunning) {
+        await timer.stopTimer();
+      } else {
+        await timer.startTimer(currentCard.id);
+      }
     } catch (err) {
       console.error('Timer error:', err);
     }
@@ -481,19 +501,47 @@ export default function ProblemCard() {
             <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <button
                 onClick={toggleTimer}
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                title="Timer (UI only - backend integration pending)"
+                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
+                disabled={timer.isLoading}
+                title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
               >
-                {timerState.isRunning ? (
+                {timer.timerState.isRunning ? (
                   <StopIcon className="h-4 w-4 text-red-500" />
                 ) : (
                   <PlayIcon className="h-4 w-4 text-green-500" />
                 )}
               </button>
-              <span className="text-sm font-mono">
-                {Math.floor(timerState.elapsedTime / 60)}:
-                {(timerState.elapsedTime % 60).toString().padStart(2, '0')}
-              </span>
+              <div className="flex flex-col items-center">
+                {/* Total duration on top */}
+                <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+                  {(() => {
+                    console.log(`🕐 [Timer Display] Total Duration: ${timer.totalDuration}`);
+                    return formatTimeDisplay(timer.totalDuration);
+                  })()}
+                </span>
+                {/* Current session below in red and smaller */}
+                <span className={`text-xs font-mono transition-colors ${
+                  timer.timerState.isRunning 
+                    ? 'text-red-500 dark:text-red-400' 
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}>
+                  {(() => {
+                    console.log(`🕐 [Timer Display] Elapsed Time: ${timer.timerState.elapsedTime}, Timer State:`, timer.timerState);
+                    return formatTimeDisplay(timer.timerState.elapsedTime, false);
+                  })()}
+                </span>
+              </div>
+              {timer.error && (
+                <div className="text-xs text-red-500" title={timer.error}>
+                  ⚠️
+                </div>
+              )}
+              {/* Debug info - remove in production */}
+              {(import.meta as any).env?.MODE === 'development' && (
+                <div className="text-xs text-blue-500" title={`Debug: totalDuration=${timer.totalDuration}, elapsedTime=${timer.timerState.elapsedTime}, isRunning=${timer.timerState.isRunning}`}>
+                  🔍
+                </div>
+              )}
             </div>
 
             {/* Recording */}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
-import { Problem, Difficulty } from '../types';
+import { Problem, Difficulty, Card } from '../types';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -10,10 +10,31 @@ const difficultyColors = {
   'Hard': 'bg-difficulty-hard text-red-800'
 };
 
+interface ProblemWithStudyTime extends Problem {
+  totalStudyTime: number; // in seconds
+  cardCount: number;
+}
+
 export default function Dashboard() {
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper function to format time display
+  const formatTimeDisplay = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m`;
+    } else if (seconds > 0) {
+      return `${seconds}s`;
+    } else {
+      return '0h';
+    }
+  };
 
   useEffect(() => {
     loadProblems();
@@ -22,8 +43,36 @@ export default function Dashboard() {
   const loadProblems = async () => {
     try {
       setLoading(true);
-      const result = await invoke<Problem[]>('get_problems');
-      setProblems(result);
+      const baseProblems = await invoke<Problem[]>('get_problems');
+      
+      // For each problem, get its cards and calculate total study time
+      const problemsWithStudyTime = await Promise.all(
+        baseProblems.map(async (problem) => {
+          try {
+            const cards = await invoke<Card[]>('get_cards_for_problem', { 
+              problemId: problem.id 
+            });
+            
+            // Sum up total_duration from all cards for this problem
+            const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0), 0);
+            
+            return {
+              ...problem,
+              totalStudyTime,
+              cardCount: cards.length
+            } as ProblemWithStudyTime;
+          } catch (err) {
+            console.error(`Failed to load cards for problem ${problem.id}:`, err);
+            return {
+              ...problem,
+              totalStudyTime: 0,
+              cardCount: 0
+            } as ProblemWithStudyTime;
+          }
+        })
+      );
+      
+      setProblems(problemsWithStudyTime);
       setError(null);
     } catch (err) {
       setError(err as string);
@@ -100,7 +149,9 @@ export default function Dashboard() {
           <div className="flex items-center">
             <ClockIcon className="h-8 w-8 text-green-500" />
             <div className="ml-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0h</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
+              </h3>
               <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
             </div>
           </div>
@@ -160,7 +211,7 @@ export default function Dashboard() {
               
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">
-                  0 cards • 0h studied
+                  {problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied
                 </span>
                 <span className="text-primary-500 dark:text-primary-400">
                   Open →
