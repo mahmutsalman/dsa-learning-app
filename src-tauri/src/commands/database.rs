@@ -118,8 +118,12 @@ pub async fn delete_card(
     state: State<'_, AppState>,
     id: String,
 ) -> Result<String, String> {
-    // TODO: Implement delete_card in DatabaseManager
-    Ok("Card deleted successfully".to_string())
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    match db.delete_card(&id) {
+        Ok(()) => Ok("Card deleted successfully".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 // Database analysis commands
