@@ -9,6 +9,7 @@ export interface ResizableProblemDescriptionPanelProps {
   isCollapsed: boolean;
   onToggle: () => void;
   problem: {
+    id: string;
     title: string;
     description: string;
     leetcode_url?: string;
@@ -19,6 +20,7 @@ export interface ResizableProblemDescriptionPanelProps {
   onWidthChange?: (width: number) => void;
   className?: string;
   useWorkspace?: boolean; // Flag to enable workspace integration
+  onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
 }
 
 const DEFAULT_WIDTH = 320; // w-80 equivalent
@@ -35,7 +37,8 @@ export default function ResizableProblemDescriptionPanel({
   maxWidth = MAX_WIDTH,
   onWidthChange,
   className = '',
-  useWorkspace = false
+  useWorkspace = false,
+  onDescriptionUpdate
 }: ResizableProblemDescriptionPanelProps) {
   // Workspace integration
   const workspaceContext = useWorkspace ? (() => {
@@ -138,6 +141,7 @@ export default function ResizableProblemDescriptionPanel({
             onToggle={onToggle}
             problem={problem}
             useWorkspace={true}
+            onDescriptionUpdate={onDescriptionUpdate}
           />
         </div>
       </div>
@@ -153,6 +157,7 @@ export default function ResizableProblemDescriptionPanel({
           onToggle={onToggle}
           problem={problem}
           useWorkspace={useWorkspace}
+          onDescriptionUpdate={onDescriptionUpdate}
         />
       </div>
     );
@@ -181,6 +186,7 @@ export default function ResizableProblemDescriptionPanel({
             onToggle={onToggle}
             problem={problem}
             useWorkspace={useWorkspace}
+            onDescriptionUpdate={onDescriptionUpdate}
           />
         </div>
       </ResizableBox>

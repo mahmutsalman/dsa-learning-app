@@ -51,9 +51,13 @@ pub async fn get_problem_by_id(
 pub async fn update_problem(
     state: State<'_, AppState>,
     request: UpdateProblemRequest,
-) -> Result<String, String> {
-    // TODO: Implement update_problem in DatabaseManager
-    Ok("Problem updated successfully".to_string())
+) -> Result<Problem, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    match db.update_problem(request) {
+        Ok(Some(problem)) => Ok(problem),
+        Ok(None) => Err("Problem not found".to_string()),
+        Err(e) => Err(e.to_string())
+    }
 }
 
 #[tauri::command]
