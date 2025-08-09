@@ -1,6 +1,5 @@
 /* Import external libraries first */
 @import 'quill/dist/quill.snow.css';
-@import 'quill/dist/quill.core.css';
 
 /* Then Tailwind */
 @tailwind base;
