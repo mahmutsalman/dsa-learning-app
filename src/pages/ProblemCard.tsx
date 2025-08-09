@@ -9,7 +9,8 @@ import {
   MicrophoneIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  TrashIcon
+  TrashIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import { Problem, Card } from '../types';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
@@ -19,6 +20,7 @@ import { LanguageSelector } from '../components/LanguageSelector';
 import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
 import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
 import DeleteCardModal from '../components/DeleteCardModal';
+import SessionHistory from '../components/SessionHistory';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
 import { logDatabaseAnalysis, getSiblingCards } from '../utils/databaseAnalysis';
@@ -33,6 +35,7 @@ export default function ProblemCard() {
   const [error, setError] = useState<string | null>(null);
   const [recordingState, setRecordingState] = useState({ isRecording: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
+  const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
   
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
@@ -221,6 +224,24 @@ export default function ProblemCard() {
       console.error('Failed to load problem:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshCardData = async () => {
+    if (!problemId || !currentCard) return;
+    
+    try {
+      // Reload cards to get updated total_duration
+      const cardsResult = await invoke<Card[]>('get_cards_for_problem', { problemId });
+      setCards(cardsResult);
+      
+      // Update the current card with refreshed data
+      const updatedCurrentCard = cardsResult.find(c => c.id === currentCard.id);
+      if (updatedCurrentCard) {
+        setCurrentCard(updatedCurrentCard);
+      }
+    } catch (err) {
+      console.error('Failed to refresh card data:', err);
     }
   };
 
@@ -544,6 +565,15 @@ export default function ProblemCard() {
               )}
             </div>
 
+            {/* Session History */}
+            <button
+              onClick={() => setSessionHistory({ isOpen: true })}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="View session history"
+            >
+              <ClockIcon className="h-4 w-4" />
+            </button>
+
             {/* Recording */}
             <button
               onClick={toggleRecording}
@@ -641,6 +671,14 @@ export default function ProblemCard() {
         onConfirm={deleteCard}
         card={currentCard}
         isDeleting={deleteModal.isDeleting}
+      />
+      
+      {/* Session History Modal */}
+      <SessionHistory
+        cardId={currentCard?.id}
+        isOpen={sessionHistory.isOpen}
+        onClose={() => setSessionHistory({ isOpen: false })}
+        onSessionDeleted={refreshCardData}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 mod schema;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, params, OptionalExtension};
 use anyhow::Context;
 use chrono::Utc;
 use uuid::Uuid;
@@ -655,6 +655,77 @@ impl DatabaseManager {
         )?;
         
         Ok(())
+    }
+    
+    #[allow(dead_code)]
+    pub fn get_sessions_for_card(&self, card_id: &str) -> anyhow::Result<Vec<TimeSession>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, card_id, start_time, end_time, duration, date, is_active, notes 
+             FROM time_sessions WHERE card_id = ?1 ORDER BY start_time DESC"
+        )?;
+        
+        let session_iter = stmt.query_map([card_id], |row| {
+            let start_time_str: String = row.get(2)?;
+            let end_time_str: Option<String> = row.get(3)?;
+            
+            Ok(TimeSession {
+                id: row.get(0)?,
+                card_id: row.get(1)?,
+                start_time: start_time_str.parse().unwrap_or_else(|_| Utc::now()),
+                end_time: end_time_str.and_then(|s| s.parse().ok()),
+                duration: row.get(4)?,
+                date: row.get(5)?,
+                is_active: row.get::<_, i32>(6)? == 1,
+                notes: row.get(7)?,
+            })
+        })?;
+        
+        let mut sessions = Vec::new();
+        for session in session_iter {
+            sessions.push(session?);
+        }
+        
+        Ok(sessions)
+    }
+    
+    #[allow(dead_code)]
+    pub fn delete_time_session(&mut self, session_id: &str) -> anyhow::Result<()> {
+        // First, get the session details to update the card's total duration
+        let session: Option<(String, i32)> = self.connection.query_row(
+            "SELECT card_id, duration FROM time_sessions WHERE id = ?1",
+            [session_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+        ).optional()?;
+        
+        match session {
+            Some((card_id, duration)) => {
+                // Begin transaction for atomic operation
+                let tx = self.connection.unchecked_transaction()?;
+                
+                // Delete the session
+                let rows_affected = tx.execute(
+                    "DELETE FROM time_sessions WHERE id = ?1",
+                    [session_id]
+                )?;
+                
+                if rows_affected == 0 {
+                    return Err(anyhow::anyhow!("Session not found"));
+                }
+                
+                // Update card's total duration (subtract the deleted session duration)
+                tx.execute(
+                    "UPDATE cards SET total_duration = total_duration - ?1 WHERE id = ?2",
+                    params![duration, &card_id]
+                )?;
+                
+                // Commit the transaction
+                tx.commit()?;
+                
+                println!("Successfully deleted session '{}' and updated card total duration", session_id);
+                Ok(())
+            },
+            None => Err(anyhow::anyhow!("Session with id '{}' not found", session_id))
+        }
     }
 
     // Recording operations (disabled until recordings table is added)
