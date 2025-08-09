@@ -460,3 +460,309 @@ textarea.text-wrap-responsive {
   -webkit-hyphens: auto;
   -ms-hyphens: auto;
 }
+
+/* Stable Header Layout - High Specificity to Override Tailwind */
+.bg-white.dark\:bg-gray-800 .stable-header-grid {
+  display: grid !important;
+  grid-template-columns: 
+    minmax(120px, auto)    /* Navigation section */
+    1fr                    /* Title section (flexible) */
+    140px                  /* Language selector */
+    120px                  /* Save indicators */
+    180px                  /* Card navigation */
+    200px !important;      /* Action buttons */
+  align-items: center !important;
+  gap: 0.5rem !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: relative;
+}
+
+/* Grid section styles - High specificity */
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-navigation {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  min-width: 0 !important; /* Prevent overflow */
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  min-width: 0 !important; /* Prevent overflow */
+  flex: 1 !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-title h1 {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  min-width: 0 !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-title p {
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-language-selector {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 140px !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-save-indicators {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 120px !important;
+  min-height: 2rem !important; /* Reserve space even when empty */
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-card-navigation {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.25rem !important;
+  width: 180px !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-actions {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0.5rem !important;
+  width: 200px !important;
+}
+
+/* Fixed button container for delete button */
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container {
+  width: 2.5rem !important; /* Reserve space always */
+  height: 2.5rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container button {
+  width: 2rem !important;
+  height: 2rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Hide delete button while maintaining space */
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container.hidden button {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 1200px) {
+  .bg-white.dark\:bg-gray-800 .stable-header-grid {
+    grid-template-columns: 
+      minmax(100px, auto)    /* Navigation section */
+      1fr                    /* Title section */
+      120px                  /* Language selector */
+      100px                  /* Save indicators */
+      160px                  /* Card navigation */
+      180px !important;      /* Action buttons */
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-language-selector {
+    width: 120px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-save-indicators {
+    width: 100px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-card-navigation {
+    width: 160px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-actions {
+    width: 180px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .bg-white.dark\:bg-gray-800 .stable-header-grid {
+    grid-template-columns: 
+      auto                   /* Navigation section */
+      1fr                    /* Title section */
+      100px                  /* Language selector */
+      80px                   /* Save indicators */
+      140px                  /* Card navigation */
+      160px !important;      /* Action buttons */
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-language-selector {
+    width: 100px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-save-indicators {
+    width: 80px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-card-navigation {
+    width: 140px !important;
+  }
+  
+  .bg-white.dark\:bg-gray-800 .stable-header-grid .header-actions {
+    width: 160px !important;
+    gap: 0.25rem !important;
+  }
+}
+
+/* Workspace Header - Integrated into grid */
+.workspace-header {
+  background: white;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .workspace-header {
+  background: #1f2937;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.workspace-header-content {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Workspace header grid */
+.workspace-header-grid {
+  display: grid;
+  grid-template-columns: 
+    minmax(80px, 150px)    /* Navigation section */
+    minmax(150px, 1fr)     /* Title section (flexible but with min) */
+    minmax(80px, 150px)    /* Language selector */
+    minmax(60px, 130px)    /* Save indicators */
+    minmax(100px, 200px)   /* Card navigation */
+    minmax(120px, 220px);  /* Action buttons */
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Header grid sections */
+.workspace-header-grid > * {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Header grid sections */
+.header-navigation {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header-title h1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.header-title p {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+}
+
+.header-language-selector {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.header-save-indicators {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 2rem;
+}
+
+.header-card-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* Unified workspace seamless integration */
+.unified-workspace {
+  background: #111827; /* Dark background to match gaps */
+  height: 100vh;
+  overflow: hidden;
+}
+
+.dark .unified-workspace {
+  background: #111827;
+}
+
+/* Remove all gaps between workspace components */
+.unified-workspace .workspace-panel {
+  margin: 0 !important;
+}
+
+.unified-workspace .workspace-content-area {
+  background: white;
+}
+
+.dark .unified-workspace .workspace-content-area {
+  background: #1f2937;
+}
+
+/* Responsive header adjustments */
+@container (max-width: 800px) {
+  .workspace-header-grid {
+    gap: 0.25rem;
+  }
+  
+  .header-title h1 {
+    font-size: 1rem;
+  }
+  
+  .header-title p {
+    font-size: 0.7rem;
+  }
+}
+
+/* Hide less important elements when space is tight */
+@media (max-width: 1000px) {
+  .header-navigation button:nth-child(2) {
+    display: none; /* Hide DB Analysis button */
+  }
+}

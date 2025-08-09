@@ -1,10 +1,10 @@
 import React, { useRef, useCallback } from 'react';
-import { WorkspaceContext, WorkspaceContextValue } from './WorkspaceContext';
-import { useWorkspaceLayout } from './useWorkspaceLayout';
+import { useWorkspaceContext } from './WorkspaceContext';
 import ResizeHandle from './ResizeHandle';
 import WorkspacePanel from './WorkspacePanel';
 
 export interface ResizableWorkspaceProps {
+  header: React.ReactNode;
   problemPanel: React.ReactNode;
   codeEditor: React.ReactNode;
   notesEditor: React.ReactNode;
@@ -13,14 +13,14 @@ export interface ResizableWorkspaceProps {
 }
 
 export default function ResizableWorkspace({
+  header,
   problemPanel,
   codeEditor,
   notesEditor,
   className = '',
-  onLayoutChange,
 }: ResizableWorkspaceProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const { state, actions } = useWorkspaceLayout({ onLayoutChange });
+  const { state, actions } = useWorkspaceContext();
   
   const { dimensions, layout, constraints } = state;
 
@@ -91,42 +91,56 @@ export default function ResizableWorkspace({
     document.addEventListener('mouseup', handleMouseUp);
   }, [actions]);
 
-  // Context value
-  const contextValue: WorkspaceContextValue = {
-    state,
-    actions,
-  };
-
-  // Grid layout styles
+  // Grid layout styles - now includes header row
   const gridStyles: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: layout.isCollapsed.problemPanel 
-      ? `${dimensions.problemPanelWidth}px 1fr`
-      : `${dimensions.problemPanelWidth}px 1fr`,
-    gridTemplateRows: `${dimensions.codeEditorHeight}px 1fr`,
+    gridTemplateColumns: `${dimensions.problemPanelWidth}px 1fr`,
+    gridTemplateRows: '64px 1fr', // Fixed header height + content area
     height: '100%',
     width: '100%',
     position: 'relative',
+  };
+
+  // Content grid styles for the editors area
+  const contentGridStyles: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gridTemplateRows: `${dimensions.codeEditorHeight}px 1fr`,
+    height: '100%',
+    width: '100%',
   };
 
   // Calculate actual notes editor height
   const notesEditorHeight = dimensions.totalHeight - dimensions.codeEditorHeight - 100; // Account for header
 
   return (
-    <WorkspaceContext.Provider value={contextValue}>
-      <div
-        ref={workspaceRef}
-        className={`unified-workspace ${className}`}
-        style={gridStyles}
-      >
+    <div
+      ref={workspaceRef}
+      className={`unified-workspace ${className}`}
+      style={gridStyles}
+    >
+        {/* Header - spans full width */}
+        <div
+          className="workspace-header"
+          style={{
+            gridColumn: '1 / -1',
+            gridRow: '1',
+            height: '64px',
+            borderBottom: '1px solid var(--workspace-border-color)',
+          }}
+        >
+          {header}
+        </div>
+
         {/* Problem Description Panel */}
         <WorkspacePanel
           id="problemPanel"
           className="workspace-panel-problem"
           style={{
             gridColumn: '1',
-            gridRow: '1 / -1',
+            gridRow: '2',
             width: dimensions.problemPanelWidth,
+            height: '100%',
             minWidth: layout.isCollapsed.problemPanel ? dimensions.problemPanelWidth : constraints.minProblemWidth,
           }}
         >
@@ -140,57 +154,66 @@ export default function ResizableWorkspace({
             onResizeStart={handleResizeStart}
             style={{
               gridColumn: '2',
-              gridRow: '1 / -1',
+              gridRow: '2',
               marginLeft: -2,
               zIndex: 10,
             }}
           />
         )}
 
-        {/* Code Editor */}
-        <WorkspacePanel
-          id="codeEditor"
-          className="workspace-panel-code"
+        {/* Content Area - contains code and notes editors */}
+        <div
+          className="workspace-content-area"
           style={{
             gridColumn: '2',
-            gridRow: '1',
-            height: dimensions.codeEditorHeight,
-            minHeight: constraints.minCodeHeight,
+            gridRow: '2',
+            ...contentGridStyles,
           }}
         >
-          {codeEditor}
-        </WorkspacePanel>
-
-        {/* Horizontal Resize Handle */}
-        {!layout.isCollapsed.notesEditor && (
-          <ResizeHandle
-            handle={horizontalHandle}
-            onResizeStart={handleResizeStart}
-            style={{
-              gridColumn: '2',
-              gridRow: '1',
-              marginTop: dimensions.codeEditorHeight - 2,
-              zIndex: 10,
-            }}
-          />
-        )}
-
-        {/* Notes Editor */}
-        {!layout.isCollapsed.notesEditor && (
+          {/* Code Editor */}
           <WorkspacePanel
-            id="notesEditor"
-            className="workspace-panel-notes"
+            id="codeEditor"
+            className="workspace-panel-code"
             style={{
-              gridColumn: '2',
-              gridRow: '2',
-              height: Math.max(notesEditorHeight, constraints.minNotesHeight),
-              minHeight: constraints.minNotesHeight,
+              gridColumn: '1',
+              gridRow: '1',
+              height: dimensions.codeEditorHeight,
+              minHeight: constraints.minCodeHeight,
             }}
           >
-            {notesEditor}
+            {codeEditor}
           </WorkspacePanel>
-        )}
+
+          {/* Horizontal Resize Handle */}
+          {!layout.isCollapsed.notesEditor && (
+            <ResizeHandle
+              handle={horizontalHandle}
+              onResizeStart={handleResizeStart}
+              style={{
+                gridColumn: '1',
+                gridRow: '1',
+                marginTop: dimensions.codeEditorHeight - 2,
+                zIndex: 10,
+              }}
+            />
+          )}
+
+          {/* Notes Editor */}
+          {!layout.isCollapsed.notesEditor && (
+            <WorkspacePanel
+              id="notesEditor"
+              className="workspace-panel-notes"
+              style={{
+                gridColumn: '1',
+                gridRow: '2',
+                height: Math.max(notesEditorHeight, constraints.minNotesHeight),
+                minHeight: constraints.minNotesHeight,
+              }}
+            >
+              {notesEditor}
+            </WorkspacePanel>
+          )}
+        </div>
       </div>
-    </WorkspaceContext.Provider>
   );
 }

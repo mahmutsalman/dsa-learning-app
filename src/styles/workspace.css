@@ -7,7 +7,7 @@
   --workspace-resize-handle-color: #007acc;
   --workspace-resize-handle-hover-color: #005a9e;
   --workspace-transition-speed: 200ms;
-  --workspace-border-radius: 4px;
+  --workspace-border-radius: 0px;
   --workspace-spacing: 0px;
 }
 
@@ -24,28 +24,33 @@
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: transparent;
+  background: #111827; /* Match the dark gaps */
   position: relative;
   user-select: none; /* Prevent text selection during resize */
+}
+
+.dark .unified-workspace {
+  background: #111827;
 }
 
 /* Workspace panels */
 .workspace-panel {
   position: relative;
   overflow: hidden;
-  border: 1px solid var(--workspace-border-color);
-  margin: var(--workspace-spacing);
-  background: inherit;
+  border: none;
+  margin: 0;
+  background: white;
+  height: 100%;
   transition: border-color var(--workspace-transition-speed) ease;
 }
 
-/* Remove default margins and create seamless borders */
-.workspace-panel:not(:first-child) {
-  margin-left: -1px;
+.dark .workspace-panel {
+  background: #1f2937;
 }
 
-.workspace-panel:not(.workspace-panel:first-of-type) {
-  margin-top: -1px;
+/* Remove all margins for seamless integration */
+.workspace-panel {
+  margin: 0 !important;
 }
 
 /* Panel content container */
@@ -58,21 +63,38 @@
 
 /* Specific panel styles */
 .workspace-panel-problem {
-  border-right: 1px solid var(--workspace-border-color);
-  border-bottom: none;
-  border-top: none;
-  border-left: none;
+  border-right: 1px solid var(--workspace-border-color) !important;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .workspace-panel-code {
-  border-bottom: 1px solid var(--workspace-border-color);
-  border-top: none;
-  border-left: none;
-  border-right: none;
+  border-bottom: 1px solid var(--workspace-border-color) !important;
 }
 
 .workspace-panel-notes {
   border: none;
+}
+
+/* Workspace header styles */
+.workspace-header {
+  background: white;
+  z-index: 10;
+}
+
+.dark .workspace-header {
+  background: #1f2937;
+}
+
+/* Content area for editors */
+.workspace-content-area {
+  background: white;
+  overflow: hidden;
+}
+
+.dark .workspace-content-area {
+  background: #1f2937;
 }
 
 /* Resize handles */
@@ -334,6 +356,18 @@
   width: 100%;
 }
 
+.unified-workspace .workspace-panel-problem .resizable-problem-panel-container > div {
+  height: 100% !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.unified-workspace .workspace-panel-problem .resizable-problem-panel-box {
+  height: 100% !important;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Responsive text adjustments for narrow widths */
 .unified-workspace .workspace-panel-problem .problem-title-responsive {
   word-wrap: break-word;
@@ -385,6 +419,45 @@
 
 .unified-workspace .react-resizable-handle {
   display: none !important;
+}
+
+/* Header grid styles moved to main styles.css for higher specificity */
+
+/* Monaco Editor Responsiveness Fixes */
+.workspace-monaco-responsive {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.workspace-monaco-responsive .monaco-editor {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.workspace-monaco-responsive .monaco-editor .overflow-guard {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Force Monaco Editor to re-layout when workspace dimensions change */
+.unified-workspace .workspace-panel-code {
+  resize: both; /* Trigger resize events */
+  overflow: hidden;
+}
+
+/* Ensure Monaco Editor responds to parent container changes */
+.workspace-integrated .monaco-editor-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.workspace-integrated .monaco-editor-container .monaco-editor {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
 /* Accessibility improvements */
