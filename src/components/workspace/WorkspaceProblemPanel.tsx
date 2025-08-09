@@ -3,13 +3,15 @@ import ResizableProblemDescriptionPanel from '../ResizableProblemDescriptionPane
 
 interface WorkspaceProblemPanelProps {
   problem: {
+    id: string;
     title: string;
     description: string;
     leetcode_url?: string;
   } | null;
+  onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
 }
 
-export default function WorkspaceProblemPanel({ problem }: WorkspaceProblemPanelProps) {
+export default function WorkspaceProblemPanel({ problem, onDescriptionUpdate }: WorkspaceProblemPanelProps) {
   const { state, actions } = useWorkspaceContext();
 
   const handleToggle = () => {
@@ -22,6 +24,7 @@ export default function WorkspaceProblemPanel({ problem }: WorkspaceProblemPanel
       onToggle={handleToggle}
       problem={problem}
       useWorkspace={true}
+      onDescriptionUpdate={onDescriptionUpdate}
     />
   );
 }

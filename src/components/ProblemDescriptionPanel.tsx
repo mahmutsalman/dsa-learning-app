@@ -1,26 +1,76 @@
+import { useState } from 'react';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
-  ArrowTopRightOnSquareIcon
+  ArrowTopRightOnSquareIcon,
+  PencilIcon,
+  CheckIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 export interface ProblemDescriptionPanelProps {
   isCollapsed: boolean;
   onToggle: () => void;
   problem: {
+    id: string;
     title: string;
     description: string;
     leetcode_url?: string;
   } | null;
   useWorkspace?: boolean; // Flag to enable workspace integration
+  onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
 }
 
 export default function ProblemDescriptionPanel({ 
   isCollapsed, 
   onToggle, 
   problem,
-  useWorkspace = false
+  useWorkspace = false,
+  onDescriptionUpdate
 }: ProblemDescriptionPanelProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedDescription, setEditedDescription] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const startEditing = () => {
+    if (problem) {
+      setEditedDescription(problem.description);
+      setIsEditing(true);
+      setSaveError(null);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditedDescription('');
+    setSaveError(null);
+  };
+
+  const saveDescription = async () => {
+    if (!problem || !onDescriptionUpdate || editedDescription.trim() === '') {
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+      
+      const success = await onDescriptionUpdate(problem.id, editedDescription.trim());
+      
+      if (success) {
+        setIsEditing(false);
+        setEditedDescription('');
+      } else {
+        setSaveError('Failed to update description');
+      }
+    } catch (error) {
+      console.error('Error saving description:', error);
+      setSaveError('Failed to update description');
+    } finally {
+      setIsSaving(false);
+    }
+  };
   // Generate width classes based on workspace usage
   const getWidthClasses = () => {
     if (useWorkspace) {
@@ -91,9 +141,49 @@ export default function ProblemDescriptionPanel({
         getPaddingClasses()
       } py-4 border-b border-gray-200 dark:border-gray-700 min-h-[73px]`}>
         {!isCollapsed && (
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white transition-opacity duration-300">
-            Problem Description
-          </h2>
+          <div className="flex items-center flex-1">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white transition-opacity duration-300">
+              Problem Description
+            </h2>
+            {/* Edit Button - Only show if onDescriptionUpdate is provided and not editing */}
+            {onDescriptionUpdate && !isEditing && (
+              <button
+                onClick={startEditing}
+                className="ml-2 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                title="Edit description"
+              >
+                <PencilIcon className="h-4 w-4" />
+              </button>
+            )}
+            {/* Edit Mode Controls */}
+            {isEditing && (
+              <div className="ml-2 flex items-center space-x-1">
+                <button
+                  onClick={saveDescription}
+                  disabled={isSaving || editedDescription.trim() === ''}
+                  className="p-1 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors text-green-600 dark:text-green-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Save changes"
+                >
+                  <CheckIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  disabled={isSaving}
+                  className="p-1 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Cancel editing"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            {/* Save status indicator */}
+            {isSaving && (
+              <div className="ml-2 flex items-center text-blue-600 dark:text-blue-400">
+                <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
+                <span className="ml-1 text-xs">Saving...</span>
+              </div>
+            )}
+          </div>
         )}
         <button
           onClick={onToggle}
@@ -118,15 +208,39 @@ export default function ProblemDescriptionPanel({
             </h3>
           </div>
 
-          {/* Problem Description */}
-          <div className="prose dark:prose-invert max-w-none mb-6 min-w-0">
-            <div className="text-gray-700 dark:text-gray-300 whitespace-normal leading-relaxed text-sm problem-description-content">
-              {problem.description}
+          {/* Problem Description - View Mode */}
+          {!isEditing && (
+            <div className="prose dark:prose-invert max-w-none mb-6 min-w-0">
+              <div className="text-gray-700 dark:text-gray-300 whitespace-normal leading-relaxed text-sm problem-description-content">
+                {problem.description}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Problem Description - Edit Mode */}
+          {isEditing && (
+            <div className="mb-6 min-w-0">
+              <textarea
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                className="w-full h-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-gray-300 text-sm resize-none"
+                placeholder="Enter problem description..."
+              />
+              {/* Error message */}
+              {saveError && (
+                <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+                  {saveError}
+                </p>
+              )}
+              {/* Character count helper */}
+              <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {editedDescription.length} characters
+              </div>
+            </div>
+          )}
           
-          {/* LeetCode Link */}
-          {problem.leetcode_url && (
+          {/* LeetCode Link - Only show when not editing */}
+          {!isEditing && problem.leetcode_url && (
             <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
               <a
                 href={problem.leetcode_url}

@@ -178,6 +178,25 @@ export default function ProblemCard() {
     }
   }, [saveCard]);
 
+  // Problem description update handler
+  const handleDescriptionUpdate = useCallback(async (problemId: string, newDescription: string): Promise<boolean> => {
+    try {
+      const updatedProblem = await invoke<Problem>('update_problem', {
+        request: {
+          id: problemId,
+          description: newDescription
+        }
+      });
+      
+      // Update local problem state
+      setProblem(updatedProblem);
+      return true;
+    } catch (err) {
+      console.error('Failed to update problem description:', err);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (problemId) {
       loadProblem();
@@ -611,7 +630,10 @@ export default function ProblemCard() {
       <div className="flex-1 flex overflow-hidden">
         <ResizableWorkspace
           problemPanel={
-            <WorkspaceProblemPanel problem={problem} />
+            <WorkspaceProblemPanel 
+              problem={problem} 
+              onDescriptionUpdate={handleDescriptionUpdate}
+            />
           }
           codeEditor={
             <div className="bg-gray-50 dark:bg-gray-900 relative h-full">

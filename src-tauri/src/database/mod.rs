@@ -398,6 +398,89 @@ impl DatabaseManager {
         }
     }
 
+    pub fn update_problem(&mut self, req: UpdateProblemRequest) -> anyhow::Result<Option<Problem>> {
+        // First check if problem exists
+        let existing_problem = self.get_problem_by_id(&req.id)?;
+        if existing_problem.is_none() {
+            return Err(anyhow::anyhow!("Problem with id '{}' not found", req.id));
+        }
+
+        // Build dynamic query to update only provided fields
+        let mut update_fields = Vec::new();
+        let mut update_values: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+
+        if let Some(ref title) = req.title {
+            update_fields.push("title = ?");
+            update_values.push(Box::new(title.clone()));
+        }
+
+        if let Some(ref description) = req.description {
+            update_fields.push("description = ?");
+            update_values.push(Box::new(description.clone()));
+        }
+
+        if let Some(ref difficulty) = req.difficulty {
+            update_fields.push("difficulty = ?");
+            update_values.push(Box::new(difficulty.clone()));
+        }
+
+        if let Some(ref category) = req.category {
+            let category_json = serde_json::to_string(category)?;
+            update_fields.push("category = ?");
+            update_values.push(Box::new(category_json));
+        }
+
+        if let Some(ref leetcode_url) = req.leetcode_url {
+            update_fields.push("leetcode_url = ?");
+            update_values.push(Box::new(leetcode_url.clone()));
+        }
+
+        if let Some(ref constraints) = req.constraints {
+            let constraints_json = serde_json::to_string(constraints)?;
+            update_fields.push("constraints = ?");
+            update_values.push(Box::new(constraints_json));
+        }
+
+        if let Some(ref examples) = req.examples {
+            let examples_json = serde_json::to_string(examples)?;
+            update_fields.push("examples = ?");
+            update_values.push(Box::new(examples_json));
+        }
+
+        if let Some(ref hints) = req.hints {
+            let hints_json = serde_json::to_string(hints)?;
+            update_fields.push("hints = ?");
+            update_values.push(Box::new(hints_json));
+        }
+
+        // If no fields to update, return the existing problem
+        if update_fields.is_empty() {
+            return Ok(existing_problem);
+        }
+
+        // Build the SQL query
+        let sql = format!(
+            "UPDATE problems SET {} WHERE id = ?",
+            update_fields.join(", ")
+        );
+        
+        // Add the id to the end of the values
+        update_values.push(Box::new(req.id.clone()));
+
+        // Execute the update
+        let rows_affected = self.connection.execute(
+            &sql,
+            rusqlite::params_from_iter(update_values.iter().map(|v| v.as_ref()))
+        )?;
+
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Failed to update problem - no rows affected"));
+        }
+
+        // Return the updated problem
+        self.get_problem_by_id(&req.id)
+    }
+
     // Card operations
     pub fn create_card(&mut self, req: CreateCardRequest) -> anyhow::Result<Card> {
         let id = Uuid::new_v4().to_string();
