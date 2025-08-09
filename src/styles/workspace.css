@@ -319,16 +319,9 @@
   border-radius: 0 !important;
 }
 
-/* Integration with Quill Editor */
-.workspace-panel-notes .ql-container {
-  border: none !important;
-  border-radius: 0 !important;
-}
-
-.workspace-panel-notes .ql-toolbar {
-  border: none !important;
-  border-bottom: 1px solid var(--workspace-border-color) !important;
-  border-radius: 0 !important;
+/* Integration with Quill Editor - Let Quill handle everything */
+.workspace-panel-notes {
+  overflow: hidden;
 }
 
 /* Workspace-integrated Problem Panel Overrides */
