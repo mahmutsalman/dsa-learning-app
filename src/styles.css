@@ -1,49 +1,16 @@
+/* Import external libraries first */
+@import 'quill/dist/quill.snow.css';
+@import 'quill/dist/quill.core.css';
+
+/* Then Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Quill Editor Styles - Import before custom styles */
-@import 'quill/dist/quill.snow.css';
-
 /* Unified Workspace Styles */
 @import './styles/workspace.css';
 
-/* Ensure Quill toolbar is visible and properly styled */
-.ql-toolbar {
-  border: 1px solid #ccc !important;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-  background: white;
-  padding: 8px;
-}
-
-.ql-container {
-  border: 1px solid #ccc !important;
-  border-top: none !important;
-  border-bottom-left-radius: 4px;
-  border-bottom-right-radius: 4px;
-  font-size: 14px;
-  height: calc(100% - 42px) !important; /* Subtract toolbar height */
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-.ql-editor {
-  min-height: 150px;
-  padding: 12px 15px;
-  height: calc(100% - 42px); /* Subtract toolbar height */
-}
-
-/* Prevent duplicate toolbars */
-.ql-container .ql-toolbar {
-  display: none !important;
-}
-
-/* Force toolbar visibility */
-.ql-toolbar.ql-snow {
-  display: block !important;
-  visibility: visible !important;
-}
+/* Basic Quill editor integration - minimal global styles to prevent conflicts */
 
 /* Custom scrollbar styles */
 @layer utilities {
@@ -96,105 +63,7 @@
   background-color: #1f2937 !important;
 }
 
-/* Quill editor dark theme - Enhanced styles */
-.dark .ql-toolbar {
-  border-color: #374151 !important;
-  background-color: #374151 !important;
-}
-
-.dark .ql-container {
-  border-color: #374151 !important;
-  background-color: #1f2937 !important;
-  color: #f9fafb !important;
-}
-
-.dark .ql-editor {
-  color: #f9fafb !important;
-}
-
-.dark .ql-toolbar .ql-stroke {
-  stroke: #f9fafb !important;
-}
-
-.dark .ql-toolbar .ql-fill {
-  fill: #f9fafb !important;
-}
-
-.dark .ql-toolbar button:hover {
-  background-color: #4b5563 !important;
-}
-
-.dark .ql-toolbar button.ql-active {
-  background-color: #3b82f6 !important;
-  color: white !important;
-}
-
-.dark .ql-toolbar .ql-picker-label {
-  color: #f9fafb !important;
-}
-
-.dark .ql-toolbar .ql-picker-options {
-  background-color: #374151 !important;
-  border-color: #4b5563 !important;
-}
-
-.dark .ql-toolbar .ql-picker-item {
-  color: #f9fafb !important;
-}
-
-.dark .ql-toolbar .ql-picker-item:hover {
-  background-color: #4b5563 !important;
-}
-
-/* Ensure proper theme application */
-.dark-theme.ql-toolbar {
-  border-color: #374151 !important;
-  background-color: #374151 !important;
-}
-
-.dark-theme.ql-container {
-  border-color: #374151 !important;
-  background-color: #1f2937 !important;
-  color: #f9fafb !important;
-}
-
-.dark-theme .ql-editor {
-  color: #f9fafb !important;
-}
-
-.dark-theme.ql-toolbar .ql-stroke {
-  stroke: #f9fafb !important;
-}
-
-.dark-theme.ql-toolbar .ql-fill {
-  fill: #f9fafb !important;
-}
-
-.dark-theme.ql-toolbar button:hover {
-  background-color: #4b5563 !important;
-}
-
-.dark-theme.ql-toolbar button.ql-active {
-  background-color: #3b82f6 !important;
-  color: white !important;
-}
-
-.dark-theme.ql-toolbar .ql-picker-label {
-  color: #f9fafb !important;
-}
-
-.dark-theme.ql-toolbar .ql-picker-options {
-  background-color: #374151 !important;
-  border-color: #4b5563 !important;
-}
-
-.dark-theme.ql-toolbar .ql-picker-item {
-  color: #f9fafb !important;
-}
-
-.dark-theme.ql-toolbar .ql-picker-item:hover {
-  background-color: #4b5563 !important;
-}
+/* Quill styles moved to component level to prevent conflicts */
 
 /* Audio player dark theme */
 .dark .rhap_container {
