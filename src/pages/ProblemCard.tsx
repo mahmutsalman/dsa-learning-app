@@ -1,29 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { 
-  ArrowLeftIcon, 
-  ArrowRightIcon, 
-  PlayIcon, 
-  StopIcon,
-  MicrophoneIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
-  TrashIcon,
-  ClockIcon
-} from '@heroicons/react/24/outline';
+// Icons are now used in WorkspaceHeader component
 import { Problem, Card } from '../types';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
-import { LanguageSelector } from '../components/LanguageSelector';
+// LanguageSelector is now used in WorkspaceHeader component
 // import ResizableProblemDescriptionPanel from '../components/ResizableProblemDescriptionPanel';
 import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
 import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
+import { WorkspaceHeader } from '../components/WorkspaceHeader';
+import { WorkspaceContext } from '../components/workspace/WorkspaceContext';
+import { useWorkspaceLayout } from '../components/workspace/useWorkspaceLayout';
 import DeleteCardModal from '../components/DeleteCardModal';
 import SessionHistory from '../components/SessionHistory';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
-import { logDatabaseAnalysis, getSiblingCards } from '../utils/databaseAnalysis';
+import { getSiblingCards } from '../utils/databaseAnalysis';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -95,6 +88,18 @@ export default function ProblemCard() {
 
   // Ref for the main content container to help calculate dynamic constraints
   const contentContainerRef = useRef<HTMLDivElement>(null);
+
+  // Workspace layout management
+  const { state, actions } = useWorkspaceLayout({ 
+    onLayoutChange: (layout) => {
+      // Trigger Monaco Editor resize when workspace layout changes
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 100);
+      // Optional: handle layout changes for debugging or analytics
+      console.debug('Workspace layout changed:', layout);
+    }
+  });
 
   // Legacy state - kept for compatibility but not used in workspace mode
   // const [isProblemPanelCollapsed, setIsProblemPanelCollapsed] = useState(false);
@@ -422,213 +427,32 @@ export default function ProblemCard() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => navigate('/')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <ArrowLeftIcon className="h-5 w-5" />
-            </button>
-            
-            {/* Developer Debug Button - remove in production */}
-            {(import.meta as any).env?.MODE === 'development' && (
-              <button
-                onClick={logDatabaseAnalysis}
-                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                title="Analyze database structure (check console)"
-              >
-                DB Analysis
-              </button>
-            )}
-            
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {problem.title}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {currentCard ? (() => {
-                  const allProblemCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-                  const cardType = currentCard.parent_card_id ? 'Child Card' : 'Main Card';
-                  
-                  return `${cardType} ${currentIndex + 1} / ${allProblemCards.length}`;
-                })() : 'Card 1 / 1'}
-              </p>
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="flex items-center space-x-3">
-            {/* Language Selector */}
-            <div className="flex flex-col items-end">
-              <LanguageSelector
-                value={language}
-                onChange={setLanguage}
-                className="w-32"
-              />
-            </div>
-
-            {/* Save Indicators */}
-            <div className="flex items-center space-x-1">
-              {(codeAutoSave.isLoading || notesAutoSave.isLoading || languageAutoSave.isLoading) && (
-                <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
-                  <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
-                  <span className="text-xs">Saving...</span>
-                </div>
-              )}
-              
-              {(codeAutoSave.isSaved && notesAutoSave.isSaved && languageAutoSave.isSaved && 
-                !codeAutoSave.isLoading && !notesAutoSave.isLoading && !languageAutoSave.isLoading) && (
-                <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
-                  <CheckCircleIcon className="h-3 w-3" />
-                  <span className="text-xs">Saved</span>
-                </div>
-              )}
-              
-              {(codeAutoSave.error || notesAutoSave.error || languageAutoSave.error) && (
-                <div className="flex items-center space-x-1 text-red-600 dark:text-red-400">
-                  <ExclamationCircleIcon className="h-3 w-3" />
-                  <span className="text-xs">Error</span>
-                </div>
-              )}
-            </div>
-
-            {/* Card Navigation */}
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={() => navigateToCard('prev')}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={currentCard ? (() => {
-                  const allProblemCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-                  return currentIndex === 0; // Disabled if at first card
-                })() : true}
-              >
-                <ArrowLeftIcon className="h-4 w-4" />
-              </button>
-              
-              <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-                {currentCard ? (() => {
-                  const allProblemCards = getSiblingCards(currentCard, cards);
-                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-                  
-                  return `${currentIndex + 1} / ${allProblemCards.length}`;
-                })() : '1 / 1'}
-              </span>
-              
-              <button
-                onClick={() => navigateToCard('next')}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                title="Navigate to next card or create new card"
-              >
-                <ArrowRightIcon className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Delete Button - Only show for child cards */}
-            {currentCard?.parent_card_id && (
-              <button
-                onClick={() => setDeleteModal({ isOpen: true, isDeleting: false })}
-                className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
-                title="Delete child card"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            )}
-
-            {/* Timer - Fully Clickable */}
-            <button
-              onClick={toggleTimer}
-              disabled={timer.isLoading}
-              className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-              title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-              aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-              aria-pressed={timer.timerState.isRunning}
-            >
-              {/* Play/Stop Icon */}
-              <div className="flex-shrink-0">
-                {timer.timerState.isRunning ? (
-                  <StopIcon className="h-4 w-4 text-red-500" />
-                ) : (
-                  <PlayIcon className="h-4 w-4 text-green-500" />
-                )}
-              </div>
-              
-              {/* Timer Display */}
-              <div className="flex flex-col items-center min-w-0">
-                {/* Total duration on top - Live during recording */}
-                <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                  {(() => {
-                    // Show live total duration when timer is running
-                    const liveTotalDuration = timer.timerState.isRunning 
-                      ? timer.totalDuration + timer.timerState.elapsedTime
-                      : timer.totalDuration;
-                    
-                    console.log(`🕐 [Timer Display] Total Duration: ${timer.totalDuration}, Elapsed: ${timer.timerState.elapsedTime}, Live Total: ${liveTotalDuration}`);
-                    return formatTimeDisplay(liveTotalDuration);
-                  })()}
-                </span>
-                {/* Current session below in red and smaller */}
-                <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
-                  timer.timerState.isRunning 
-                    ? 'text-red-500 dark:text-red-400' 
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                  {(() => {
-                    console.log(`🕐 [Timer Display] Elapsed Time: ${timer.timerState.elapsedTime}, Timer State:`, timer.timerState);
-                    return formatTimeDisplay(timer.timerState.elapsedTime, false);
-                  })()}
-                </span>
-              </div>
-              
-              {/* Error and Debug Info */}
-              <div className="flex items-center space-x-1">
-                {timer.error && (
-                  <div className="text-xs text-red-500" title={timer.error}>
-                    ⚠️
-                  </div>
-                )}
-                {/* Debug info - remove in production */}
-                {(import.meta as any).env?.MODE === 'development' && (
-                  <div className="text-xs text-blue-500" title={`Debug: totalDuration=${timer.totalDuration}, elapsedTime=${timer.timerState.elapsedTime}, isRunning=${timer.timerState.isRunning}`}>
-                    🔍
-                  </div>
-                )}
-              </div>
-            </button>
-
-            {/* Session History */}
-            <button
-              onClick={() => setSessionHistory({ isOpen: true })}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-              title="View session history"
-            >
-              <ClockIcon className="h-4 w-4" />
-            </button>
-
-            {/* Recording */}
-            <button
-              onClick={toggleRecording}
-              className={`p-2 rounded-lg transition-colors ${
-                recordingState.isRecording
-                  ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-              title="Recording (UI only - backend integration pending)"
-            >
-              <MicrophoneIcon className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Content - Unified Workspace */}
-      <div className="flex-1 flex overflow-hidden">
-        <ResizableWorkspace
+    <WorkspaceContext.Provider value={{ state, actions }}>
+      <div className="flex-1 flex flex-col h-full relative">
+        {/* Content - Unified Workspace */}
+        <div className="flex-1 flex overflow-hidden">
+          <ResizableWorkspace
+          header={
+            <WorkspaceHeader
+              problem={problem}
+              currentCard={currentCard}
+              cards={cards}
+              language={language}
+              onLanguageChange={setLanguage}
+              timer={timer}
+              codeAutoSave={codeAutoSave}
+              notesAutoSave={notesAutoSave}
+              languageAutoSave={languageAutoSave}
+              recordingState={recordingState}
+              onToggleTimer={toggleTimer}
+              onToggleRecording={toggleRecording}
+              onNavigateCard={navigateToCard}
+              onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
+              onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
+              formatTimeDisplay={formatTimeDisplay}
+              getSiblingCards={getSiblingCards}
+            />
+          }
           problemPanel={
             <WorkspaceProblemPanel 
               problem={problem} 
@@ -696,10 +520,6 @@ export default function ProblemCard() {
               )}
             </div>
           }
-          onLayoutChange={(layout) => {
-            // Optional: handle layout changes for debugging or analytics
-            console.debug('Workspace layout changed:', layout);
-          }}
         />
       </div>
       
@@ -720,5 +540,6 @@ export default function ProblemCard() {
         onSessionDeleted={refreshCardData}
       />
     </div>
+    </WorkspaceContext.Provider>
   );
 }

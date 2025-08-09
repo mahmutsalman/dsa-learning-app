@@ -14,6 +14,7 @@ export interface ResizableMonacoEditorProps extends Omit<MonacoEditorProps, 'cla
   containerRef?: React.RefObject<HTMLElement>;
   siblingMinHeight?: number;
   useWorkspace?: boolean; // Flag to enable workspace integration
+  onMount?: (editor: any) => void; // Additional mount callback for workspace integration
 }
 
 const DEFAULT_HEIGHT = 400;
@@ -29,6 +30,7 @@ export function ResizableMonacoEditor({
   containerRef,
   siblingMinHeight = 300,
   useWorkspace = false,
+  onMount,
   ...monacoProps
 }: ResizableMonacoEditorProps) {
   // Workspace integration
@@ -103,8 +105,8 @@ export function ResizableMonacoEditor({
     const workspaceHeight = workspaceContext.state.dimensions.codeEditorHeight;
     
     return (
-      <div ref={resizableRef} className={`resizable-monaco-container workspace-integrated ${className}`}>
-        <div className="h-full w-full" style={{ height: workspaceHeight }}>
+      <div ref={resizableRef} className={`resizable-monaco-container workspace-integrated workspace-monaco-responsive ${className}`}>
+        <div className="monaco-editor-container" style={{ height: workspaceHeight }}>
           <MonacoEditor
             {...monacoProps}
             className="h-full w-full"
