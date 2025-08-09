@@ -55,7 +55,9 @@ async fn main() {
             commands::timer::stop_timer_session,
             commands::timer::pause_timer_session,
             commands::timer::resume_timer_session,
-            commands::timer::get_timer_state
+            commands::timer::get_timer_state,
+            commands::timer::get_card_sessions,
+            commands::timer::delete_session
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

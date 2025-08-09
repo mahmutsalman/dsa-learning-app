@@ -109,3 +109,22 @@ pub async fn get_timer_state(state: State<'_, AppState>) -> Result<TimerState, S
         })
     }
 }
+
+#[tauri::command]
+pub async fn get_card_sessions(
+    state: State<'_, AppState>,
+    card_id: String,
+) -> Result<Vec<TimeSession>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_sessions_for_card(&card_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn delete_session(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    db.delete_time_session(&session_id).map_err(|e| e.to_string())?;
+    Ok("Session deleted successfully".to_string())
+}
