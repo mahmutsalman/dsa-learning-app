@@ -240,6 +240,9 @@ export default function ProblemCard() {
       if (updatedCurrentCard) {
         setCurrentCard(updatedCurrentCard);
       }
+      
+      // Refresh timer state to update total duration display
+      await timer.refreshTimerState();
     } catch (err) {
       console.error('Failed to refresh card data:', err);
     }
@@ -518,30 +521,40 @@ export default function ProblemCard() {
               </button>
             )}
 
-            {/* Timer */}
-            <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <button
-                onClick={toggleTimer}
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50"
-                disabled={timer.isLoading}
-                title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-              >
+            {/* Timer - Fully Clickable */}
+            <button
+              onClick={toggleTimer}
+              disabled={timer.isLoading}
+              className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+              aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+              aria-pressed={timer.timerState.isRunning}
+            >
+              {/* Play/Stop Icon */}
+              <div className="flex-shrink-0">
                 {timer.timerState.isRunning ? (
                   <StopIcon className="h-4 w-4 text-red-500" />
                 ) : (
                   <PlayIcon className="h-4 w-4 text-green-500" />
                 )}
-              </button>
-              <div className="flex flex-col items-center">
-                {/* Total duration on top */}
-                <span className="text-xs font-mono text-gray-600 dark:text-gray-400">
+              </div>
+              
+              {/* Timer Display */}
+              <div className="flex flex-col items-center min-w-0">
+                {/* Total duration on top - Live during recording */}
+                <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
                   {(() => {
-                    console.log(`🕐 [Timer Display] Total Duration: ${timer.totalDuration}`);
-                    return formatTimeDisplay(timer.totalDuration);
+                    // Show live total duration when timer is running
+                    const liveTotalDuration = timer.timerState.isRunning 
+                      ? timer.totalDuration + timer.timerState.elapsedTime
+                      : timer.totalDuration;
+                    
+                    console.log(`🕐 [Timer Display] Total Duration: ${timer.totalDuration}, Elapsed: ${timer.timerState.elapsedTime}, Live Total: ${liveTotalDuration}`);
+                    return formatTimeDisplay(liveTotalDuration);
                   })()}
                 </span>
                 {/* Current session below in red and smaller */}
-                <span className={`text-xs font-mono transition-colors ${
+                <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
                   timer.timerState.isRunning 
                     ? 'text-red-500 dark:text-red-400' 
                     : 'text-gray-500 dark:text-gray-400'
@@ -552,18 +565,22 @@ export default function ProblemCard() {
                   })()}
                 </span>
               </div>
-              {timer.error && (
-                <div className="text-xs text-red-500" title={timer.error}>
-                  ⚠️
-                </div>
-              )}
-              {/* Debug info - remove in production */}
-              {(import.meta as any).env?.MODE === 'development' && (
-                <div className="text-xs text-blue-500" title={`Debug: totalDuration=${timer.totalDuration}, elapsedTime=${timer.timerState.elapsedTime}, isRunning=${timer.timerState.isRunning}`}>
-                  🔍
-                </div>
-              )}
-            </div>
+              
+              {/* Error and Debug Info */}
+              <div className="flex items-center space-x-1">
+                {timer.error && (
+                  <div className="text-xs text-red-500" title={timer.error}>
+                    ⚠️
+                  </div>
+                )}
+                {/* Debug info - remove in production */}
+                {(import.meta as any).env?.MODE === 'development' && (
+                  <div className="text-xs text-blue-500" title={`Debug: totalDuration=${timer.totalDuration}, elapsedTime=${timer.timerState.elapsedTime}, isRunning=${timer.timerState.isRunning}`}>
+                    🔍
+                  </div>
+                )}
+              </div>
+            </button>
 
             {/* Session History */}
             <button
