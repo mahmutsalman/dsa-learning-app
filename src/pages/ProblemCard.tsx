@@ -35,11 +35,8 @@ export default function ProblemCard() {
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
-    console.log(`🕐 [Format Debug] Input seconds: ${seconds}, showSeconds: ${showSeconds}`);
-    
     // Input validation and sanitization
     if (typeof seconds !== 'number' || isNaN(seconds) || seconds < 0) {
-      console.log(`🕐 [Format Debug] Invalid seconds input: ${seconds}, returning fallback`);
       return showSeconds ? '0s' : '00:00';
     }
     
@@ -50,33 +47,22 @@ export default function ProblemCard() {
     const minutes = Math.floor((safeSeconds % 3600) / 60);
     const secs = safeSeconds % 60;
     
-    console.log(`🕐 [Format Debug] Calculated - hours: ${hours}, minutes: ${minutes}, secs: ${secs}`);
-    
     // Validate calculated values
     if (isNaN(hours) || isNaN(minutes) || isNaN(secs)) {
-      console.log(`🕐 [Format Debug] NaN detected in calculations, returning fallback`);
       return showSeconds ? '0s' : '00:00';
     }
     
     if (showSeconds) {
       if (hours > 0) {
-        const result = `${hours}h ${minutes}m ${secs}s`;
-        console.log(`🕐 [Format Debug] Long format result: ${result}`);
-        return result;
+        return `${hours}h ${minutes}m ${secs}s`;
       } else if (minutes > 0) {
-        const result = `${minutes}m ${secs}s`;
-        console.log(`🕐 [Format Debug] Medium format result: ${result}`);
-        return result;
+        return `${minutes}m ${secs}s`;
       } else {
-        const result = `${secs}s`;
-        console.log(`🕐 [Format Debug] Short format result: ${result}`);
-        return result;
+        return `${secs}s`;
       }
     } else {
       // For timer display, always show MM:SS format
-      const result = `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-      console.log(`🕐 [Format Debug] Timer format result: ${result}`);
-      return result;
+      return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
   };
 
@@ -97,7 +83,7 @@ export default function ProblemCard() {
         window.dispatchEvent(new Event('resize'));
       }, 100);
       // Optional: handle layout changes for debugging or analytics
-      console.debug('Workspace layout changed:', layout);
+      // console.debug('Workspace layout changed:', layout);
     }
   });
 

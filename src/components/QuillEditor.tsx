@@ -28,13 +28,11 @@ export function QuillEditor({
     
     // Check if this specific container was already initialized using data attribute
     if (containerRef.current.getAttribute('data-quill-initialized') === 'true') {
-      console.log('Container already initialized with Quill, skipping...');
       return;
     }
     
     // Check if container already has Quill classes (means it was initialized)
     if (containerRef.current.classList.contains('ql-container')) {
-      console.log('Container already has Quill classes, skipping...');
       return;
     }
     
@@ -43,13 +41,11 @@ export function QuillEditor({
     const existingToolbar = parent?.querySelector('.ql-toolbar');
     
     if (existingToolbar) {
-      console.log('Quill toolbar already exists, skipping...');
       return;
     }
     
     // Prevent double initialization - set flag immediately
     if (isInitialized.current) {
-      console.log('Initialization already in progress, skipping...');
       return;
     }
     isInitialized.current = true;
@@ -134,7 +130,6 @@ export function QuillEditor({
         });
 
       } catch (error) {
-        console.error('Failed to initialize Quill:', error);
         // Reset flag on error so it can be retried
         isInitialized.current = false;
       }
@@ -201,14 +196,22 @@ export function QuillEditor({
         /* Simple container styles */
         .quill-wrapper {
           height: 100%;
+          width: 100%;
           display: flex;
           flex-direction: column;
+          position: relative;
+          overflow: hidden; /* Prevent wrapper from expanding */
+          min-height: 0; /* Allow wrapper to shrink */
         }
         
         .quill-container {
           height: 100%;
+          width: 100%;
           display: flex;
           flex-direction: column;
+          position: relative;
+          overflow: hidden; /* Prevent container from expanding */
+          min-height: 0; /* Allow container to shrink */
         }
         
         /* Fix for React StrictMode double toolbar issue */
@@ -225,22 +228,80 @@ export function QuillEditor({
         /* Let Quill handle its own layout */
         .quill-container .ql-toolbar {
           flex-shrink: 0;
+          border-bottom: 1px solid #e5e7eb;
         }
         
         .quill-container .ql-container {
           flex: 1;
-          overflow: hidden;
+          min-height: 0; /* Critical: allows container to not expand with content */
+          overflow: hidden; /* Container doesn't scroll, editor does */
+          display: flex;
+          flex-direction: column;
         }
         
         .quill-container .ql-editor {
-          height: 100%;
-          overflow-y: auto;
+          flex: 1;
+          overflow-y: auto; /* Editor handles scrolling */
+          padding: 12px 15px;
+          max-height: 100%; /* Ensure editor doesn't exceed container */
+        }
+        
+        /* Custom scrollbar styling for better visibility */
+        .quill-container .ql-editor {
+          scrollbar-width: thin;
+          scrollbar-color: #6b7280 #f3f4f6;
+        }
+        
+        .quill-container .ql-editor::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        
+        .quill-container .ql-editor::-webkit-scrollbar-track {
+          background: #f3f4f6;
+          border-radius: 4px;
+        }
+        
+        .quill-container .ql-editor::-webkit-scrollbar-thumb {
+          background-color: #6b7280;
+          border-radius: 4px;
+          border: 1px solid #f3f4f6;
+        }
+        
+        .quill-container .ql-editor::-webkit-scrollbar-thumb:hover {
+          background-color: #4b5563;
+        }
+        
+        .quill-container .ql-editor::-webkit-scrollbar-corner {
+          background: #f3f4f6;
         }
         
         /* Dark theme adjustments */
         .quill-dark .ql-toolbar.ql-snow {
           background: #374151;
           border-color: #4b5563;
+        }
+        
+        /* Dark theme scrollbar */
+        .quill-dark .ql-editor {
+          scrollbar-color: #4b5563 #1f2937;
+        }
+        
+        .quill-dark .ql-editor::-webkit-scrollbar-track {
+          background: #1f2937;
+        }
+        
+        .quill-dark .ql-editor::-webkit-scrollbar-thumb {
+          background-color: #4b5563;
+          border: 1px solid #1f2937;
+        }
+        
+        .quill-dark .ql-editor::-webkit-scrollbar-thumb:hover {
+          background-color: #6b7280;
+        }
+        
+        .quill-dark .ql-editor::-webkit-scrollbar-corner {
+          background: #1f2937;
         }
         
         .quill-dark .ql-toolbar.ql-snow .ql-stroke {
