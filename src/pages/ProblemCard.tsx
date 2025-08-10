@@ -493,7 +493,6 @@ export default function ProblemCard() {
                   onChange={setNotes}
                   onSave={handleManualSave}
                   placeholder="Write your notes, observations, and thoughts here..."
-                  className="h-full"
                 />
               ) : (
                 <div className="h-full flex items-center justify-center">
