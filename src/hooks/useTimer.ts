@@ -32,13 +32,12 @@ export function useTimer(cardId?: string): UseTimerReturn {
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Debug logging helper
-  const debugLog = (message: string, data?: any) => {
-    console.log(`🕐 [Timer Debug] ${message}`, data ? data : '');
+  // Debug logging helper - disabled to prevent memory leaks
+  const debugLog = (_message: string, _data?: any) => {
+    // Disabled to prevent memory leak when inspector is open
+    // Uncomment only when actively debugging
+    // console.log(`🕐 [Timer Debug] ${message}`, data ? data : '');
   };
-
-  // Initialize with debug
-  console.log(`🕐 [Timer Init] useTimer initialized with cardId: ${cardId}`);
 
 
   // Refresh timer state from backend
@@ -86,7 +85,6 @@ export function useTimer(cardId?: string): UseTimerReturn {
     } catch (err) {
       setError(err as string);
       debugLog('Error refreshing timer state:', err);
-      console.error('Failed to refresh timer state:', err);
     }
   }, [cardId]);
 
@@ -121,7 +119,6 @@ export function useTimer(cardId?: string): UseTimerReturn {
     } catch (err) {
       setError(err as string);
       debugLog('Error starting timer:', err);
-      console.error('Failed to start timer:', err);
     } finally {
       setIsLoading(false);
     }
@@ -143,7 +140,6 @@ export function useTimer(cardId?: string): UseTimerReturn {
     } catch (err) {
       setError(err as string);
       debugLog('Error stopping timer:', err);
-      console.error('Failed to stop timer:', err);
     } finally {
       setIsLoading(false);
     }
@@ -157,7 +153,6 @@ export function useTimer(cardId?: string): UseTimerReturn {
       setTimerState(prev => ({ ...prev, isPaused: true }));
     } catch (err) {
       setError(err as string);
-      console.error('Failed to pause timer:', err);
     }
   }, []);
 
@@ -169,7 +164,6 @@ export function useTimer(cardId?: string): UseTimerReturn {
       setTimerState(prev => ({ ...prev, isPaused: false }));
     } catch (err) {
       setError(err as string);
-      console.error('Failed to resume timer:', err);
     }
   }, []);
 
