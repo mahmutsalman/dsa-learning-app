@@ -42,6 +42,7 @@ export default function EnhancedResizableWorkspace({
   // Use context values if available, otherwise fallback to localStorage
   const currentSidebarSize = layout?.sidebarSize ?? sidebarSize;
   const currentCodeSize = layout?.codeSize ?? codeSize;
+  const isCollapsed = layout?.isCollapsed?.sidebar ?? false;
 
   // Layout change handlers with context integration
   const handleHorizontalResize = useCallback((sizes: number[]) => {
@@ -65,10 +66,16 @@ export default function EnhancedResizableWorkspace({
       editorsSize: 100 - newSidebarSize,
     });
 
-    // Trigger window resize event for Monaco Editor
-    setTimeout(() => {
+    // Trigger multiple resize events for Monaco Editor - horizontal resize
+    const triggerHorizontalResize = () => {
       window.dispatchEvent(new Event('resize'));
-    }, 100);
+      window.dispatchEvent(new CustomEvent('workspace-layout-change', { detail: { type: 'horizontal' } }));
+    };
+    
+    // Multiple attempts to ensure Monaco Editor responds to horizontal resize
+    setTimeout(triggerHorizontalResize, 10);
+    setTimeout(triggerHorizontalResize, 100);
+    setTimeout(triggerHorizontalResize, 300);
   }, [layout, updateLayout, setSidebarSize, onLayoutChange]);
 
   const handleVerticalResize = useCallback((sizes: number[]) => {
@@ -92,10 +99,16 @@ export default function EnhancedResizableWorkspace({
       notesSize: 100 - newCodeSize,
     });
 
-    // Trigger window resize event for Monaco Editor
-    setTimeout(() => {
+    // Trigger multiple resize events for Monaco Editor - vertical resize
+    const triggerVerticalResize = () => {
       window.dispatchEvent(new Event('resize'));
-    }, 100);
+      window.dispatchEvent(new CustomEvent('workspace-layout-change', { detail: { type: 'vertical' } }));
+    };
+    
+    // Multiple attempts to ensure Monaco Editor responds to vertical resize
+    setTimeout(triggerVerticalResize, 10);
+    setTimeout(triggerVerticalResize, 100);
+    setTimeout(triggerVerticalResize, 300);
   }, [layout, updateLayout, setCodeSize, onLayoutChange]);
 
   // Resize start handler
@@ -130,7 +143,7 @@ export default function EnhancedResizableWorkspace({
           {/* Problem Description Panel (Sidebar) */}
           <Panel 
             defaultSize={currentSidebarSize} 
-            minSize={MIN_SIDEBAR_SIZE} 
+            minSize={isCollapsed ? 3 : MIN_SIDEBAR_SIZE} 
             maxSize={MAX_SIDEBAR_SIZE}
             className="enhanced-panel-sidebar"
             onResize={handleResizeStart}
