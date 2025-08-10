@@ -70,6 +70,17 @@ export default function ProblemCard() {
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
+
+  // Debug wrapper for setNotes to track state changes
+  const debugSetNotes = useCallback((newNotes: string) => {
+    console.debug('ProblemCard: setNotes called', {
+      oldValue: notes,
+      newValue: newNotes,
+      currentCard: currentCard?.id,
+      autoSaveEnabled: !!currentCard
+    });
+    setNotes(newNotes);
+  }, [notes, currentCard]);
   const [isDark, setIsDark] = useState<boolean>(false);
 
   // Ref for the main content container to help calculate dynamic constraints
@@ -149,6 +160,12 @@ export default function ProblemCard() {
   }, { delay: 3000, enabled: !!currentCard });
 
   const notesAutoSave = useAutoSave(notes, async () => {
+    console.debug('ProblemCard: Notes auto-save triggered', {
+      notes,
+      currentCardNotes: currentCard?.notes,
+      isDifferent: notes !== currentCard?.notes,
+      enabled: !!currentCard
+    });
     if (currentCard && notes !== currentCard.notes) {
       await saveCard();
     }
@@ -195,16 +212,42 @@ export default function ProblemCard() {
   }, [problemId]);
 
   useEffect(() => {
+    console.debug('ProblemCard: Selecting card from cards array', {
+      cardId,
+      cardsLength: cards.length,
+      cardIds: cards.map(c => c.id),
+      cardsWithNotes: cards.filter(c => c.notes).map(c => ({ id: c.id, notesLength: c.notes?.length }))
+    });
+    
     if (cardId && cards.length > 0) {
       const card = cards.find(c => c.id === cardId);
+      console.debug('ProblemCard: Found card by ID', {
+        found: !!card,
+        cardId: card?.id,
+        hasNotes: !!card?.notes,
+        notesContent: card?.notes
+      });
       setCurrentCard(card || cards[0]);
     } else if (cards.length > 0) {
+      console.debug('ProblemCard: Using first card', {
+        firstCard: cards[0].id,
+        hasNotes: !!cards[0].notes,
+        notesContent: cards[0].notes
+      });
       setCurrentCard(cards[0]);
     }
   }, [cardId, cards]);
 
   // Sync editor state when current card changes
   useEffect(() => {
+    console.debug('ProblemCard: Card changed, syncing editor state', {
+      cardId: currentCard?.id,
+      cardNotes: currentCard?.notes,
+      cardCode: currentCard?.code,
+      cardLanguage: currentCard?.language,
+      notesLength: currentCard?.notes?.length || 0
+    });
+    
     if (currentCard) {
       setCode(currentCard.code || '');
       setNotes(currentCard.notes || '');
@@ -219,6 +262,17 @@ export default function ProblemCard() {
         invoke<Problem>('get_problem_by_id', { id: problemId }),
         invoke<Card[]>('get_cards_for_problem', { problemId })
       ]);
+      
+      console.debug('ProblemCard: Loaded cards from backend', {
+        problemId,
+        cardCount: cardsResult.length,
+        cardsData: cardsResult.map(c => ({
+          id: c.id,
+          hasNotes: !!c.notes,
+          notesLength: c.notes?.length || 0,
+          notesPreview: c.notes ? c.notes.substring(0, 50) + '...' : 'empty'
+        }))
+      });
       
       setProblem(problemResult);
       setCards(cardsResult);
@@ -490,7 +544,7 @@ export default function ProblemCard() {
                 <QuillEditor
                   value={notes}
                   theme={isDark ? 'dark' : 'light'}
-                  onChange={setNotes}
+                  onChange={debugSetNotes}
                   onSave={handleManualSave}
                   placeholder="Write your notes, observations, and thoughts here..."
                 />
