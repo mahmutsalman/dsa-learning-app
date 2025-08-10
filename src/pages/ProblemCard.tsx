@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 // Icons are now used in WorkspaceHeader component
 import { Problem, Card } from '../types';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
+import { EnhancedMonacoEditor } from '../components/EnhancedMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
 // LanguageSelector is now used in WorkspaceHeader component
 // import ResizableProblemDescriptionPanel from '../components/ResizableProblemDescriptionPanel';
@@ -507,63 +508,65 @@ export default function ProblemCard() {
               />
             }
             codeEditor={
-              <div className="bg-gray-50 dark:bg-gray-900 relative h-full">
-                <div className="absolute top-2 right-2 z-10">
+              <div className="bg-gray-50 dark:bg-gray-900 h-full flex flex-col">
+                {/* Header with label - using flex instead of absolute positioning */}
+                <div className="flex justify-end p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
                   <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                     <span>Code Editor</span>
                     <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
                   </div>
                 </div>
-                {currentCard ? (
-                  <ResizableMonacoEditor
-                    value={code}
-                    language={language}
-                    theme={isDark ? 'vs-dark' : 'vs-light'}
-                    onChange={setCode}
-                    onSave={handleManualSave}
-                    initialHeight={400}
-                    minHeight={200}
-                    maxHeight={window.innerHeight * 0.8}
-                    containerRef={contentContainerRef}
-                    siblingMinHeight={300}
-                    useWorkspace={true}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-gray-500 dark:text-gray-400">
-                        Select a card to start coding
-                      </p>
+                {/* Editor container - takes remaining height */}
+                <div className="flex-1 min-h-0">
+                  {currentCard ? (
+                    <EnhancedMonacoEditor
+                      value={code}
+                      language={language}
+                      theme={isDark ? 'vs-dark' : 'vs-light'}
+                      onChange={setCode}
+                      onSave={handleManualSave}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-gray-500 dark:text-gray-400">
+                          Select a card to start coding
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             }
             notesEditor={
-              <div className="bg-white dark:bg-gray-800 relative h-full">
-                <div className="absolute top-2 right-2 z-10">
+              <div className="bg-white dark:bg-gray-800 h-full flex flex-col">
+                {/* Header with label - using flex instead of absolute positioning */}
+                <div className="flex justify-end p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
                   <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
                     <span>Notes</span>
                     <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
                   </div>
                 </div>
-                {currentCard ? (
-                  <QuillEditor
-                    value={notes}
-                    theme={isDark ? 'dark' : 'light'}
-                    onChange={debugSetNotes}
-                    onSave={handleManualSave}
-                    placeholder="Write your notes, observations, and thoughts here..."
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-gray-500 dark:text-gray-400">
-                        Select a card to start taking notes
-                      </p>
+                {/* Notes container - takes remaining height */}
+                <div className="flex-1 min-h-0">
+                  {currentCard ? (
+                    <QuillEditor
+                      value={notes}
+                      theme={isDark ? 'dark' : 'light'}
+                      onChange={debugSetNotes}
+                      onSave={handleManualSave}
+                      placeholder="Write your notes, observations, and thoughts here..."
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-gray-500 dark:text-gray-400">
+                          Select a card to start taking notes
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             }
             onLayoutChange={(layout) => {

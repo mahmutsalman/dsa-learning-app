@@ -185,11 +185,7 @@ export default function EnhancedResizableWorkspace({
                 className="enhanced-panel-code"
                 onResize={handleResizeStart}
               >
-                <div className="enhanced-editor-container">
-                  <div className="enhanced-editor-content">
-                    {codeEditor}
-                  </div>
-                </div>
+                {codeEditor}
               </Panel>
 
               {/* Vertical Resize Handle */}
@@ -212,11 +208,7 @@ export default function EnhancedResizableWorkspace({
                 minSize={MIN_PANEL_SIZE}
                 className="enhanced-panel-notes"
               >
-                <div className="enhanced-editor-container">
-                  <div className="enhanced-editor-content">
-                    {notesEditor}
-                  </div>
-                </div>
+                {notesEditor}
               </Panel>
             </PanelGroup>
           </Panel>
