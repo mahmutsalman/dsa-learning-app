@@ -137,12 +137,18 @@ export function EnhancedWorkspaceProvider({
             ...prev.layout.isCollapsed,
             sidebar: newCollapsed,
           },
-          // Adjust sizes when collapsing/expanding
-          sidebarSize: newCollapsed ? 0 : (storedLayout.sidebarSize || DEFAULT_WORKSPACE_STATE.layout.sidebarSize),
-          editorsSize: newCollapsed ? 100 : (100 - (storedLayout.sidebarSize || DEFAULT_WORKSPACE_STATE.layout.sidebarSize)),
+          // When collapsing, use minimum size (3%), when expanding restore saved size
+          sidebarSize: newCollapsed ? 3 : (storedLayout.sidebarSize || DEFAULT_WORKSPACE_STATE.layout.sidebarSize),
+          editorsSize: newCollapsed ? 97 : (100 - (storedLayout.sidebarSize || DEFAULT_WORKSPACE_STATE.layout.sidebarSize)),
         };
         
         setStoredLayout(newLayout);
+        
+        // Trigger resize events for Monaco Editor after layout change
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+        }, 100);
+        
         return { ...prev, layout: newLayout };
       });
     }, [storedLayout.sidebarSize, setStoredLayout]),
