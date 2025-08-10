@@ -550,3 +550,238 @@
   outline: 2px solid var(--workspace-resize-handle-color);
   outline-offset: 2px;
 }
+
+/* ===========================================
+   ENHANCED WORKSPACE STYLES - TEXT EDITOR PATTERNS
+   =========================================== */
+
+/* Enhanced Container Patterns inspired by text editor */
+.enhanced-workspace-container {
+  @apply h-screen bg-gray-50 dark:bg-gray-950 p-2 flex flex-col overflow-hidden;
+}
+
+.enhanced-workspace-content {
+  @apply flex-1 overflow-hidden;
+}
+
+/* Enhanced Component Container Pattern */
+.enhanced-component-container {
+  @apply bg-white dark:bg-gray-900 border-2 border-blue-500 dark:border-blue-400 rounded-lg m-1 h-full;
+}
+
+.enhanced-component-panel {
+  @apply bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg;
+}
+
+/* React-resizable-panels specific enhancements */
+.react-resizable-panels-group {
+  @apply h-full;
+}
+
+/* Enhanced Panel Resize Handles for react-resizable-panels */
+.enhanced-panel-resize-handle-horizontal {
+  @apply w-2 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-400 transition-colors duration-200 cursor-col-resize relative;
+}
+
+.enhanced-panel-resize-handle-vertical {
+  @apply h-2 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-400 transition-colors duration-200 cursor-row-resize relative;
+}
+
+/* Enhanced resize handle with visual feedback */
+.enhanced-panel-resize-handle-horizontal::after {
+  content: '';
+  @apply absolute inset-y-0 left-1/2 transform -translate-x-1/2 w-0.5 bg-gray-400 dark:bg-gray-600 rounded-full opacity-60;
+}
+
+.enhanced-panel-resize-handle-vertical::after {
+  content: '';
+  @apply absolute inset-x-0 top-1/2 transform -translate-y-1/2 h-0.5 bg-gray-400 dark:bg-gray-600 rounded-full opacity-60;
+}
+
+.enhanced-panel-resize-handle-horizontal:hover::after {
+  @apply bg-white opacity-90;
+}
+
+.enhanced-panel-resize-handle-vertical:hover::after {
+  @apply bg-white opacity-90;
+}
+
+/* Enhanced Flexible Content Pattern */
+.enhanced-flexible-content {
+  @apply h-full flex flex-col;
+}
+
+.enhanced-content-header {
+  @apply flex-shrink-0;
+}
+
+.enhanced-content-main {
+  @apply flex-1 overflow-auto;
+}
+
+.enhanced-content-footer {
+  @apply flex-shrink-0;
+}
+
+/* Enhanced Editor specific styles */
+.enhanced-editor-container {
+  @apply enhanced-component-container p-4;
+}
+
+.enhanced-editor-header {
+  @apply flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700;
+}
+
+.enhanced-editor-content {
+  @apply flex-1 min-h-0;
+}
+
+.enhanced-editor-footer {
+  @apply flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400;
+}
+
+/* Enhanced Problem Panel specific styles */
+.enhanced-problem-panel {
+  @apply enhanced-component-container p-4;
+}
+
+.enhanced-problem-header {
+  @apply flex items-center justify-between mb-4 pb-3 border-b border-gray-200 dark:border-gray-700;
+}
+
+.enhanced-problem-title {
+  @apply text-lg font-semibold text-gray-900 dark:text-white;
+}
+
+.enhanced-problem-content {
+  @apply flex-1 overflow-auto prose dark:prose-invert max-w-none;
+}
+
+/* Enhanced Header styles */
+.enhanced-workspace-header {
+  @apply bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 h-16 flex items-center;
+}
+
+/* Enhanced Interactive Elements */
+.enhanced-interactive-element {
+  @apply transition-colors duration-200 hover:bg-gray-100 dark:hover:bg-gray-700;
+}
+
+.enhanced-primary-button {
+  @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200;
+}
+
+.enhanced-secondary-button {
+  @apply bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 px-4 py-2 rounded-lg transition-colors duration-200;
+}
+
+/* Enhanced Status indicators */
+.enhanced-status-indicator {
+  @apply inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.enhanced-status-saved {
+  @apply bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-400;
+}
+
+.enhanced-status-saving {
+  @apply bg-blue-100 dark:bg-blue-900/20 text-blue-800 dark:text-blue-400;
+}
+
+.enhanced-status-error {
+  @apply bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-400;
+}
+
+/* Smooth transitions for enhanced panel groups */
+.enhanced-panel-group {
+  @apply transition-all duration-300 ease-in-out;
+}
+
+/* Enhanced focus states for accessibility */
+.enhanced-panel-resize-handle-horizontal:focus-visible,
+.enhanced-panel-resize-handle-vertical:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 dark:ring-blue-400 ring-offset-2 ring-offset-gray-50 dark:ring-offset-gray-950;
+}
+
+/* Enhanced resize handle indicators */
+.enhanced-resize-handle-indicator {
+  @apply pointer-events-none flex items-center justify-center h-full w-full;
+}
+
+.enhanced-resize-dots-vertical {
+  @apply flex flex-col gap-0.5 items-center;
+}
+
+.enhanced-resize-dots-horizontal {
+  @apply flex flex-row gap-0.5 items-center;
+}
+
+.enhanced-resize-dot {
+  @apply w-0.5 h-0.5 rounded-full bg-gray-400 dark:bg-gray-600 opacity-60 transition-all duration-200;
+}
+
+.enhanced-panel-resize-handle-horizontal:hover .enhanced-resize-dot,
+.enhanced-panel-resize-handle-vertical:hover .enhanced-resize-dot {
+  @apply bg-white opacity-90 scale-125;
+}
+
+/* Enhanced panel specific styles */
+.enhanced-panel-sidebar {
+  @apply h-full;
+}
+
+.enhanced-panel-editors {
+  @apply h-full;
+}
+
+.enhanced-panel-code {
+  @apply h-full;
+}
+
+.enhanced-panel-notes {
+  @apply h-full;
+}
+
+/* Remove default margins and padding from enhanced containers */
+.enhanced-editor-container {
+  @apply p-0 m-0 border-none h-full;
+}
+
+.enhanced-problem-panel {
+  @apply p-0 m-0 border-none h-full;
+}
+
+/* Ensure proper overflow handling */
+.enhanced-editor-content {
+  @apply overflow-hidden;
+}
+
+/* Integration fixes for Monaco Editor in enhanced workspace */
+.enhanced-panel-code .enhanced-editor-content {
+  @apply bg-gray-50 dark:bg-gray-900 relative;
+}
+
+/* Integration fixes for Quill Editor in enhanced workspace */
+.enhanced-panel-notes .enhanced-editor-content {
+  @apply bg-white dark:bg-gray-800 relative;
+}
+
+/* Enhanced workspace specific overrides */
+.enhanced-workspace-container .react-resizable-handle {
+  @apply hidden;
+}
+
+/* Responsive behavior for enhanced workspace */
+@media (max-width: 768px) {
+  .enhanced-workspace-container {
+    @apply p-1;
+  }
+  
+  .enhanced-panel-resize-handle-horizontal {
+    @apply w-3;
+  }
+  
+  .enhanced-panel-resize-handle-vertical {
+    @apply h-3;
+  }
+}
