@@ -172,20 +172,63 @@ export function QuillEditor({
 
       quillRef.current = quill;
 
-      // Set initial content
-      if (value) {
+      // Set initial content with better error handling and debugging
+      console.debug('QuillEditor: Setting initial content', {
+        hasValue: !!value,
+        valueLength: value?.length || 0,
+        valuePreview: value ? value.substring(0, 50) + '...' : 'empty'
+      });
+      
+      if (value && value.trim()) {
         isUpdatingRef.current = true;
-        quill.root.innerHTML = value;
+        try {
+          // Use setContents for better reliability
+          if (value.startsWith('<')) {
+            // HTML content - set via innerHTML
+            quill.root.innerHTML = value;
+            console.debug('QuillEditor: Set HTML content via innerHTML');
+          } else {
+            // Plain text content - set via setText
+            quill.setText(value);
+            console.debug('QuillEditor: Set plain text content');
+          }
+        } catch (error) {
+          console.warn('QuillEditor: Error setting initial content:', error);
+          // Fallback to plain text
+          quill.setText(value);
+        }
         isUpdatingRef.current = false;
+        
+        // Verify content was set
+        const currentContent = quill.root.innerHTML;
+        console.debug('QuillEditor: Content verification after setting', {
+          expectedLength: value.length,
+          actualLength: currentContent.length,
+          contentMatches: currentContent.includes(value.replace(/<[^>]*>/g, '').trim())
+        });
+      } else {
+        console.debug('QuillEditor: No initial content to set');
       }
 
       // Handle content changes
       quill.on('text-change', () => {
-        if (isUpdatingRef.current) return;
+        if (isUpdatingRef.current) {
+          console.debug('QuillEditor: Skipping text-change - currently updating');
+          return;
+        }
         
         const html = quill.root.innerHTML;
         const isEmpty = html === '<p><br></p>' || html === '<p></p>' || !html.trim();
-        stableOnChange(isEmpty ? '' : html);
+        const newValue = isEmpty ? '' : html;
+        
+        console.debug('QuillEditor: Text changed', {
+          html: html,
+          isEmpty: isEmpty,
+          newValue: newValue,
+          length: newValue.length
+        });
+        
+        stableOnChange(newValue);
       });
 
       // Add keyboard shortcuts
@@ -236,22 +279,97 @@ export function QuillEditor({
     };
   }, [placeholder]); // Only depend on placeholder, not functions
 
-  // Update content when value changes
+  // Update content when value changes - with retry mechanism for timing issues
   useEffect(() => {
-    if (!quillRef.current || isUpdatingRef.current) return;
-    
-    const currentContent = quillRef.current.root.innerHTML;
-    if (value !== currentContent) {
-      console.debug('QuillEditor: Updating content externally');
-      isUpdatingRef.current = true;
-      
-      if (!value || value.trim() === '') {
-        quillRef.current.setText('');
-      } else {
-        quillRef.current.root.innerHTML = value;
+    const updateContent = () => {
+      if (isUpdatingRef.current) {
+        console.debug('QuillEditor: Skipping external content update - currently updating');
+        return false;
+      }
+
+      if (!quillRef.current) {
+        console.debug('QuillEditor: Quill not ready, will retry when available', {
+          hasValue: !!value,
+          valueLength: value?.length || 0
+        });
+        return false;
       }
       
-      isUpdatingRef.current = false;
+      const currentContent = quillRef.current.root.innerHTML;
+      const needsUpdate = value !== currentContent;
+      
+      console.debug('QuillEditor: External content update check', {
+        valueLength: value?.length || 0,
+        currentLength: currentContent?.length || 0,
+        needsUpdate,
+        valuePreview: value ? value.substring(0, 50) + '...' : 'empty',
+        currentPreview: currentContent ? currentContent.substring(0, 50) + '...' : 'empty'
+      });
+      
+      if (needsUpdate) {
+        console.debug('QuillEditor: Updating content externally');
+        isUpdatingRef.current = true;
+        
+        try {
+          if (!value || value.trim() === '') {
+            quillRef.current.setText('');
+            console.debug('QuillEditor: Cleared content');
+          } else if (value.startsWith('<')) {
+            quillRef.current.root.innerHTML = value;
+            console.debug('QuillEditor: Set HTML content externally');
+          } else {
+            quillRef.current.setText(value);
+            console.debug('QuillEditor: Set text content externally');
+          }
+          
+          // Verify update
+          const newContent = quillRef.current.root.innerHTML;
+          console.debug('QuillEditor: External update verification', {
+            expectedLength: value?.length || 0,
+            actualLength: newContent?.length || 0,
+            updateSuccessful: newContent !== currentContent
+          });
+        } catch (error) {
+          console.warn('QuillEditor: Error updating content externally:', error);
+        }
+        
+        isUpdatingRef.current = false;
+      }
+      
+      return true; // Successfully processed
+    };
+
+    // Try to update immediately
+    if (updateContent()) {
+      return; // Success, no need to retry
+    }
+
+    // If Quill isn't ready but we have content, set up a retry mechanism
+    if (value && value.trim() && !quillRef.current) {
+      console.debug('QuillEditor: Setting up retry mechanism for content update');
+      
+      const retryInterval = setInterval(() => {
+        console.debug('QuillEditor: Retrying content update', {
+          hasQuill: !!quillRef.current,
+          hasValue: !!value
+        });
+        
+        if (updateContent()) {
+          console.debug('QuillEditor: Content update retry successful');
+          clearInterval(retryInterval);
+        }
+      }, 50); // Check every 50ms
+      
+      // Clear retry after 2 seconds to prevent infinite retries
+      const timeout = setTimeout(() => {
+        console.warn('QuillEditor: Content update retry timeout reached');
+        clearInterval(retryInterval);
+      }, 2000);
+      
+      return () => {
+        clearInterval(retryInterval);
+        clearTimeout(timeout);
+      };
     }
   }, [value]);
 
