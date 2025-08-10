@@ -1,13 +1,11 @@
 /* Import external libraries first */
 @import 'quill/dist/quill.snow.css';
+@import './styles/workspace.css';
 
 /* Then Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Unified Workspace Styles */
-@import './styles/workspace.css';
 
 /* Basic Quill editor integration - minimal global styles to prevent conflicts */
 

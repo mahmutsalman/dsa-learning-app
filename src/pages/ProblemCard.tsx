@@ -8,9 +8,12 @@ import { QuillEditor } from '../components/QuillEditor';
 // LanguageSelector is now used in WorkspaceHeader component
 // import ResizableProblemDescriptionPanel from '../components/ResizableProblemDescriptionPanel';
 import ResizableWorkspace from '../components/workspace/ResizableWorkspace';
+import EnhancedResizableWorkspace from '../components/workspace/EnhancedResizableWorkspace';
 import WorkspaceProblemPanel from '../components/workspace/WorkspaceProblemPanel';
+import EnhancedWorkspaceProblemPanel from '../components/workspace/EnhancedWorkspaceProblemPanel';
 import { WorkspaceHeader } from '../components/WorkspaceHeader';
 import { WorkspaceContext } from '../components/workspace/WorkspaceContext';
+import { EnhancedWorkspaceProvider } from '../components/workspace/EnhancedWorkspaceContext';
 import { useWorkspaceLayout } from '../components/workspace/useWorkspaceLayout';
 import DeleteCardModal from '../components/DeleteCardModal';
 import SessionHistory from '../components/SessionHistory';
@@ -29,6 +32,9 @@ export default function ProblemCard() {
   const [recordingState, setRecordingState] = useState({ isRecording: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
+  
+  // Enhanced workspace feature flag
+  const [useEnhancedWorkspace, setUseEnhancedWorkspace] = useState(true);
   
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
@@ -466,6 +472,128 @@ export default function ProblemCard() {
     );
   }
 
+  // Render enhanced workspace if enabled, otherwise fallback to original
+  if (useEnhancedWorkspace) {
+    return (
+      <EnhancedWorkspaceProvider>
+        <div className="flex-1 flex flex-col h-full relative">
+          {/* Enhanced Workspace */}
+          <EnhancedResizableWorkspace
+            header={
+              <WorkspaceHeader
+                problem={problem}
+                currentCard={currentCard}
+                cards={cards}
+                language={language}
+                onLanguageChange={setLanguage}
+                timer={timer}
+                codeAutoSave={codeAutoSave}
+                notesAutoSave={notesAutoSave}
+                languageAutoSave={languageAutoSave}
+                recordingState={recordingState}
+                onToggleTimer={toggleTimer}
+                onToggleRecording={toggleRecording}
+                onNavigateCard={navigateToCard}
+                onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
+                onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
+                formatTimeDisplay={formatTimeDisplay}
+                getSiblingCards={getSiblingCards}
+              />
+            }
+            problemPanel={
+              <EnhancedWorkspaceProblemPanel 
+                problem={problem} 
+                onDescriptionUpdate={handleDescriptionUpdate}
+              />
+            }
+            codeEditor={
+              <div className="bg-gray-50 dark:bg-gray-900 relative h-full">
+                <div className="absolute top-2 right-2 z-10">
+                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Code Editor</span>
+                    <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
+                  </div>
+                </div>
+                {currentCard ? (
+                  <ResizableMonacoEditor
+                    value={code}
+                    language={language}
+                    theme={isDark ? 'vs-dark' : 'vs-light'}
+                    onChange={setCode}
+                    onSave={handleManualSave}
+                    initialHeight={400}
+                    minHeight={200}
+                    maxHeight={window.innerHeight * 0.8}
+                    containerRef={contentContainerRef}
+                    siblingMinHeight={300}
+                    useWorkspace={true}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-gray-500 dark:text-gray-400">
+                        Select a card to start coding
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            }
+            notesEditor={
+              <div className="bg-white dark:bg-gray-800 relative h-full">
+                <div className="absolute top-2 right-2 z-10">
+                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Notes</span>
+                    <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
+                  </div>
+                </div>
+                {currentCard ? (
+                  <QuillEditor
+                    value={notes}
+                    theme={isDark ? 'dark' : 'light'}
+                    onChange={debugSetNotes}
+                    onSave={handleManualSave}
+                    placeholder="Write your notes, observations, and thoughts here..."
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center">
+                    <div className="text-center">
+                      <p className="text-gray-500 dark:text-gray-400">
+                        Select a card to start taking notes
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            }
+            onLayoutChange={(layout) => {
+              // Optional: Handle layout changes
+              console.debug('Enhanced workspace layout changed:', layout);
+            }}
+          />
+          
+          {/* Delete Card Modal */}
+          <DeleteCardModal
+            isOpen={deleteModal.isOpen}
+            onClose={() => setDeleteModal({ isOpen: false, isDeleting: false })}
+            onConfirm={deleteCard}
+            card={currentCard}
+            isDeleting={deleteModal.isDeleting}
+          />
+          
+          {/* Session History Modal */}
+          <SessionHistory
+            cardId={currentCard?.id}
+            isOpen={sessionHistory.isOpen}
+            onClose={() => setSessionHistory({ isOpen: false })}
+            onSessionDeleted={refreshCardData}
+          />
+        </div>
+      </EnhancedWorkspaceProvider>
+    );
+  }
+
+  // Fallback to original workspace system
   return (
     <WorkspaceContext.Provider value={{ state, actions }}>
       <div className="flex-1 flex flex-col h-full relative">

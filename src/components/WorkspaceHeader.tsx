@@ -77,15 +77,24 @@ export function WorkspaceHeader({
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
           
-          {/* Developer Debug Button - remove in production */}
+          {/* Developer Debug Buttons - remove in production */}
           {(import.meta as any).env?.MODE === 'development' && (
-            <button
-              onClick={logDatabaseAnalysis}
-              className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-              title="Analyze database structure (check console)"
-            >
-              DB Analysis
-            </button>
+            <>
+              <button
+                onClick={logDatabaseAnalysis}
+                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                title="Analyze database structure (check console)"
+              >
+                DB Analysis
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                title="Reload page to test enhanced workspace"
+              >
+                Enhanced UI
+              </button>
+            </>
           )}
         </div>
 
