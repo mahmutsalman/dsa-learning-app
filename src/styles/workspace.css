@@ -319,9 +319,97 @@
   border-radius: 0 !important;
 }
 
-/* Integration with Quill Editor - Let Quill handle everything */
+/* Integration with Quill Editor - Clean architecture approach */
 .workspace-panel-notes {
+  position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Notes panel content container */
+.workspace-panel-notes .workspace-panel-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* Quill Editor Wrapper Integration */
+.workspace-panel-notes .quill-editor-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Fixed height container for Quill (as per reference architecture) */
+.workspace-panel-notes .quill-editor-wrapper > div {
+  flex: 1;
+  min-height: 300px;
+  height: 100% !important; /* Override inline style for workspace integration */
+}
+
+/* Ensure Quill toolbar is always visible */
+.workspace-panel-notes .ql-toolbar.ql-snow {
+  flex-shrink: 0;
+  border: none;
+  border-bottom: 1px solid var(--workspace-border-color);
+  background: white;
+}
+
+.dark .workspace-panel-notes .ql-toolbar.ql-snow {
+  background: #374151;
+  border-bottom-color: var(--workspace-border-color);
+}
+
+/* Quill container should flex to fill remaining space */
+.workspace-panel-notes .ql-container.ql-snow {
+  flex: 1;
+  border: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: white;
+}
+
+.dark .workspace-panel-notes .ql-container.ql-snow {
+  background: #1f2937;
+}
+
+/* Quill editor should handle its own scrolling */
+.workspace-panel-notes .ql-editor {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 15px;
+  min-height: 200px;
+}
+
+/* Dark theme for Quill editor content */
+.workspace-panel-notes .quill-dark .ql-editor {
+  color: #f3f4f6;
+  background: #1f2937;
+}
+
+.workspace-panel-notes .quill-dark .ql-editor.ql-blank::before {
+  color: #9ca3af;
+}
+
+/* Ensure proper theme integration */
+.workspace-panel-notes .quill-light .ql-editor {
+  color: #1f2937;
+  background: white;
+}
+
+.workspace-panel-notes .quill-light .ql-editor.ql-blank::before {
+  color: #6b7280;
 }
 
 /* Workspace-integrated Problem Panel Overrides */
