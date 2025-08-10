@@ -578,6 +578,21 @@
   @apply h-full;
 }
 
+/* Enhanced Monaco Editor Styles */
+.enhanced-monaco-editor {
+  /* Container will use explicit dimensions from ResizeObserver */
+  @apply w-full;
+}
+
+.enhanced-monaco-editor .monaco-editor {
+  width: 100% !important;
+  /* Height will be set explicitly by the component */
+}
+
+.enhanced-monaco-editor .monaco-editor .overflow-guard {
+  border-radius: 0;
+}
+
 /* Enhanced Panel Resize Handles for react-resizable-panels */
 .enhanced-panel-resize-handle-horizontal {
   @apply w-2 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-400 transition-colors duration-200 cursor-col-resize relative;
@@ -623,21 +638,18 @@
   @apply flex-shrink-0;
 }
 
-/* Enhanced Editor specific styles */
-.enhanced-editor-container {
-  @apply enhanced-component-container p-4;
+/* Enhanced Editor Panel styles - direct content */
+.enhanced-panel-code {
+  @apply h-full;
 }
 
-.enhanced-editor-header {
-  @apply flex items-center justify-between mb-4 pb-2 border-b border-gray-200 dark:border-gray-700;
+.enhanced-panel-notes {
+  @apply h-full;
 }
 
-.enhanced-editor-content {
-  @apply flex-1 min-h-0;
-}
-
-.enhanced-editor-footer {
-  @apply flex items-center justify-between mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400;
+.enhanced-panel-code > *,
+.enhanced-panel-notes > * {
+  @apply h-full;
 }
 
 /* Enhanced Problem Panel specific styles */
@@ -742,28 +754,9 @@
   @apply h-full;
 }
 
-/* Remove default margins and padding from enhanced containers */
-.enhanced-editor-container {
-  @apply p-0 m-0 border-none h-full;
-}
-
+/* Enhanced panel content styling */
 .enhanced-problem-panel {
-  @apply p-0 m-0 border-none h-full;
-}
-
-/* Ensure proper overflow handling */
-.enhanced-editor-content {
-  @apply overflow-hidden;
-}
-
-/* Integration fixes for Monaco Editor in enhanced workspace */
-.enhanced-panel-code .enhanced-editor-content {
-  @apply bg-gray-50 dark:bg-gray-900 relative;
-}
-
-/* Integration fixes for Quill Editor in enhanced workspace */
-.enhanced-panel-notes .enhanced-editor-content {
-  @apply bg-white dark:bg-gray-800 relative;
+  @apply p-0 m-0 border-none h-full overflow-hidden;
 }
 
 /* Enhanced workspace specific overrides */
