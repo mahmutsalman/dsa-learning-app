@@ -125,9 +125,9 @@ export default function EnhancedResizableWorkspace({
   }, [setResizing]);
 
   // Resize end handler  
-  const handleResizeEnd = useCallback(() => {
-    setResizing?.(false);
-  }, [setResizing]);
+  // const handleResizeEnd = useCallback(() => {
+  //   setResizing?.(false);
+  // }, [setResizing]);
 
   // Force layout update when collapse state changes
   useEffect(() => {
@@ -170,7 +170,7 @@ export default function EnhancedResizableWorkspace({
         >
           {/* Problem Description Panel (Sidebar) */}
           <Panel 
-            size={actualSidebarSize}
+            defaultSize={actualSidebarSize}
             minSize={isCollapsed ? 3 : MIN_SIDEBAR_SIZE} 
             maxSize={isCollapsed ? 3 : MAX_SIDEBAR_SIZE}
             className="enhanced-panel-sidebar"
@@ -197,7 +197,7 @@ export default function EnhancedResizableWorkspace({
 
           {/* Editors Container Panel */}
           <Panel 
-            size={actualEditorsSize}
+            defaultSize={actualEditorsSize}
             minSize={MIN_EDITOR_SIZE}
             className="enhanced-panel-editors"
           >

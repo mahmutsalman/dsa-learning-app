@@ -195,3 +195,52 @@ pub async fn get_tag_suggestions(
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_tag_suggestions(&query, limit.unwrap_or(10)).map_err(|e| e.to_string())
 }
+
+// Problem connection commands
+#[tauri::command]
+pub async fn search_problems_for_connection(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<i32>,
+    exclude_id: Option<String>,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let exclude_id_ref = exclude_id.as_deref();
+    db.search_problems_by_title(&query, limit.unwrap_or(10), exclude_id_ref)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn add_problem_relation(
+    state: State<'_, AppState>,
+    problem_id: String,
+    related_problem_id: String,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    match db.add_problem_relation(&problem_id, &related_problem_id) {
+        Ok(()) => Ok("Problem relation added successfully".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn remove_problem_relation(
+    state: State<'_, AppState>,
+    problem_id: String,
+    related_problem_id: String,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    match db.remove_problem_relation(&problem_id, &related_problem_id) {
+        Ok(()) => Ok("Problem relation removed successfully".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn get_related_problems(
+    state: State<'_, AppState>,
+    problem_id: String,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_related_problems(&problem_id).map_err(|e| e.to_string())
+}

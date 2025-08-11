@@ -8,7 +8,7 @@ export default function ProblemContextMenu({
   onManageTags,
   onEditProblem,
   position,
-  problemId,
+  problemId: _problemId,
 }: ProblemContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 

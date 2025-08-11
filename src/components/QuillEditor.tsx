@@ -21,7 +21,7 @@ export function QuillEditor({
   const quillRef = useRef<any>(null);
   const isUpdatingRef = useRef(false);
   const isInitializedRef = useRef(false);
-  const initializationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const initializationTimeoutRef = useRef<number | null>(null);
 
   // Stable callback references to avoid useEffect re-runs
   const stableOnChange = useCallback((newValue: string) => {

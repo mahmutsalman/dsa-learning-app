@@ -330,9 +330,14 @@ export default function Dashboard() {
               )}
               
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">
-                  {problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied
-                </span>
+                <div className="text-gray-500 dark:text-gray-400">
+                  <span>{problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied</span>
+                  {problem.related_problem_ids && problem.related_problem_ids.length > 0 && (
+                    <span className="ml-2">
+                      • {problem.related_problem_ids.length} related {problem.related_problem_ids.length === 1 ? 'question' : 'questions'}
+                    </span>
+                  )}
+                </div>
                 <span className="text-primary-500 dark:text-primary-400">
                   Open →
                 </span>

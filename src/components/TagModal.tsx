@@ -15,7 +15,7 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
   const [error, setError] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<number>();
 
   // Load tags when modal opens
   useEffect(() => {

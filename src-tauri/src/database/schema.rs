@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS problems (
     constraints TEXT,
     examples TEXT, -- JSON string
     hints TEXT, -- JSON string
+    related_problem_ids TEXT, -- JSON array of related problem IDs
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
