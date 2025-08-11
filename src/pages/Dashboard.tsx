@@ -5,6 +5,7 @@ import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon } from '@heroicons/react/
 import { Problem, Difficulty, Card, Tag } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
+import NewProblemModal from '../components/NewProblemModal';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedProblemId, setSelectedProblemId] = useState<string>('');
   const [showTagModal, setShowTagModal] = useState(false);
+  const [showNewProblemModal, setShowNewProblemModal] = useState(false);
 
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
@@ -95,9 +97,8 @@ export default function Dashboard() {
     }
   };
 
-  const createNewProblem = async () => {
-    console.log('Create new problem feature coming soon!');
-    // TODO: Implement create problem functionality
+  const createNewProblem = () => {
+    setShowNewProblemModal(true);
   };
 
   // Handle right-click context menu
@@ -130,6 +131,12 @@ export default function Dashboard() {
   // Handle tag save
   const handleTagSave = async (tags: Tag[]) => {
     // Reload problems to get updated tags
+    await loadProblems();
+  };
+
+  // Handle new problem save
+  const handleNewProblemSave = async (problem: Problem) => {
+    // Reload problems to show the new problem
     await loadProblems();
   };
 
@@ -316,6 +323,13 @@ export default function Dashboard() {
         onClose={() => setShowTagModal(false)}
         onSave={handleTagSave}
         problemId={selectedProblemId}
+      />
+
+      {/* New Problem Modal */}
+      <NewProblemModal
+        isOpen={showNewProblemModal}
+        onClose={() => setShowNewProblemModal(false)}
+        onSave={handleNewProblemSave}
       />
     </div>
   );
