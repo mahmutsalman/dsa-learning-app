@@ -3,17 +3,13 @@ import { ResizableBox } from 'react-resizable';
 import ProblemDescriptionPanel from './ProblemDescriptionPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useWorkspaceContext } from './workspace/WorkspaceContext';
+import { Problem } from '../types';
 import 'react-resizable/css/styles.css';
 
 export interface ResizableProblemDescriptionPanelProps {
   isCollapsed: boolean;
   onToggle: () => void;
-  problem: {
-    id: string;
-    title: string;
-    description: string;
-    leetcode_url?: string;
-  } | null;
+  problem: Problem | null;
   initialWidth?: number;
   minWidth?: number;
   maxWidth?: number;

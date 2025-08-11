@@ -27,13 +27,13 @@ pub async fn connect_database(state: State<'_, AppState>) -> Result<String, Stri
 pub async fn create_problem(
     state: State<'_, AppState>,
     request: CreateProblemRequest,
-) -> Result<Problem, String> {
+) -> Result<FrontendProblem, String> {
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
     db.create_problem(request).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn get_problems(state: State<'_, AppState>) -> Result<Vec<Problem>, String> {
+pub async fn get_problems(state: State<'_, AppState>) -> Result<Vec<FrontendProblem>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_problems().map_err(|e| e.to_string())
 }
@@ -42,7 +42,7 @@ pub async fn get_problems(state: State<'_, AppState>) -> Result<Vec<Problem>, St
 pub async fn get_problem_by_id(
     state: State<'_, AppState>,
     id: String,
-) -> Result<Option<Problem>, String> {
+) -> Result<Option<FrontendProblem>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_problem_by_id(&id).map_err(|e| e.to_string())
 }
@@ -51,7 +51,7 @@ pub async fn get_problem_by_id(
 pub async fn update_problem(
     state: State<'_, AppState>,
     request: UpdateProblemRequest,
-) -> Result<Problem, String> {
+) -> Result<FrontendProblem, String> {
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
     match db.update_problem(request) {
         Ok(Some(problem)) => Ok(problem),

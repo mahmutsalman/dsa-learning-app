@@ -1,13 +1,9 @@
 import { useWorkspaceContext } from './WorkspaceContext';
 import ResizableProblemDescriptionPanel from '../ResizableProblemDescriptionPanel';
+import { Problem } from '../../types';
 
 interface WorkspaceProblemPanelProps {
-  problem: {
-    id: string;
-    title: string;
-    description: string;
-    leetcode_url?: string;
-  } | null;
+  problem: Problem | null;
   onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
 }
 
