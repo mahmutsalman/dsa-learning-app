@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS problems (
     title TEXT NOT NULL,
     description TEXT,
     difficulty TEXT CHECK(difficulty IN ('Easy', 'Medium', 'Hard')),
-    category TEXT,
+    topic TEXT,
     leetcode_url TEXT,
     constraints TEXT,
     examples TEXT, -- JSON string

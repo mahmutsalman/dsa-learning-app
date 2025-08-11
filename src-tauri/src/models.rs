@@ -16,7 +16,7 @@ pub struct Problem {
     pub title: String,
     pub description: String,
     pub difficulty: String, // 'Easy', 'Medium', 'Hard'
-    pub category: String,   // JSON string for array
+    pub topic: String,   // JSON string for array
     pub leetcode_url: Option<String>,
     pub constraints: String, // JSON string for array
     pub hints: String,       // JSON string for array
@@ -44,7 +44,7 @@ pub struct CreateProblemRequest {
     pub title: String,
     pub description: String,
     pub difficulty: String,
-    pub category: Vec<String>,
+    pub topic: Vec<String>,
     pub leetcode_url: Option<String>,
     pub constraints: Vec<String>,
     pub hints: Vec<String>,
@@ -56,7 +56,7 @@ pub struct UpdateProblemRequest {
     pub title: Option<String>,
     pub description: Option<String>,
     pub difficulty: Option<String>,
-    pub category: Option<Vec<String>>,
+    pub topic: Option<Vec<String>>,
     pub leetcode_url: Option<String>,
     pub constraints: Option<Vec<String>>,
     pub hints: Option<Vec<String>>,
