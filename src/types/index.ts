@@ -10,7 +10,7 @@ export interface Problem {
   title: string;
   description: string;
   difficulty: Difficulty;
-  category: string[];
+  topic: string[];
   tags: string[];
   created_at: string;
   leetcode_url?: string;
@@ -240,7 +240,7 @@ export interface CreateProblemRequest {
   title: string;
   description: string;
   difficulty: string;
-  category: string[];
+  topic: string[];
   leetcode_url?: string;
   constraints: string[];
   hints: string[];
@@ -251,7 +251,7 @@ export interface UpdateProblemRequest {
   title?: string;
   description?: string;
   difficulty?: string;
-  category?: string[];
+  topic?: string[];
   leetcode_url?: string;
   constraints?: string[];
   hints?: string[];

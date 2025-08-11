@@ -15,7 +15,7 @@ interface FormData {
   title: string;
   description: string;
   difficulty: Difficulty;
-  category: string[];
+  topic: string[];
   leetcodeUrl: string;
   constraints: string[];
   hints: string[];
@@ -25,14 +25,14 @@ interface FormErrors {
   title?: string;
   description?: string;
   difficulty?: string;
-  category?: string;
+  topic?: string;
 }
 
 const initialFormData: FormData = {
   title: '',
   description: '',
   difficulty: 'Easy',
-  category: [],
+  topic: [],
   leetcodeUrl: '',
   constraints: [''],
   hints: ['']
@@ -48,7 +48,7 @@ export default function NewProblemModal({
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [categoryInput, setCategoryInput] = useState('');
+  const [topicInput, setTopicInput] = useState('');
   
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,8 +59,8 @@ export default function NewProblemModal({
         title: problem.title || '',
         description: problem.description || '',
         difficulty: problem.difficulty as Difficulty || 'Easy',
-        category: Array.isArray(problem.category) ? problem.category : 
-                  typeof problem.category === 'string' ? JSON.parse(problem.category) : [],
+        topic: Array.isArray(problem.topic) ? problem.topic : 
+                  typeof problem.topic === 'string' ? JSON.parse(problem.topic) : [],
         leetcodeUrl: problem.leetcode_url || '',
         constraints: Array.isArray(problem.constraints) ? problem.constraints :
                      typeof problem.constraints === 'string' ? JSON.parse(problem.constraints) : [''],
@@ -85,7 +85,7 @@ export default function NewProblemModal({
       }
       
       setErrors({});
-      setCategoryInput('');
+      setTopicInput('');
       
       // Focus title input after modal animation
       setTimeout(() => {
@@ -105,8 +105,8 @@ export default function NewProblemModal({
       newErrors.description = 'Description is required';
     }
 
-    if (formData.category.length === 0) {
-      newErrors.category = 'At least one category is required';
+    if (formData.topic.length === 0) {
+      newErrors.topic = 'At least one topic is required';
     }
 
     setErrors(newErrors);
@@ -130,7 +130,7 @@ export default function NewProblemModal({
           title: formData.title.trim(),
           description: formData.description.trim(),
           difficulty: formData.difficulty,
-          category: formData.category,
+          topic: formData.topic,
           leetcode_url: formData.leetcodeUrl.trim() || undefined,
           constraints: formData.constraints.filter(c => c.trim()),
           hints: formData.hints.filter(h => h.trim())
@@ -144,7 +144,7 @@ export default function NewProblemModal({
           title: formData.title.trim(),
           description: formData.description.trim(),
           difficulty: formData.difficulty,
-          category: formData.category,
+          topic: formData.topic,
           leetcode_url: formData.leetcodeUrl.trim() || undefined,
           constraints: formData.constraints.filter(c => c.trim()),
           hints: formData.hints.filter(h => h.trim())
@@ -163,20 +163,20 @@ export default function NewProblemModal({
     }
   };
 
-  const addCategory = () => {
-    if (categoryInput.trim() && !formData.category.includes(categoryInput.trim())) {
+  const addTopic = () => {
+    if (topicInput.trim() && !formData.topic.includes(topicInput.trim())) {
       setFormData(prev => ({
         ...prev,
-        category: [...prev.category, categoryInput.trim()]
+        topic: [...prev.topic, topicInput.trim()]
       }));
-      setCategoryInput('');
+      setTopicInput('');
     }
   };
 
-  const removeCategory = (index: number) => {
+  const removeTopic = (index: number) => {
     setFormData(prev => ({
       ...prev,
-      category: prev.category.filter((_, i) => i !== index)
+      topic: prev.topic.filter((_, i) => i !== index)
     }));
   };
 
@@ -278,37 +278,37 @@ export default function NewProblemModal({
               </select>
             </div>
 
-            {/* Category */}
+            {/* Topic */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Categories *
+                Topics *
               </label>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
-                  value={categoryInput}
-                  onChange={(e) => setCategoryInput(e.target.value)}
+                  value={topicInput}
+                  onChange={(e) => setTopicInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      addCategory();
+                      addTopic();
                     }
                   }}
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                  placeholder="Add category (e.g., Array, Dynamic Programming)"
+                  placeholder="Add topic (e.g., Array, Dynamic Programming)"
                 />
                 <button
                   type="button"
-                  onClick={addCategory}
+                  onClick={addTopic}
                   className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
                 >
                   <PlusIcon className="h-5 w-5" />
                 </button>
               </div>
               
-              {formData.category.length > 0 && (
+              {formData.topic.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
-                  {formData.category.map((cat, index) => (
+                  {formData.topic.map((cat, index) => (
                     <span
                       key={index}
                       className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-sm rounded-full"
@@ -316,7 +316,7 @@ export default function NewProblemModal({
                       {cat}
                       <button
                         type="button"
-                        onClick={() => removeCategory(index)}
+                        onClick={() => removeTopic(index)}
                         className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
                       >
                         <XMarkIcon className="h-4 w-4" />
@@ -326,8 +326,8 @@ export default function NewProblemModal({
                 </div>
               )}
               
-              {errors.category && (
-                <p className="mt-1 text-sm text-red-600">{errors.category}</p>
+              {errors.topic && (
+                <p className="mt-1 text-sm text-red-600">{errors.topic}</p>
               )}
             </div>
 

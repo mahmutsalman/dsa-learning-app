@@ -131,17 +131,45 @@ impl DatabaseManager {
         )?;
         println!("🔍 [Database] time_sessions table exists: {}", time_sessions_exists > 0);
         
+        // Check if problems table has old 'category' column but no 'topic' column
+        let has_category_column = if problems_exists > 0 {
+            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+                .query_map([], |row| Ok(row.get::<_, String>(1)?))?
+                .collect();
+            
+            match column_info {
+                Ok(columns) => {
+                    println!("🔍 [Database] problems table columns: {:?}", columns);
+                    let has_category = columns.contains(&"category".to_string());
+                    let has_topic = columns.contains(&"topic".to_string());
+                    println!("🔍 [Database] has_category: {}, has_topic: {}", has_category, has_topic);
+                    has_category && !has_topic
+                }
+                Err(e) => {
+                    println!("🔍 [Database] Failed to get column info: {}", e);
+                    false
+                }
+            }
+        } else {
+            false
+        };
+        
         // List all existing tables for debugging
         let tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
             .query_map([], |row| Ok(row.get::<_, String>(0)?))?
             .collect::<Result<Vec<String>, _>>()?;
         println!("🔍 [Database] Existing tables: {:?}", tables);
         
-        // Migration needed if problems exist but time_sessions don't
-        let migration_needed = problems_exists > 0 && time_sessions_exists == 0;
-        println!("🔍 [Database] Migration logic: problems={} AND time_sessions_missing={} = migration_needed={}", 
-                 problems_exists > 0, 
-                 time_sessions_exists == 0, 
+        // Migration needed if:
+        // 1. Problems exist but time_sessions don't (original migration)
+        // 2. Problems table has 'category' column but no 'topic' column (new migration)
+        let needs_table_migration = problems_exists > 0 && time_sessions_exists == 0;
+        let needs_column_migration = has_category_column;
+        let migration_needed = needs_table_migration || needs_column_migration;
+        
+        println!("🔍 [Database] Migration logic: table_migration={}, column_migration={}, total_needed={}", 
+                 needs_table_migration,
+                 needs_column_migration,
                  migration_needed);
         
         Ok(migration_needed)
@@ -183,6 +211,30 @@ impl DatabaseManager {
             .context("Failed to query existing tables")?
             .collect::<Result<Vec<String>, _>>()?;
         println!("🔄 [Database Migration] Current tables before migration: {:?}", existing_tables);
+        
+        // Check if we need to migrate category -> topic column
+        let needs_column_migration = if existing_tables.contains(&"problems".to_string()) {
+            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+                .query_map([], |row| Ok(row.get::<_, String>(1)?))?
+                .collect();
+                
+            match column_info {
+                Ok(columns) => {
+                    let has_category = columns.contains(&"category".to_string());
+                    let has_topic = columns.contains(&"topic".to_string());
+                    has_category && !has_topic
+                }
+                Err(_) => false
+            }
+        } else {
+            false
+        };
+        
+        // Perform category -> topic migration if needed
+        if needs_column_migration {
+            println!("🔄 [Database Migration] Migrating category column to topic...");
+            self.migrate_category_to_topic().await?;
+        }
         
         // Add missing tables one by one with error handling
         let missing_tables = [
@@ -301,26 +353,98 @@ impl DatabaseManager {
         println!("✅ [Database Migration] Migration completed successfully!");
         Ok(())
     }
+    
+    async fn migrate_category_to_topic(&mut self) -> anyhow::Result<()> {
+        println!("🔄 [Database Migration] Starting category -> topic column migration...");
+        
+        // SQLite doesn't support ALTER TABLE DROP COLUMN until version 3.35.0
+        // So we use the standard SQLite approach: create new table, copy data, drop old, rename
+        
+        // Temporarily disable foreign key constraints for migration
+        println!("🔄 [Database Migration] Disabling foreign key constraints for migration...");
+        self.connection.execute("PRAGMA foreign_keys = OFF", [])?;
+        
+        // Begin transaction for atomic migration
+        let tx = self.connection.unchecked_transaction()?;
+        
+        // Step 0: Check if problems_new already exists and drop it (cleanup from failed migration)
+        let problems_new_exists: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems_new'",
+            [],
+            |row| row.get(0)
+        )?;
+        
+        if problems_new_exists > 0 {
+            println!("🔄 [Database Migration] Found existing problems_new table from previous migration, dropping it...");
+            tx.execute("DROP TABLE problems_new", [])?;
+        }
+        
+        // Step 1: Create a new problems table with the correct schema
+        println!("🔄 [Database Migration] Creating new problems table with topic column...");
+        tx.execute(
+            "CREATE TABLE problems_new (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                difficulty TEXT CHECK(difficulty IN ('Easy', 'Medium', 'Hard')),
+                topic TEXT,
+                leetcode_url TEXT,
+                constraints TEXT,
+                examples TEXT,
+                hints TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )",
+            []
+        )?;
+        
+        // Step 2: Copy all data from old table to new table, mapping category -> topic
+        println!("🔄 [Database Migration] Copying data from old table to new table...");
+        let rows_copied = tx.execute(
+            "INSERT INTO problems_new (id, title, description, difficulty, topic, leetcode_url, constraints, examples, hints, created_at)
+             SELECT id, title, description, difficulty, category, leetcode_url, constraints, examples, hints, created_at
+             FROM problems",
+            []
+        )?;
+        println!("🔄 [Database Migration] Copied {} rows from old table to new table", rows_copied);
+        
+        // Step 3: Drop the old table
+        println!("🔄 [Database Migration] Dropping old problems table...");
+        tx.execute("DROP TABLE problems", [])?;
+        
+        // Step 4: Rename the new table to the original name
+        println!("🔄 [Database Migration] Renaming new table to problems...");
+        tx.execute("ALTER TABLE problems_new RENAME TO problems", [])?;
+        
+        // Commit the transaction
+        tx.commit()?;
+        
+        // Re-enable foreign key constraints
+        println!("🔄 [Database Migration] Re-enabling foreign key constraints...");
+        self.connection.execute("PRAGMA foreign_keys = ON", [])?;
+        
+        println!("✅ [Database Migration] Category -> Topic migration completed successfully!");
+        Ok(())
+    }
 
     // Problem operations
     pub fn create_problem(&mut self, req: CreateProblemRequest) -> anyhow::Result<Problem> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         
-        let category_json = serde_json::to_string(&req.category)?;
+        let topic_json = serde_json::to_string(&req.topic)?;
         let constraints_json = serde_json::to_string(&req.constraints)?;
         let hints_json = serde_json::to_string(&req.hints)?;
         let leetcode_url = req.leetcode_url.as_ref().map(|s| s.as_str()).unwrap_or("");
         
         self.connection.execute(
-            "INSERT INTO problems (id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at)
+            "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 &id,
                 &req.title,
                 &req.description,
                 &req.difficulty,
-                &category_json,
+                &topic_json,
                 leetcode_url,
                 &constraints_json,
                 &hints_json,
@@ -333,7 +457,7 @@ impl DatabaseManager {
             title: req.title,
             description: req.description,
             difficulty: req.difficulty,
-            category: category_json,
+            topic: topic_json,
             leetcode_url: req.leetcode_url,
             constraints: constraints_json,
             hints: hints_json,
@@ -343,7 +467,7 @@ impl DatabaseManager {
     
     pub fn get_problems(&self) -> anyhow::Result<Vec<Problem>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at FROM problems ORDER BY created_at DESC"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems ORDER BY created_at DESC"
         )?;
         
         let problem_iter = stmt.query_map([], |row| {
@@ -352,7 +476,7 @@ impl DatabaseManager {
                 title: row.get(1)?,
                 description: row.get(2)?,
                 difficulty: row.get(3)?,
-                category: row.get(4)?,
+                topic: row.get(4)?,
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
@@ -370,7 +494,7 @@ impl DatabaseManager {
     
     pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<Problem>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at FROM problems WHERE id = ?1"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems WHERE id = ?1"
         )?;
         
         let mut problem_iter = stmt.query_map([id], |row| {
@@ -379,7 +503,7 @@ impl DatabaseManager {
                 title: row.get(1)?,
                 description: row.get(2)?,
                 difficulty: row.get(3)?,
-                category: row.get(4)?,
+                topic: row.get(4)?,
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
@@ -419,10 +543,10 @@ impl DatabaseManager {
             update_values.push(Box::new(difficulty.clone()));
         }
 
-        if let Some(ref category) = req.category {
-            let category_json = serde_json::to_string(category)?;
-            update_fields.push("category = ?");
-            update_values.push(Box::new(category_json));
+        if let Some(ref topic) = req.topic {
+            let topic_json = serde_json::to_string(topic)?;
+            update_fields.push("topic = ?");
+            update_values.push(Box::new(topic_json));
         }
 
         if let Some(ref leetcode_url) = req.leetcode_url {
