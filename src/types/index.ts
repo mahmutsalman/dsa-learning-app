@@ -15,7 +15,6 @@ export interface Problem {
   created_at: string;
   leetcode_url?: string;
   constraints: string[];
-  examples: object[];
   hints: string[];
 }
 
@@ -214,6 +213,7 @@ export interface ProblemContextMenuProps {
   isOpen: boolean;
   onClose: () => void;
   onManageTags: () => void;
+  onEditProblem: () => void;
   position: { x: number; y: number };
   problemId: string;
 }
@@ -233,4 +233,26 @@ export interface RemoveProblemTagRequest {
 export interface GetTagSuggestionsRequest {
   query: string;
   limit?: number;
+}
+
+// Request types for problem operations
+export interface CreateProblemRequest {
+  title: string;
+  description: string;
+  difficulty: string;
+  category: string[];
+  leetcode_url?: string;
+  constraints: string[];
+  hints: string[];
+}
+
+export interface UpdateProblemRequest {
+  id: string;
+  title?: string;
+  description?: string;
+  difficulty?: string;
+  category?: string[];
+  leetcode_url?: string;
+  constraints?: string[];
+  hints?: string[];
 }

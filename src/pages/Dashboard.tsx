@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag } from '../types';
@@ -31,6 +31,8 @@ export default function Dashboard() {
   const [selectedProblemId, setSelectedProblemId] = useState<string>('');
   const [showTagModal, setShowTagModal] = useState(false);
   const [showNewProblemModal, setShowNewProblemModal] = useState(false);
+  const [showEditProblemModal, setShowEditProblemModal] = useState(false);
+  const [problemToEdit, setProblemToEdit] = useState<ProblemWithStudyTime | null>(null);
 
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
@@ -129,15 +131,47 @@ export default function Dashboard() {
   };
 
   // Handle tag save
-  const handleTagSave = async (tags: Tag[]) => {
+  const handleTagSave = async () => {
     // Reload problems to get updated tags
     await loadProblems();
   };
 
   // Handle new problem save
-  const handleNewProblemSave = async (problem: Problem) => {
+  const handleNewProblemSave = async () => {
     // Reload problems to show the new problem
     await loadProblems();
+  };
+
+  // Handle edit problem action
+  const handleEditProblem = async () => {
+    const selectedProblem = problems.find(p => p.id === selectedProblemId);
+    if (selectedProblem) {
+      try {
+        // Fetch the complete problem data from backend
+        const fullProblem = await invoke<Problem>('get_problem_by_id', { id: selectedProblemId });
+        if (fullProblem) {
+          // Convert Problem to ProblemWithStudyTime for consistency
+          const problemWithStudyTime = {
+            ...fullProblem,
+            totalStudyTime: selectedProblem.totalStudyTime,
+            cardCount: selectedProblem.cardCount,
+            problemTags: selectedProblem.problemTags
+          };
+          setProblemToEdit(problemWithStudyTime);
+          setShowEditProblemModal(true);
+        }
+      } catch (error) {
+        console.error('Failed to fetch problem for editing:', error);
+        // Could add toast notification here
+      }
+    }
+  };
+
+  // Handle edit problem save
+  const handleEditProblemSave = async () => {
+    // Reload problems to show the updated problem
+    await loadProblems();
+    setProblemToEdit(null);
   };
 
   // Close context menu when clicking elsewhere
@@ -313,6 +347,7 @@ export default function Dashboard() {
         isOpen={showContextMenu}
         onClose={() => setShowContextMenu(false)}
         onManageTags={handleManageTags}
+        onEditProblem={handleEditProblem}
         position={contextMenuPosition}
         problemId={selectedProblemId}
       />
@@ -330,6 +365,18 @@ export default function Dashboard() {
         isOpen={showNewProblemModal}
         onClose={() => setShowNewProblemModal(false)}
         onSave={handleNewProblemSave}
+      />
+
+      {/* Edit Problem Modal */}
+      <NewProblemModal
+        isOpen={showEditProblemModal}
+        onClose={() => {
+          setShowEditProblemModal(false);
+          setProblemToEdit(null);
+        }}
+        onSave={handleEditProblemSave}
+        editMode={true}
+        existingProblem={problemToEdit || undefined}
       />
     </div>
   );

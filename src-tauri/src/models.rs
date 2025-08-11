@@ -19,7 +19,6 @@ pub struct Problem {
     pub category: String,   // JSON string for array
     pub leetcode_url: Option<String>,
     pub constraints: String, // JSON string for array
-    pub examples: String,    // JSON string for array
     pub hints: String,       // JSON string for array
     pub created_at: DateTime<Utc>,
 }
@@ -48,7 +47,6 @@ pub struct CreateProblemRequest {
     pub category: Vec<String>,
     pub leetcode_url: Option<String>,
     pub constraints: Vec<String>,
-    pub examples: Vec<serde_json::Value>,
     pub hints: Vec<String>,
 }
 
@@ -61,7 +59,6 @@ pub struct UpdateProblemRequest {
     pub category: Option<Vec<String>>,
     pub leetcode_url: Option<String>,
     pub constraints: Option<Vec<String>>,
-    pub examples: Option<Vec<serde_json::Value>>,
     pub hints: Option<Vec<String>>,
 }
 
