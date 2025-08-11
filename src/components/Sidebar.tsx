@@ -20,13 +20,16 @@ const navigation = [
 interface SidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
+  isResizable?: boolean;
 }
 
-export default function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ isCollapsed, onToggle, isResizable = false }: SidebarProps) {
   return (
     <div className={`${
-      isCollapsed ? 'w-16' : 'w-64'
-    } bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out`}>
+      !isResizable ? (isCollapsed ? 'w-16' : 'w-64') : 'w-full'
+    } bg-white dark:bg-gray-800 ${
+      !isResizable ? 'border-r border-gray-200 dark:border-gray-700' : ''
+    } flex flex-col transition-all duration-300 ease-in-out h-full`}>
       {/* Logo */}
       <div className={`flex items-center ${isCollapsed ? 'px-2 justify-center' : 'px-6'} py-4 border-b border-gray-200 dark:border-gray-700`}>
         <div className="flex items-center">

@@ -778,3 +778,54 @@
     @apply h-3;
   }
 }
+
+/* ===========================================
+   APP-LEVEL RESIZABLE LAYOUT STYLES
+   =========================================== */
+
+/* App-level resize handle styles */
+.app-resize-handle {
+  @apply w-2 bg-transparent hover:bg-blue-500 hover:bg-opacity-30 transition-colors duration-200 cursor-col-resize relative;
+}
+
+.app-resize-handle-inner {
+  @apply absolute inset-y-0 left-1/2 transform -translate-x-1/2 w-0.5 bg-gray-300 dark:bg-gray-600 rounded-full opacity-0 transition-all duration-200;
+}
+
+.app-resize-handle:hover .app-resize-handle-inner {
+  @apply opacity-60 bg-white;
+}
+
+.app-resize-handle:active {
+  @apply bg-blue-600 bg-opacity-50;
+}
+
+.app-resize-handle:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 dark:ring-blue-400 ring-offset-2 ring-offset-gray-50 dark:ring-offset-gray-950;
+}
+
+/* App-level layout optimizations */
+.resizing {
+  cursor: col-resize !important;
+}
+
+.resizing * {
+  pointer-events: none;
+  user-select: none;
+}
+
+.resizing .app-resize-handle {
+  pointer-events: all;
+}
+
+/* Smooth transitions when not resizing */
+body:not(.resizing) .app-resize-handle {
+  transition: all 200ms ease;
+}
+
+/* Mobile adjustments for app-level resize */
+@media (max-width: 768px) {
+  .app-resize-handle {
+    @apply w-3;
+  }
+}

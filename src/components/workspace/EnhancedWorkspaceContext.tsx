@@ -260,6 +260,24 @@ export function useEnhancedWorkspaceLayout() {
   };
 }
 
+// Optional hook that doesn't throw if context is missing
+export function useEnhancedWorkspaceLayoutOptional() {
+  const context = useContext(EnhancedWorkspaceContext);
+  
+  if (!context) {
+    return null;
+  }
+  
+  const { state, actions } = context;
+  return {
+    layout: state.layout,
+    updateLayout: actions.updateLayout,
+    toggleSidebar: actions.toggleSidebar,
+    toggleNotes: actions.toggleNotes,
+    resetLayout: actions.resetLayout,
+  };
+}
+
 export function useEnhancedWorkspacePreferences() {
   const { state, actions } = useEnhancedWorkspace();
   return {

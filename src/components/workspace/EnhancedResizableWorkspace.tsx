@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { useEnhancedWorkspaceLayout, useEnhancedWorkspaceResize } from './EnhancedWorkspaceContext';
@@ -30,6 +30,7 @@ export default function EnhancedResizableWorkspace({
   onLayoutChange,
 }: EnhancedResizableWorkspaceProps) {
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const panelGroupRef = useRef<any>(null);
   
   // Enhanced workspace context
   const { layout, updateLayout } = useEnhancedWorkspaceLayout();
@@ -43,20 +44,27 @@ export default function EnhancedResizableWorkspace({
   const currentSidebarSize = layout?.sidebarSize ?? sidebarSize;
   const currentCodeSize = layout?.codeSize ?? codeSize;
   const isCollapsed = layout?.isCollapsed?.sidebar ?? false;
+  
+  // Calculate actual sizes based on collapse state
+  const actualSidebarSize = isCollapsed ? 3 : currentSidebarSize;
+  const actualEditorsSize = isCollapsed ? 97 : (100 - currentSidebarSize);
 
   // Layout change handlers with context integration
   const handleHorizontalResize = useCallback((sizes: number[]) => {
     const [newSidebarSize] = sizes;
     
-    // Update context if available
-    if (layout) {
-      updateLayout({
-        sidebarSize: newSidebarSize,
-        editorsSize: 100 - newSidebarSize,
-      });
-    } else {
-      // Fallback to localStorage
-      setSidebarSize(newSidebarSize);
+    // Only update if not collapsed - prevent manual resize during collapse state
+    if (!isCollapsed) {
+      // Update context if available
+      if (layout) {
+        updateLayout({
+          sidebarSize: newSidebarSize,
+          editorsSize: 100 - newSidebarSize,
+        });
+      } else {
+        // Fallback to localStorage
+        setSidebarSize(newSidebarSize);
+      }
     }
     
     // Trigger layout change callback
@@ -121,6 +129,25 @@ export default function EnhancedResizableWorkspace({
     setResizing?.(false);
   }, [setResizing]);
 
+  // Force layout update when collapse state changes
+  useEffect(() => {
+    if (panelGroupRef.current) {
+      // Small delay to ensure context state has propagated
+      setTimeout(() => {
+        // Trigger layout update to reflect new sizes
+        window.dispatchEvent(new Event('resize'));
+        window.dispatchEvent(new CustomEvent('workspace-layout-change', { 
+          detail: { 
+            type: 'collapse-toggle',
+            isCollapsed,
+            sidebarSize: actualSidebarSize,
+            editorsSize: actualEditorsSize
+          } 
+        }));
+      }, 50);
+    }
+  }, [isCollapsed, actualSidebarSize, actualEditorsSize]);
+
   return (
     <div
       ref={workspaceRef}
@@ -136,15 +163,16 @@ export default function EnhancedResizableWorkspace({
       {/* Flexible Content Area with Resizable Panels */}
       <div className="enhanced-workspace-content">
         <PanelGroup 
+          ref={panelGroupRef}
           direction="horizontal" 
           onLayout={handleHorizontalResize}
           className="enhanced-panel-group"
         >
           {/* Problem Description Panel (Sidebar) */}
           <Panel 
-            defaultSize={currentSidebarSize} 
+            size={actualSidebarSize}
             minSize={isCollapsed ? 3 : MIN_SIDEBAR_SIZE} 
-            maxSize={MAX_SIDEBAR_SIZE}
+            maxSize={isCollapsed ? 3 : MAX_SIDEBAR_SIZE}
             className="enhanced-panel-sidebar"
             onResize={handleResizeStart}
           >
@@ -169,7 +197,7 @@ export default function EnhancedResizableWorkspace({
 
           {/* Editors Container Panel */}
           <Panel 
-            defaultSize={100 - currentSidebarSize} 
+            size={actualEditorsSize}
             minSize={MIN_EDITOR_SIZE}
             className="enhanced-panel-editors"
           >
