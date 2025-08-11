@@ -8,7 +8,8 @@ import {
   CheckIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
-import { useEnhancedWorkspaceLayout } from './workspace/EnhancedWorkspaceContext';
+import { useEnhancedWorkspaceLayoutOptional } from './workspace/EnhancedWorkspaceContext';
+import { useAppSidebarOptional } from '../contexts/AppLayoutContext';
 import ImageThumbnails from './ImageThumbnails';
 
 export interface EnhancedProblemDescriptionPanelProps {
@@ -31,9 +32,16 @@ export default function EnhancedProblemDescriptionPanel({
   onDescriptionUpdate,
   className = ''
 }: EnhancedProblemDescriptionPanelProps) {
-  // Enhanced workspace integration
-  const { layout, toggleSidebar } = useEnhancedWorkspaceLayout();
-  const isCollapsed = layout?.isCollapsed?.sidebar ?? false;
+  // Smart context usage - prioritize workspace context when available (for ProblemCard pages)
+  // Fall back to app context only when no workspace context exists (for Dashboard page)
+  const workspaceContext = useEnhancedWorkspaceLayoutOptional();
+  const appSidebar = useAppSidebarOptional();
+  
+  // Determine which context to use and extract values
+  // IMPORTANT: Prioritize workspace context to ensure Problem Description panel
+  // only collapses itself within workspace, not the entire app navigation
+  const isCollapsed = workspaceContext?.layout?.isCollapsed?.sidebar ?? appSidebar?.isCollapsed ?? false;
+  const toggleSidebar = workspaceContext?.toggleSidebar ?? appSidebar?.toggle ?? (() => {});
 
   // Edit state management
   const [isEditing, setIsEditing] = useState(false);
@@ -147,9 +155,7 @@ export default function EnhancedProblemDescriptionPanel({
 
   // Toggle collapse/expand
   const handleToggle = useCallback(() => {
-    if (toggleSidebar) {
-      toggleSidebar();
-    }
+    toggleSidebar();
   }, [toggleSidebar]);
 
   if (!problem) {

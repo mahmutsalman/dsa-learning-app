@@ -52,6 +52,10 @@ recordings/
 # Backup files from previous implementation
 localResources_backup/
 
+# Attachment files (keep folder structure but ignore contents)
+src-tauri/attachments/*/*/*
+!src-tauri/attachments/*/
+
 # Development and testing utilities
 add-sample-data.js
 check-database-status.js
