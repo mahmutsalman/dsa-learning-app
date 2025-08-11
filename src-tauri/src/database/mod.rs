@@ -1082,4 +1082,136 @@ impl DatabaseManager {
         tx.commit()?;
         Ok(())
     }
+
+    // Tag management operations
+    pub fn get_problem_tags(&self, problem_id: &str) -> anyhow::Result<Vec<Tag>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT t.id, t.name, t.color, t.category 
+             FROM tags t 
+             JOIN problem_tags pt ON t.id = pt.tag_id 
+             WHERE pt.problem_id = ?1 
+             ORDER BY t.name"
+        )?;
+        
+        let tag_iter = stmt.query_map([problem_id], |row| {
+            Ok(Tag {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                category: row.get(3)?,
+            })
+        })?;
+        
+        let mut tags = Vec::new();
+        for tag in tag_iter {
+            tags.push(tag?);
+        }
+        
+        Ok(tags)
+    }
+    
+    pub fn get_all_tags(&self) -> anyhow::Result<Vec<Tag>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, name, color, category FROM tags ORDER BY name"
+        )?;
+        
+        let tag_iter = stmt.query_map([], |row| {
+            Ok(Tag {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                category: row.get(3)?,
+            })
+        })?;
+        
+        let mut tags = Vec::new();
+        for tag in tag_iter {
+            tags.push(tag?);
+        }
+        
+        Ok(tags)
+    }
+    
+    pub fn add_problem_tag(&mut self, req: AddProblemTagRequest) -> anyhow::Result<Tag> {
+        // First, check if tag already exists
+        let existing_tag: Option<Tag> = self.connection.query_row(
+            "SELECT id, name, color, category FROM tags WHERE name = ?1",
+            [&req.tag_name],
+            |row| Ok(Tag {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                color: row.get(2)?,
+                category: row.get(3)?,
+            })
+        ).optional()?;
+        
+        let tag = match existing_tag {
+            Some(tag) => tag,
+            None => {
+                // Create new tag
+                let tag_id = Uuid::new_v4().to_string();
+                let category = req.category.unwrap_or_else(|| "custom".to_string());
+                
+                self.connection.execute(
+                    "INSERT INTO tags (id, name, color, category) VALUES (?1, ?2, ?3, ?4)",
+                    params![&tag_id, &req.tag_name, &req.color, &category],
+                )?;
+                
+                Tag {
+                    id: tag_id,
+                    name: req.tag_name.clone(),
+                    color: req.color.clone(),
+                    category,
+                }
+            }
+        };
+        
+        // Check if the problem-tag relationship already exists
+        let exists: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problem_tags WHERE problem_id = ?1 AND tag_id = ?2",
+            params![&req.problem_id, &tag.id],
+            |row| row.get(0),
+        )?;
+        
+        // Only add the relationship if it doesn't exist
+        if exists == 0 {
+            self.connection.execute(
+                "INSERT INTO problem_tags (problem_id, tag_id) VALUES (?1, ?2)",
+                params![&req.problem_id, &tag.id],
+            )?;
+        }
+        
+        Ok(tag)
+    }
+    
+    pub fn remove_problem_tag(&mut self, req: RemoveProblemTagRequest) -> anyhow::Result<()> {
+        let rows_affected = self.connection.execute(
+            "DELETE FROM problem_tags WHERE problem_id = ?1 AND tag_id = ?2",
+            params![&req.problem_id, &req.tag_id],
+        )?;
+        
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Tag relationship not found"));
+        }
+        
+        Ok(())
+    }
+    
+    pub fn get_tag_suggestions(&self, query: &str, limit: i32) -> anyhow::Result<Vec<String>> {
+        let search_pattern = format!("%{}%", query);
+        
+        let mut stmt = self.connection.prepare(
+            "SELECT DISTINCT name FROM tags 
+             WHERE name LIKE ?1 
+             ORDER BY name 
+             LIMIT ?2"
+        )?;
+        
+        let suggestions = stmt.query_map(params![search_pattern, limit], |row| {
+            Ok(row.get::<_, String>(0)?)
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(suggestions)
+    }
 }

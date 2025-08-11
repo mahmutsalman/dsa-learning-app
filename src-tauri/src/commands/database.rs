@@ -148,3 +148,50 @@ pub async fn get_cards_per_problem(state: State<'_, AppState>) -> Result<Vec<Car
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.get_cards_per_problem().map_err(|e| e.to_string())
 }
+
+// Tag management commands
+#[tauri::command]
+pub async fn get_problem_tags(
+    state: State<'_, AppState>,
+    problem_id: String,
+) -> Result<Vec<Tag>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_problem_tags(&problem_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_all_tags(state: State<'_, AppState>) -> Result<Vec<Tag>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_all_tags().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn add_problem_tag(
+    state: State<'_, AppState>,
+    request: AddProblemTagRequest,
+) -> Result<Tag, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    db.add_problem_tag(request).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn remove_problem_tag(
+    state: State<'_, AppState>,
+    request: RemoveProblemTagRequest,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    match db.remove_problem_tag(request) {
+        Ok(()) => Ok("Tag removed successfully".to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn get_tag_suggestions(
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<i32>,
+) -> Result<Vec<String>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_tag_suggestions(&query, limit.unwrap_or(10)).map_err(|e| e.to_string())
+}

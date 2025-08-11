@@ -161,6 +161,36 @@ pub struct Recording {
     pub file_size: Option<i64>,
 }
 
+// Tag models
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Tag {
+    pub id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub category: String, // 'algorithm', 'data-structure', 'pattern', 'custom'
+}
+
+// Tag request/response models
+#[derive(Debug, Deserialize)]
+pub struct AddProblemTagRequest {
+    pub problem_id: String,
+    pub tag_name: String,
+    pub color: Option<String>,
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RemoveProblemTagRequest {
+    pub problem_id: String,
+    pub tag_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetTagSuggestionsRequest {
+    pub query: String,
+    pub limit: Option<i32>,
+}
+
 // Timer-specific models for in-memory timer state
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TimerState {

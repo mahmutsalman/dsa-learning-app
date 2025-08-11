@@ -69,7 +69,7 @@ export interface Connection {
 export interface Tag {
   id: string;
   name: string;
-  color: string;
+  color?: string;
   category: TagCategory;
 }
 
@@ -200,4 +200,37 @@ export interface SearchOptions {
   filter: ProblemFilter;
   sort: ProblemSort;
   sortDirection: 'asc' | 'desc';
+}
+
+// Tagging system interfaces
+export interface TagModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (tags: Tag[]) => void;
+  problemId: string;
+}
+
+export interface ProblemContextMenuProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onManageTags: () => void;
+  position: { x: number; y: number };
+  problemId: string;
+}
+
+export interface AddProblemTagRequest {
+  problem_id: string;
+  tag_name: string;
+  color?: string;
+  category?: TagCategory;
+}
+
+export interface RemoveProblemTagRequest {
+  problem_id: string;
+  tag_id: string;
+}
+
+export interface GetTagSuggestionsRequest {
+  query: string;
+  limit?: number;
 }
