@@ -627,8 +627,3 @@ textarea.text-wrap-responsive {
 }
 
 /* Hide less important elements when space is tight */
-@media (max-width: 1000px) {
-  .header-navigation button:nth-child(2) {
-    display: none; /* Hide DB Analysis button */
-  }
-}
