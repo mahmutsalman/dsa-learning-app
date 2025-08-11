@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon } from '@heroicons/react/24/outline';
-import { Problem, Difficulty, Card } from '../types';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon } from '@heroicons/react/24/outline';
+import { Problem, Difficulty, Card, Tag } from '../types';
+import ProblemContextMenu from '../components/ProblemContextMenu';
+import TagModal from '../components/TagModal';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -13,12 +15,20 @@ const difficultyColors = {
 interface ProblemWithStudyTime extends Problem {
   totalStudyTime: number; // in seconds
   cardCount: number;
+  problemTags?: Tag[]; // Optional tags for the problem
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Context menu and tag modal state
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [selectedProblemId, setSelectedProblemId] = useState<string>('');
+  const [showTagModal, setShowTagModal] = useState(false);
 
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
@@ -45,13 +55,14 @@ export default function Dashboard() {
       setLoading(true);
       const baseProblems = await invoke<Problem[]>('get_problems');
       
-      // For each problem, get its cards and calculate total study time
+      // For each problem, get its cards, tags and calculate total study time
       const problemsWithStudyTime = await Promise.all(
         baseProblems.map(async (problem) => {
           try {
-            const cards = await invoke<Card[]>('get_cards_for_problem', { 
-              problemId: problem.id 
-            });
+            const [cards, tags] = await Promise.all([
+              invoke<Card[]>('get_cards_for_problem', { problemId: problem.id }),
+              invoke<Tag[]>('get_problem_tags', { problemId: problem.id })
+            ]);
             
             // Sum up total_duration from all cards for this problem
             const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0), 0);
@@ -59,14 +70,16 @@ export default function Dashboard() {
             return {
               ...problem,
               totalStudyTime,
-              cardCount: cards.length
+              cardCount: cards.length,
+              problemTags: tags
             } as ProblemWithStudyTime;
           } catch (err) {
-            console.error(`Failed to load cards for problem ${problem.id}:`, err);
+            console.error(`Failed to load data for problem ${problem.id}:`, err);
             return {
               ...problem,
               totalStudyTime: 0,
-              cardCount: 0
+              cardCount: 0,
+              problemTags: []
             } as ProblemWithStudyTime;
           }
         })
@@ -86,6 +99,51 @@ export default function Dashboard() {
     console.log('Create new problem feature coming soon!');
     // TODO: Implement create problem functionality
   };
+
+  // Handle right-click context menu
+  const handleRightClick = (e: React.MouseEvent, problemId: string) => {
+    e.preventDefault(); // Prevent default browser context menu
+    e.stopPropagation(); // Stop event from bubbling up
+    
+    setContextMenuPosition({
+      x: e.clientX,
+      y: e.clientY,
+    });
+    setSelectedProblemId(problemId);
+    setShowContextMenu(true);
+  };
+
+  // Handle card click for navigation
+  const handleCardClick = (e: React.MouseEvent, problemId: string) => {
+    // Only navigate on left click, not on right click
+    if (e.button === 0) {
+      e.preventDefault();
+      navigate(`/problem/${problemId}`);
+    }
+  };
+
+  // Handle manage tags action
+  const handleManageTags = () => {
+    setShowTagModal(true);
+  };
+
+  // Handle tag save
+  const handleTagSave = async (tags: Tag[]) => {
+    // Reload problems to get updated tags
+    await loadProblems();
+  };
+
+  // Close context menu when clicking elsewhere
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setShowContextMenu(false);
+    };
+
+    if (showContextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showContextMenu]);
 
   if (loading) {
     return (
@@ -189,10 +247,11 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {problems.map((problem) => (
-            <Link
+            <div
               key={problem.id}
-              to={`/problem/${problem.id}`}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors group"
+              onClick={(e) => handleCardClick(e, problem.id)}
+              onContextMenu={(e) => handleRightClick(e, problem.id)}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors group cursor-pointer select-none"
             >
               <div className="flex items-start justify-between mb-3">
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
@@ -209,6 +268,26 @@ export default function Dashboard() {
                 {problem.description}
               </p>
               
+              {/* Tags display */}
+              {problem.problemTags && problem.problemTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {problem.problemTags.slice(0, 3).map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                    >
+                      <TagIcon className="h-3 w-3" />
+                      {tag.name}
+                    </span>
+                  ))}
+                  {problem.problemTags.length > 3 && (
+                    <span className="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                      +{problem.problemTags.length - 3} more
+                    </span>
+                  )}
+                </div>
+              )}
+              
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-gray-400">
                   {problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied
@@ -217,10 +296,27 @@ export default function Dashboard() {
                   Open →
                 </span>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}
+
+      {/* Context Menu */}
+      <ProblemContextMenu
+        isOpen={showContextMenu}
+        onClose={() => setShowContextMenu(false)}
+        onManageTags={handleManageTags}
+        position={contextMenuPosition}
+        problemId={selectedProblemId}
+      />
+
+      {/* Tag Modal */}
+      <TagModal
+        isOpen={showTagModal}
+        onClose={() => setShowTagModal(false)}
+        onSave={handleTagSave}
+        problemId={selectedProblemId}
+      />
     </div>
   );
 }

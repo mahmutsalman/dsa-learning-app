@@ -50,6 +50,12 @@ async fn main() {
             commands::database::get_database_stats,
             commands::database::get_card_hierarchy,
             commands::database::get_cards_per_problem,
+            // Tag management commands
+            commands::database::get_problem_tags,
+            commands::database::get_all_tags,
+            commands::database::add_problem_tag,
+            commands::database::remove_problem_tag,
+            commands::database::get_tag_suggestions,
             // Timer commands
             commands::timer::start_timer_session,
             commands::timer::stop_timer_session,
