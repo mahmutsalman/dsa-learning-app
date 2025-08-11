@@ -509,13 +509,6 @@ export default function ProblemCard() {
             }
             codeEditor={
               <div className="bg-gray-50 dark:bg-gray-900 h-full flex flex-col">
-                {/* Header with label - using flex instead of absolute positioning */}
-                <div className="flex justify-end p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
-                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Code Editor</span>
-                    <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-                  </div>
-                </div>
                 {/* Editor container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -540,13 +533,6 @@ export default function ProblemCard() {
             }
             notesEditor={
               <div className="bg-white dark:bg-gray-800 h-full flex flex-col">
-                {/* Header with label - using flex instead of absolute positioning */}
-                <div className="flex justify-end p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
-                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Notes</span>
-                    <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-                  </div>
-                </div>
                 {/* Notes container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -632,12 +618,6 @@ export default function ProblemCard() {
           }
           codeEditor={
             <div className="bg-gray-50 dark:bg-gray-900 relative h-full">
-              <div className="absolute top-2 right-2 z-10">
-                <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Code Editor</span>
-                  <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-                </div>
-              </div>
               {currentCard ? (
                 <ResizableMonacoEditor
                   value={code}
@@ -665,12 +645,6 @@ export default function ProblemCard() {
           }
           notesEditor={
             <div className="bg-white dark:bg-gray-800 relative h-full">
-              <div className="absolute top-2 right-2 z-10">
-                <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Notes</span>
-                  <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+S</kbd>
-                </div>
-              </div>
               {currentCard ? (
                 <QuillEditor
                   value={notes}

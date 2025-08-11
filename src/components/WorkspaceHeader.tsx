@@ -56,15 +56,6 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const navigate = useNavigate();
 
-  const logDatabaseAnalysis = async () => {
-    try {
-      const { logDatabaseAnalysis } = await import('../utils/databaseAnalysis');
-      logDatabaseAnalysis();
-    } catch (err) {
-      console.error('Failed to import database analysis:', err);
-    }
-  };
-
   return (
     <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center">
       <div className="workspace-header-grid">
@@ -76,26 +67,6 @@ export function WorkspaceHeader({
           >
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
-          
-          {/* Developer Debug Buttons - remove in production */}
-          {(import.meta as any).env?.MODE === 'development' && (
-            <>
-              <button
-                onClick={logDatabaseAnalysis}
-                className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                title="Analyze database structure (check console)"
-              >
-                DB Analysis
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                title="Reload page to test enhanced workspace"
-              >
-                Enhanced UI
-              </button>
-            </>
-          )}
         </div>
 
         {/* Title Section */}
