@@ -16,6 +16,7 @@ export interface Problem {
   leetcode_url?: string;
   constraints: string[];
   hints: string[];
+  related_problem_ids: string[];
 }
 
 export interface Card {
@@ -244,6 +245,7 @@ export interface CreateProblemRequest {
   leetcode_url?: string;
   constraints: string[];
   hints: string[];
+  related_problem_ids?: string[];
 }
 
 export interface UpdateProblemRequest {
@@ -255,4 +257,26 @@ export interface UpdateProblemRequest {
   leetcode_url?: string;
   constraints?: string[];
   hints?: string[];
+  related_problem_ids?: string[];
+}
+
+// Problem connection request types
+export interface SearchProblemsForConnectionRequest {
+  query: string;
+  limit?: number;
+  exclude_id?: string;
+}
+
+export interface AddProblemRelationRequest {
+  problem_id: string;
+  related_problem_id: string;
+}
+
+export interface RemoveProblemRelationRequest {
+  problem_id: string;
+  related_problem_id: string;
+}
+
+export interface GetRelatedProblemsRequest {
+  problem_id: string;
 }

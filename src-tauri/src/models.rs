@@ -20,6 +20,7 @@ pub struct Problem {
     pub leetcode_url: Option<String>,
     pub constraints: String, // JSON string for array
     pub hints: String,       // JSON string for array
+    pub related_problem_ids: Option<String>, // JSON string for array of problem IDs
     pub created_at: DateTime<Utc>,
 }
 
@@ -34,6 +35,7 @@ pub struct FrontendProblem {
     pub leetcode_url: Option<String>,
     pub constraints: Vec<String>,
     pub hints: Vec<String>,
+    pub related_problem_ids: Vec<String>, // Array of related problem IDs
     pub created_at: DateTime<Utc>,
     pub tags: Vec<String>, // For compatibility with frontend expectations
 }
@@ -63,6 +65,7 @@ pub struct CreateProblemRequest {
     pub leetcode_url: Option<String>,
     pub constraints: Vec<String>,
     pub hints: Vec<String>,
+    pub related_problem_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +78,7 @@ pub struct UpdateProblemRequest {
     pub leetcode_url: Option<String>,
     pub constraints: Option<Vec<String>>,
     pub hints: Option<Vec<String>>,
+    pub related_problem_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]

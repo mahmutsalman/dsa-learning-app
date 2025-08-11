@@ -56,6 +56,11 @@ async fn main() {
             commands::database::add_problem_tag,
             commands::database::remove_problem_tag,
             commands::database::get_tag_suggestions,
+            // Problem connection commands
+            commands::database::search_problems_for_connection,
+            commands::database::add_problem_relation,
+            commands::database::remove_problem_relation,
+            commands::database::get_related_problems,
             // Timer commands
             commands::timer::start_timer_session,
             commands::timer::stop_timer_session,

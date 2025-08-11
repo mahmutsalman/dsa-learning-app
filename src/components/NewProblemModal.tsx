@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { CreateProblemRequest, UpdateProblemRequest, Problem, Difficulty } from '../types';
+import ProblemAutocomplete from './ProblemAutocomplete';
 
 interface NewProblemModalProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ interface FormData {
   leetcodeUrl: string;
   constraints: string[];
   hints: string[];
+  relatedProblems: Problem[];
 }
 
 interface FormErrors {
@@ -35,7 +37,8 @@ const initialFormData: FormData = {
   topic: [],
   leetcodeUrl: '',
   constraints: [''],
-  hints: ['']
+  hints: [''],
+  relatedProblems: []
 };
 
 export default function NewProblemModal({ 
@@ -65,7 +68,8 @@ export default function NewProblemModal({
         constraints: Array.isArray(problem.constraints) ? problem.constraints :
                      typeof problem.constraints === 'string' ? JSON.parse(problem.constraints) : [''],
         hints: Array.isArray(problem.hints) ? problem.hints :
-               typeof problem.hints === 'string' ? JSON.parse(problem.hints) : ['']
+               typeof problem.hints === 'string' ? JSON.parse(problem.hints) : [''],
+        relatedProblems: [] // Will be loaded separately if needed
       };
     } catch (error) {
       console.error('Error parsing existing problem:', error);
@@ -133,7 +137,8 @@ export default function NewProblemModal({
           topic: formData.topic,
           leetcode_url: formData.leetcodeUrl.trim() || undefined,
           constraints: formData.constraints.filter(c => c.trim()),
-          hints: formData.hints.filter(h => h.trim())
+          hints: formData.hints.filter(h => h.trim()),
+          related_problem_ids: formData.relatedProblems.map(p => p.id)
         };
 
         const updatedProblem = await invoke<Problem>('update_problem', { request: updateRequest });
@@ -147,7 +152,8 @@ export default function NewProblemModal({
           topic: formData.topic,
           leetcode_url: formData.leetcodeUrl.trim() || undefined,
           constraints: formData.constraints.filter(c => c.trim()),
-          hints: formData.hints.filter(h => h.trim())
+          hints: formData.hints.filter(h => h.trim()),
+          related_problem_ids: formData.relatedProblems.map(p => p.id)
         };
 
         const newProblem = await invoke<Problem>('create_problem', { request: createRequest });
@@ -198,6 +204,24 @@ export default function NewProblemModal({
     setFormData(prev => ({
       ...prev,
       [field]: prev[field].filter((_, i) => i !== index)
+    }));
+  };
+
+  // Helper functions for managing related problems
+  const addRelatedProblem = (problem: Problem) => {
+    // Check if the problem is already in the list
+    if (!formData.relatedProblems.some(p => p.id === problem.id)) {
+      setFormData(prev => ({
+        ...prev,
+        relatedProblems: [...prev.relatedProblems, problem]
+      }));
+    }
+  };
+
+  const removeRelatedProblem = (problemId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      relatedProblems: prev.relatedProblems.filter(p => p.id !== problemId)
     }));
   };
 
@@ -420,6 +444,68 @@ export default function NewProblemModal({
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* Related Problems */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Related Problems
+                </label>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Connect to related problems
+                </span>
+              </div>
+
+              {/* Add Related Problem */}
+              <div className="mb-4">
+                <ProblemAutocomplete
+                  onSelect={addRelatedProblem}
+                  excludeId={editMode && existingProblem ? existingProblem.id : undefined}
+                  placeholder="Search for problems to connect..."
+                  className="w-full"
+                />
+              </div>
+
+              {/* Selected Related Problems */}
+              {formData.relatedProblems.length > 0 && (
+                <div className="space-y-2">
+                  {formData.relatedProblems.map((problem) => (
+                    <div
+                      key={problem.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0 mr-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h5 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {problem.title}
+                          </h5>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            problem.difficulty === 'Easy' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                            problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            problem.difficulty === 'Hard' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {problem.difficulty}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">
+                          {problem.description}
+                        </p>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => removeRelatedProblem(problem.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                        title="Remove connection"
+                      >
+                        <XMarkIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </form>
         </div>

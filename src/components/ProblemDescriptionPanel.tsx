@@ -8,6 +8,7 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { Problem } from '../types';
+import RelatedProblemsSection from './RelatedProblemsSection';
 
 export interface ProblemDescriptionPanelProps {
   isCollapsed: boolean;
@@ -264,6 +265,18 @@ export default function ProblemDescriptionPanel({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Related Problems - Only show when not editing */}
+          {!isEditing && (
+            <div className="mb-6">
+              <RelatedProblemsSection
+                problemId={problem.id}
+                onUpdate={() => {
+                  // Optionally reload problem data or notify parent
+                }}
+              />
             </div>
           )}
           

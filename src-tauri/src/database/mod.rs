@@ -29,6 +29,11 @@ fn parse_json_array(json_str: &str) -> Vec<String> {
 }
 
 fn convert_problem_to_frontend(db_problem: Problem) -> FrontendProblem {
+    let related_problem_ids = match db_problem.related_problem_ids {
+        Some(ids_json) => parse_json_array(&ids_json),
+        None => Vec::new()
+    };
+    
     FrontendProblem {
         id: db_problem.id,
         title: db_problem.title,
@@ -38,6 +43,7 @@ fn convert_problem_to_frontend(db_problem: Problem) -> FrontendProblem {
         leetcode_url: db_problem.leetcode_url,
         constraints: parse_json_array(&db_problem.constraints),
         hints: parse_json_array(&db_problem.hints),
+        related_problem_ids,
         created_at: db_problem.created_at,
         tags: Vec::new(), // Will be populated separately if needed
     }
@@ -272,6 +278,50 @@ impl DatabaseManager {
             self.migrate_category_to_topic().await?;
         }
         
+        // Check if we need to add related_problem_ids column
+        println!("🔍 [Database Migration] Checking if related_problem_ids column migration is needed...");
+        let needs_related_problems_migration = if existing_tables.contains(&"problems".to_string()) {
+            println!("🔍 [Database Migration] Problems table exists, checking columns...");
+            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+                .query_map([], |row| Ok(row.get::<_, String>(1)?))?
+                .collect();
+                
+            match column_info {
+                Ok(columns) => {
+                    println!("🔍 [Database Migration] Current problems table columns: {:?}", columns);
+                    let has_related_problem_ids = columns.contains(&"related_problem_ids".to_string());
+                    println!("🔍 [Database Migration] Has related_problem_ids column: {}", has_related_problem_ids);
+                    let needs_migration = !has_related_problem_ids;
+                    println!("🔍 [Database Migration] Needs related_problem_ids migration: {}", needs_migration);
+                    needs_migration
+                }
+                Err(e) => {
+                    println!("⚠️ [Database Migration] Failed to get column info: {}", e);
+                    false
+                }
+            }
+        } else {
+            println!("🔍 [Database Migration] Problems table does not exist, no related_problem_ids migration needed");
+            false
+        };
+        
+        // Perform related_problem_ids migration if needed
+        if needs_related_problems_migration {
+            println!("🔄 [Database Migration] Related problems migration required - executing...");
+            match self.migrate_add_related_problems_column().await {
+                Ok(()) => {
+                    println!("✅ [Database Migration] Related problems migration completed successfully!");
+                },
+                Err(e) => {
+                    let error_msg = format!("Related problems migration failed: {}", e);
+                    println!("❌ [Database Migration] {}", error_msg);
+                    return Err(anyhow::anyhow!(error_msg));
+                }
+            }
+        } else {
+            println!("ℹ️ [Database Migration] Related problems migration not needed, skipping...");
+        }
+        
         // Add missing tables one by one with error handling
         let missing_tables = [
             ("time_sessions", "CREATE TABLE IF NOT EXISTS time_sessions (
@@ -461,6 +511,105 @@ impl DatabaseManager {
         println!("✅ [Database Migration] Category -> Topic migration completed successfully!");
         Ok(())
     }
+    
+    async fn migrate_add_related_problems_column(&mut self) -> anyhow::Result<()> {
+        println!("🔄 [Database Migration] Adding related_problem_ids column to problems table...");
+        
+        // First, verify the problems table exists
+        let problems_exists: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'",
+            [],
+            |row| row.get(0)
+        ).context("Failed to check if problems table exists")?;
+        
+        if problems_exists == 0 {
+            return Err(anyhow::anyhow!("Problems table does not exist - cannot add related_problem_ids column"));
+        }
+        
+        // Check if column already exists (double check)
+        let columns_result: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+            .context("Failed to prepare PRAGMA table_info")?
+            .query_map([], |row| Ok(row.get::<_, String>(1)?))
+            .context("Failed to query table info")?
+            .collect();
+            
+        match columns_result {
+            Ok(columns) => {
+                if columns.contains(&"related_problem_ids".to_string()) {
+                    println!("✅ [Database Migration] related_problem_ids column already exists, skipping...");
+                    return Ok(());
+                }
+            },
+            Err(e) => {
+                println!("⚠️ [Database Migration] Warning: Could not check existing columns: {}", e);
+                // Continue with migration attempt anyway
+            }
+        }
+        
+        println!("🔄 [Database Migration] Executing ALTER TABLE to add related_problem_ids column...");
+        
+        match self.connection.execute(
+            "ALTER TABLE problems ADD COLUMN related_problem_ids TEXT",
+            []
+        ) {
+            Ok(rows_affected) => {
+                println!("✅ [Database Migration] ALTER TABLE executed successfully (rows affected: {})", rows_affected);
+                
+                // Verify the column was actually added
+                let verification_result: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+                    .context("Failed to prepare verification PRAGMA")?
+                    .query_map([], |row| Ok(row.get::<_, String>(1)?))
+                    .context("Failed to query verification table info")?
+                    .collect();
+                    
+                match verification_result {
+                    Ok(columns) => {
+                        if columns.contains(&"related_problem_ids".to_string()) {
+                            println!("✅ [Database Migration] Verified: related_problem_ids column was successfully added!");
+                            Ok(())
+                        } else {
+                            let error_msg = format!("Column addition failed verification. Current columns: {:?}", columns);
+                            println!("❌ [Database Migration] {}", error_msg);
+                            Err(anyhow::anyhow!(error_msg))
+                        }
+                    },
+                    Err(e) => {
+                        let error_msg = format!("Failed to verify column addition: {}", e);
+                        println!("❌ [Database Migration] {}", error_msg);
+                        Err(anyhow::anyhow!(error_msg))
+                    }
+                }
+            },
+            Err(e) => {
+                let error_msg = format!("Failed to add related_problem_ids column: {} (Error type: {})", e, std::any::type_name_of_val(&e));
+                println!("❌ [Database Migration] {}", error_msg);
+                
+                // Check if it's a "duplicate column" error (which means it already exists)
+                let error_str = e.to_string().to_lowercase();
+                if error_str.contains("duplicate column") || error_str.contains("already exists") {
+                    println!("ℹ️ [Database Migration] Column already exists, treating as success");
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("{}", error_msg))
+                }
+            }
+        }
+    }
+
+    // Helper function to check if related_problem_ids column exists
+    fn has_related_problem_ids_column(&self) -> bool {
+        let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+            .and_then(|mut stmt| {
+                stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))
+                    .map(|rows| rows.collect::<Result<Vec<String>, _>>())
+            })
+            .and_then(|result| result);
+            
+        match column_info {
+            Ok(columns) => columns.contains(&"related_problem_ids".to_string()),
+            Err(_) => false
+        }
+    }
 
     // Problem operations
     pub fn create_problem(&mut self, req: CreateProblemRequest) -> anyhow::Result<FrontendProblem> {
@@ -472,21 +621,50 @@ impl DatabaseManager {
         let hints_json = serde_json::to_string(&req.hints)?;
         let leetcode_url = req.leetcode_url.as_ref().map(|s| s.as_str()).unwrap_or("");
         
-        self.connection.execute(
-            "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![
-                &id,
-                &req.title,
-                &req.description,
-                &req.difficulty,
-                &topic_json,
-                leetcode_url,
-                &constraints_json,
-                &hints_json,
-                &now.to_rfc3339(),
-            ],
-        )?;
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        
+        if has_related_column {
+            // Use new schema with related_problem_ids column
+            let related_problem_ids_json = req.related_problem_ids
+                .as_ref()
+                .map(|ids| serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string()))
+                .unwrap_or_else(|| "[]".to_string());
+                
+            self.connection.execute(
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    &id,
+                    &req.title,
+                    &req.description,
+                    &req.difficulty,
+                    &topic_json,
+                    leetcode_url,
+                    &constraints_json,
+                    &hints_json,
+                    &related_problem_ids_json,
+                    &now.to_rfc3339(),
+                ],
+            )?;
+        } else {
+            // Use old schema without related_problem_ids column
+            self.connection.execute(
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    &id,
+                    &req.title,
+                    &req.description,
+                    &req.difficulty,
+                    &topic_json,
+                    leetcode_url,
+                    &constraints_json,
+                    &hints_json,
+                    &now.to_rfc3339(),
+                ],
+            )?;
+        }
         
         // Return the frontend-compatible version
         Ok(FrontendProblem {
@@ -498,15 +676,23 @@ impl DatabaseManager {
             leetcode_url: req.leetcode_url,
             constraints: req.constraints,
             hints: req.hints,
+            related_problem_ids: req.related_problem_ids.unwrap_or_default(),
             created_at: now,
             tags: Vec::new(), // Empty for newly created problems
         })
     }
     
     pub fn get_problems(&self) -> anyhow::Result<Vec<FrontendProblem>> {
-        let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems ORDER BY created_at DESC"
-        )?;
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        
+        let sql = if has_related_column {
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at FROM problems ORDER BY created_at DESC"
+        } else {
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at FROM problems ORDER BY created_at DESC"
+        };
+        
+        let mut stmt = self.connection.prepare(sql)?;
         
         let problem_iter = stmt.query_map([], |row| {
             let db_problem = Problem {
@@ -518,7 +704,8 @@ impl DatabaseManager {
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
-                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
+                related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -532,9 +719,16 @@ impl DatabaseManager {
     }
     
     pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<FrontendProblem>> {
-        let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems WHERE id = ?1"
-        )?;
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        
+        let sql = if has_related_column {
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at FROM problems WHERE id = ?1"
+        } else {
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at FROM problems WHERE id = ?1"
+        };
+        
+        let mut stmt = self.connection.prepare(sql)?;
         
         let mut problem_iter = stmt.query_map([id], |row| {
             let db_problem = Problem {
@@ -546,7 +740,8 @@ impl DatabaseManager {
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
-                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
+                related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -604,6 +799,16 @@ impl DatabaseManager {
             let hints_json = serde_json::to_string(hints)?;
             update_fields.push("hints = ?");
             update_values.push(Box::new(hints_json));
+        }
+
+        // Only update related_problem_ids if the column exists (backward compatibility)
+        if let Some(ref related_problem_ids) = req.related_problem_ids {
+            if self.has_related_problem_ids_column() {
+                let related_ids_json = serde_json::to_string(related_problem_ids)?;
+                update_fields.push("related_problem_ids = ?");
+                update_values.push(Box::new(related_ids_json));
+            }
+            // If column doesn't exist, silently ignore the related_problem_ids update
         }
 
         // If no fields to update, return the existing problem
@@ -1366,5 +1571,192 @@ impl DatabaseManager {
         .collect::<Result<Vec<_>, _>>()?;
         
         Ok(suggestions)
+    }
+    
+    // Problem connection functions
+    pub fn search_problems_by_title(&self, query: &str, limit: i32, exclude_id: Option<&str>) -> anyhow::Result<Vec<FrontendProblem>> {
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
+        
+        let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(exclude_id) = exclude_id {
+            (
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
+                         FROM problems 
+                         WHERE LOWER(title) LIKE ?1 AND id != ?2 
+                         ORDER BY title 
+                         LIMIT ?3", related_column_sql),
+                vec![
+                    Box::new(search_pattern),
+                    Box::new(exclude_id.to_string()),
+                    Box::new(limit),
+                ],
+            )
+        } else {
+            (
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
+                         FROM problems 
+                         WHERE LOWER(title) LIKE ?1 
+                         ORDER BY title 
+                         LIMIT ?2", related_column_sql),
+                vec![
+                    Box::new(search_pattern),
+                    Box::new(limit),
+                ],
+            )
+        };
+        
+        let mut stmt = self.connection.prepare(&sql)?;
+        
+        let problem_iter = stmt.query_map(
+            rusqlite::params_from_iter(params.iter().map(|v| v.as_ref())),
+            |row| {
+                let db_problem = Problem {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    description: row.get(2)?,
+                    difficulty: row.get(3)?,
+                    topic: row.get(4)?,
+                    leetcode_url: row.get(5)?,
+                    constraints: row.get(6)?,
+                    hints: row.get(7)?,
+                    related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
+                    created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                };
+                Ok(convert_problem_to_frontend(db_problem))
+            },
+        )?;
+        
+        let mut problems = Vec::new();
+        for problem in problem_iter {
+            problems.push(problem?);
+        }
+        
+        Ok(problems)
+    }
+    
+    pub fn add_problem_relation(&mut self, problem_id: &str, related_problem_id: &str) -> anyhow::Result<()> {
+        // Add relation to the first problem
+        self.add_relation_to_problem(problem_id, related_problem_id)?;
+        
+        // Add bidirectional relation to the second problem
+        self.add_relation_to_problem(related_problem_id, problem_id)?;
+        
+        Ok(())
+    }
+    
+    pub fn remove_problem_relation(&mut self, problem_id: &str, related_problem_id: &str) -> anyhow::Result<()> {
+        // Remove relation from the first problem
+        self.remove_relation_from_problem(problem_id, related_problem_id)?;
+        
+        // Remove bidirectional relation from the second problem
+        self.remove_relation_from_problem(related_problem_id, problem_id)?;
+        
+        Ok(())
+    }
+    
+    pub fn get_related_problems(&self, problem_id: &str) -> anyhow::Result<Vec<FrontendProblem>> {
+        // Get the problem to access its related_problem_ids
+        if let Some(problem) = self.get_problem_by_id(problem_id)? {
+            if problem.related_problem_ids.is_empty() {
+                return Ok(Vec::new());
+            }
+            
+            // Build query to get all related problems
+            let placeholders = problem.related_problem_ids.iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(", ");
+            
+            let sql = format!(
+                "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at 
+                 FROM problems 
+                 WHERE id IN ({}) 
+                 ORDER BY title",
+                placeholders
+            );
+            
+            let mut stmt = self.connection.prepare(&sql)?;
+            
+            let params: Vec<&dyn rusqlite::ToSql> = problem.related_problem_ids.iter()
+                .map(|id| id as &dyn rusqlite::ToSql)
+                .collect();
+                
+            let problem_iter = stmt.query_map(params.as_slice(), |row| {
+                let db_problem = Problem {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    description: row.get(2)?,
+                    difficulty: row.get(3)?,
+                    topic: row.get(4)?,
+                    leetcode_url: row.get(5)?,
+                    constraints: row.get(6)?,
+                    hints: row.get(7)?,
+                    related_problem_ids: row.get(8)?,
+                    created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                };
+                Ok(convert_problem_to_frontend(db_problem))
+            })?;
+            
+            let mut related_problems = Vec::new();
+            for problem in problem_iter {
+                related_problems.push(problem?);
+            }
+            
+            Ok(related_problems)
+        } else {
+            Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id))
+        }
+    }
+    
+    // Helper functions for managing relations
+    fn add_relation_to_problem(&mut self, problem_id: &str, new_related_id: &str) -> anyhow::Result<()> {
+        if let Some(mut problem) = self.get_problem_by_id(problem_id)? {
+            // Check if relation already exists
+            if !problem.related_problem_ids.contains(&new_related_id.to_string()) {
+                problem.related_problem_ids.push(new_related_id.to_string());
+                
+                // Update the problem in database
+                let update_req = UpdateProblemRequest {
+                    id: problem_id.to_string(),
+                    title: None,
+                    description: None,
+                    difficulty: None,
+                    topic: None,
+                    leetcode_url: None,
+                    constraints: None,
+                    hints: None,
+                    related_problem_ids: Some(problem.related_problem_ids),
+                };
+                
+                self.update_problem(update_req)?;
+            }
+        }
+        Ok(())
+    }
+    
+    fn remove_relation_from_problem(&mut self, problem_id: &str, related_id_to_remove: &str) -> anyhow::Result<()> {
+        if let Some(mut problem) = self.get_problem_by_id(problem_id)? {
+            // Remove the relation if it exists
+            problem.related_problem_ids.retain(|id| id != related_id_to_remove);
+            
+            // Update the problem in database
+            let update_req = UpdateProblemRequest {
+                id: problem_id.to_string(),
+                title: None,
+                description: None,
+                difficulty: None,
+                topic: None,
+                leetcode_url: None,
+                constraints: None,
+                hints: None,
+                related_problem_ids: Some(problem.related_problem_ids),
+            };
+            
+            self.update_problem(update_req)?;
+        }
+        Ok(())
     }
 }

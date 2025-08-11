@@ -33,6 +33,8 @@ interface WorkspaceHeaderProps {
   onOpenSessionHistory: () => void;
   formatTimeDisplay: (seconds: number, showSeconds?: boolean) => string;
   getSiblingCards: (currentCard: Card, cards: Card[]) => Card[];
+  previousProblemId?: string | null;
+  onBackToPreviousProblem?: () => void;
 }
 
 export function WorkspaceHeader({
@@ -53,6 +55,8 @@ export function WorkspaceHeader({
   onOpenSessionHistory,
   formatTimeDisplay,
   getSiblingCards,
+  previousProblemId,
+  onBackToPreviousProblem,
 }: WorkspaceHeaderProps) {
   const navigate = useNavigate();
 
@@ -61,12 +65,28 @@ export function WorkspaceHeader({
       <div className="workspace-header-grid">
         {/* Navigation Section */}
         <div className="header-navigation">
-          <button
-            onClick={() => navigate('/')}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <ArrowLeftIcon className="h-5 w-5" />
-          </button>
+          {previousProblemId && onBackToPreviousProblem ? (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={onBackToPreviousProblem}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                title="Back to previous related problem"
+              >
+                <ArrowLeftIcon className="h-5 w-5" />
+              </button>
+              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                Back to related
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate('/')}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              title="Back to dashboard"
+            >
+              <ArrowLeftIcon className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
         {/* Title Section */}

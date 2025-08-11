@@ -33,9 +33,10 @@ export default function ProblemCard() {
   const [recordingState, setRecordingState] = useState({ isRecording: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
+  const [previousProblemId, setPreviousProblemId] = useState<string | null>(null);
   
   // Enhanced workspace feature flag
-  const [useEnhancedWorkspace, setUseEnhancedWorkspace] = useState(true);
+  const [useEnhancedWorkspace] = useState(true);
   
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
@@ -95,7 +96,7 @@ export default function ProblemCard() {
 
   // Workspace layout management
   const { state, actions } = useWorkspaceLayout({ 
-    onLayoutChange: (layout) => {
+    onLayoutChange: (_layout) => {
       // Trigger Monaco Editor resize when workspace layout changes
       setTimeout(() => {
         window.dispatchEvent(new Event('resize'));
@@ -215,6 +216,16 @@ export default function ProblemCard() {
   useEffect(() => {
     if (problemId) {
       loadProblem();
+    }
+  }, [problemId]);
+
+  // Check for previous problem in session storage (for back navigation from related problems)
+  useEffect(() => {
+    const previousId = sessionStorage.getItem('previousProblem');
+    if (previousId && previousId !== problemId) {
+      setPreviousProblemId(previousId);
+    } else {
+      setPreviousProblemId(null);
     }
   }, [problemId]);
 
@@ -449,6 +460,15 @@ export default function ProblemCard() {
     }
   };
 
+  // Handle back navigation to previous related problem
+  const handleBackToPreviousProblem = () => {
+    if (previousProblemId) {
+      // Clear the session storage to avoid navigation loops
+      sessionStorage.removeItem('previousProblem');
+      navigate(`/problem/${previousProblemId}`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -499,6 +519,8 @@ export default function ProblemCard() {
                 onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
                 formatTimeDisplay={formatTimeDisplay}
                 getSiblingCards={getSiblingCards}
+                previousProblemId={previousProblemId}
+                onBackToPreviousProblem={handleBackToPreviousProblem}
               />
             }
             problemPanel={
@@ -608,6 +630,8 @@ export default function ProblemCard() {
               onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
               formatTimeDisplay={formatTimeDisplay}
               getSiblingCards={getSiblingCards}
+              previousProblemId={previousProblemId}
+              onBackToPreviousProblem={handleBackToPreviousProblem}
             />
           }
           problemPanel={
