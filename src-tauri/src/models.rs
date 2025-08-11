@@ -109,6 +109,31 @@ pub struct CardCountPerProblem {
     pub child_cards: i32,
 }
 
+// Problem images model
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProblemImage {
+    pub id: String,
+    pub problem_id: String,
+    pub image_path: String,
+    pub caption: Option<String>,
+    pub position: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+// Request models for image operations
+#[derive(Debug, Deserialize)]
+pub struct SaveImageRequest {
+    pub problem_id: String,
+    pub image_data: String, // Base64 encoded image data
+    pub caption: Option<String>,
+    pub position: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteImageRequest {
+    pub image_id: String,
+}
+
 // Additional models for timer sessions and recordings
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TimeSession {

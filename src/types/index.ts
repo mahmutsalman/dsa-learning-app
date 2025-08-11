@@ -73,6 +73,16 @@ export interface Tag {
   category: TagCategory;
 }
 
+// Image type for problem images
+export interface ProblemImage {
+  id: string;
+  problem_id: string;
+  image_path: string;
+  caption?: string;
+  position: number;
+  created_at: string;
+}
+
 // Frontend-specific types
 export interface ProblemWithCards extends Problem {
   cards: Card[];

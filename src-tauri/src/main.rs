@@ -57,7 +57,14 @@ async fn main() {
             commands::timer::resume_timer_session,
             commands::timer::get_timer_state,
             commands::timer::get_card_sessions,
-            commands::timer::delete_session
+            commands::timer::delete_session,
+            // Image commands
+            commands::images::save_problem_image,
+            commands::images::get_problem_images,
+            commands::images::delete_problem_image,
+            commands::images::update_image_positions,
+            commands::images::get_image_path,
+            commands::images::get_image_data_url
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

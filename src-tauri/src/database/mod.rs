@@ -979,4 +979,107 @@ impl DatabaseManager {
 
         Ok(counts)
     }
+
+    // Image-related operations
+    pub fn save_problem_image(&mut self, problem_id: &str, image_path: &str, caption: Option<String>, position: Option<i32>) -> anyhow::Result<ProblemImage> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+        
+        // Get the next position if not provided
+        let position = match position {
+            Some(pos) => pos,
+            None => {
+                let max_position: Option<i32> = self.connection.query_row(
+                    "SELECT MAX(position) FROM problem_images WHERE problem_id = ?1",
+                    [problem_id],
+                    |row| row.get(0),
+                ).optional()?.flatten();
+                max_position.unwrap_or(-1) + 1
+            }
+        };
+        
+        self.connection.execute(
+            "INSERT INTO problem_images (id, problem_id, image_path, caption, position, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                &id,
+                problem_id,
+                image_path,
+                &caption,
+                position,
+                &now.to_rfc3339(),
+            ],
+        )?;
+        
+        Ok(ProblemImage {
+            id,
+            problem_id: problem_id.to_string(),
+            image_path: image_path.to_string(),
+            caption,
+            position,
+            created_at: now,
+        })
+    }
+    
+    pub fn get_problem_images(&self, problem_id: &str) -> anyhow::Result<Vec<ProblemImage>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, problem_id, image_path, caption, position, created_at 
+             FROM problem_images WHERE problem_id = ?1 ORDER BY position"
+        )?;
+        
+        let image_iter = stmt.query_map([problem_id], |row| {
+            let created_at_str: String = row.get(5)?;
+            
+            Ok(ProblemImage {
+                id: row.get(0)?,
+                problem_id: row.get(1)?,
+                image_path: row.get(2)?,
+                caption: row.get(3)?,
+                position: row.get(4)?,
+                created_at: created_at_str.parse().unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+        
+        let mut images = Vec::new();
+        for image in image_iter {
+            images.push(image?);
+        }
+        
+        Ok(images)
+    }
+    
+    pub fn delete_problem_image(&mut self, image_id: &str) -> anyhow::Result<String> {
+        // First get the image path so we can delete the file
+        let image_path: String = self.connection.query_row(
+            "SELECT image_path FROM problem_images WHERE id = ?1",
+            [image_id],
+            |row| row.get(0),
+        )?;
+        
+        // Delete from database
+        let rows_affected = self.connection.execute(
+            "DELETE FROM problem_images WHERE id = ?1",
+            [image_id]
+        )?;
+        
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Image not found"));
+        }
+        
+        Ok(image_path)
+    }
+    
+    pub fn update_image_positions(&mut self, updates: Vec<(String, i32)>) -> anyhow::Result<()> {
+        let tx = self.connection.unchecked_transaction()?;
+        
+        for (image_id, position) in updates {
+            tx.execute(
+                "UPDATE problem_images SET position = ?1 WHERE id = ?2",
+                params![position, &image_id]
+            )?;
+        }
+        
+        tx.commit()?;
+        Ok(())
+    }
 }

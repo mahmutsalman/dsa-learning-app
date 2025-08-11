@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { 
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -8,6 +9,7 @@ import {
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { useEnhancedWorkspaceLayout } from './workspace/EnhancedWorkspaceContext';
+import ImageThumbnails from './ImageThumbnails';
 
 export interface EnhancedProblemDescriptionPanelProps {
   problem: {
@@ -21,8 +23,8 @@ export interface EnhancedProblemDescriptionPanelProps {
 }
 
 // Collapsed state is handled by panel constraints (min size)
-const COLLAPSED_MIN_SIZE = 3; // 3% minimum for collapsed state (about 48px on 1600px screen)
-const EXPANDED_MIN_SIZE = 15; // 15% minimum for expanded state
+// const COLLAPSED_MIN_SIZE = 3; // 3% minimum for collapsed state (about 48px on 1600px screen)
+// const EXPANDED_MIN_SIZE = 15; // 15% minimum for expanded state
 
 export default function EnhancedProblemDescriptionPanel({ 
   problem,
@@ -38,6 +40,11 @@ export default function EnhancedProblemDescriptionPanel({
   const [editedDescription, setEditedDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Image handling
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageRefreshKey, setImageRefreshKey] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Edit handlers
   const startEditing = useCallback(() => {
@@ -78,6 +85,65 @@ export default function EnhancedProblemDescriptionPanel({
       setIsSaving(false);
     }
   }, [problem, onDescriptionUpdate, editedDescription]);
+
+  // Image paste handler
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!problem) return;
+
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+      e.preventDefault();
+      setIsUploadingImage(true);
+      
+      try {
+        const file = imageItem.getAsFile();
+        if (!file) return;
+        
+        // Convert to base64
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const base64Data = event.target?.result as string;
+            
+            await invoke('save_problem_image', {
+              request: {
+                problem_id: problem.id,
+                image_data: base64Data,
+                caption: null,
+                position: null,
+              }
+            });
+            
+            // Refresh the images display
+            setImageRefreshKey(prev => prev + 1);
+            
+            // Show success feedback briefly
+            const originalPlaceholder = textareaRef.current?.placeholder || '';
+            if (textareaRef.current) {
+              textareaRef.current.placeholder = 'Image uploaded successfully!';
+              setTimeout(() => {
+                if (textareaRef.current) {
+                  textareaRef.current.placeholder = originalPlaceholder;
+                }
+              }, 2000);
+            }
+          } catch (error) {
+            console.error('Failed to save image:', error);
+            alert('Failed to upload image');
+          } finally {
+            setIsUploadingImage(false);
+          }
+        };
+        
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error handling image paste:', error);
+        setIsUploadingImage(false);
+      }
+    }
+  }, [problem]);
 
   // Toggle collapse/expand
   const handleToggle = useCallback(() => {
@@ -212,10 +278,13 @@ export default function EnhancedProblemDescriptionPanel({
           {isEditing && (
             <div className="mb-6 min-w-0">
               <textarea
+                ref={textareaRef}
                 value={editedDescription}
                 onChange={(e) => setEditedDescription(e.target.value)}
+                onPaste={handlePaste}
                 className="w-full h-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:text-gray-300 text-sm resize-none"
-                placeholder="Enter problem description..."
+                placeholder={isUploadingImage ? "Uploading image..." : "Enter problem description... (Paste images here)"}
+                disabled={isUploadingImage}
               />
               {/* Error message */}
               {saveError && (
@@ -226,9 +295,22 @@ export default function EnhancedProblemDescriptionPanel({
               {/* Character count helper */}
               <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {editedDescription.length} characters
+                {isUploadingImage && (
+                  <span className="ml-2 text-primary-600">
+                    • Uploading image...
+                  </span>
+                )}
               </div>
             </div>
           )}
+
+          {/* Image Thumbnails - Show always */}
+          <ImageThumbnails 
+            key={imageRefreshKey}
+            problemId={problem.id}
+            isEditing={isEditing}
+            className="mb-6"
+          />
           
           {/* LeetCode Link - Only show when not editing */}
           {!isEditing && problem.leetcode_url && (
