@@ -97,6 +97,17 @@ CREATE TABLE IF NOT EXISTS card_tags (
     FOREIGN KEY (card_id) REFERENCES cards(id),
     FOREIGN KEY (tag_id) REFERENCES tags(id)
 );
+
+-- Problem images table
+CREATE TABLE IF NOT EXISTS problem_images (
+    id TEXT PRIMARY KEY,
+    problem_id TEXT NOT NULL,
+    image_path TEXT NOT NULL, -- Relative path like 'images/problem_123/uuid.png'
+    caption TEXT,
+    position INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (problem_id) REFERENCES problems(id) ON DELETE CASCADE
+);
 "#;
 
 pub const CREATE_INDEXES_SQL: &str = r#"
@@ -111,4 +122,6 @@ CREATE INDEX IF NOT EXISTS idx_problems_difficulty ON problems(difficulty);
 CREATE INDEX IF NOT EXISTS idx_problems_created_at ON problems(created_at);
 CREATE INDEX IF NOT EXISTS idx_cards_status ON cards(status);
 CREATE INDEX IF NOT EXISTS idx_cards_created_at ON cards(created_at);
+CREATE INDEX IF NOT EXISTS idx_problem_images_problem_id ON problem_images(problem_id);
+CREATE INDEX IF NOT EXISTS idx_problem_images_position ON problem_images(position);
 "#;
