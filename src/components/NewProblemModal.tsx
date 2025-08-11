@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { CreateProblemRequest, Problem, Difficulty } from '../types';
+import { CreateProblemRequest, UpdateProblemRequest, Problem, Difficulty } from '../types';
 
 interface NewProblemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (problem: Problem) => void;
+  editMode?: boolean;
+  existingProblem?: Problem;
 }
 
 interface FormData {
@@ -16,7 +18,6 @@ interface FormData {
   category: string[];
   leetcodeUrl: string;
   constraints: string[];
-  examples: { input: string; output: string; explanation?: string }[];
   hints: string[];
 }
 
@@ -25,7 +26,6 @@ interface FormErrors {
   description?: string;
   difficulty?: string;
   category?: string;
-  examples?: string;
 }
 
 const initialFormData: FormData = {
@@ -35,11 +35,16 @@ const initialFormData: FormData = {
   category: [],
   leetcodeUrl: '',
   constraints: [''],
-  examples: [{ input: '', output: '', explanation: '' }],
   hints: ['']
 };
 
-export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemModalProps) {
+export default function NewProblemModal({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  editMode = false, 
+  existingProblem 
+}: NewProblemModalProps) {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -47,10 +52,38 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
   
   const titleInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to parse existing problem data
+  const parseExistingProblem = (problem: Problem): FormData => {
+    try {
+      return {
+        title: problem.title || '',
+        description: problem.description || '',
+        difficulty: problem.difficulty as Difficulty || 'Easy',
+        category: Array.isArray(problem.category) ? problem.category : 
+                  typeof problem.category === 'string' ? JSON.parse(problem.category) : [],
+        leetcodeUrl: problem.leetcode_url || '',
+        constraints: Array.isArray(problem.constraints) ? problem.constraints :
+                     typeof problem.constraints === 'string' ? JSON.parse(problem.constraints) : [''],
+        hints: Array.isArray(problem.hints) ? problem.hints :
+               typeof problem.hints === 'string' ? JSON.parse(problem.hints) : ['']
+      };
+    } catch (error) {
+      console.error('Error parsing existing problem:', error);
+      return initialFormData;
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
-      // Reset form when modal opens
-      setFormData(initialFormData);
+      if (editMode && existingProblem) {
+        // Populate form with existing problem data
+        const parsedData = parseExistingProblem(existingProblem);
+        setFormData(parsedData);
+      } else {
+        // Reset form when creating new problem
+        setFormData(initialFormData);
+      }
+      
       setErrors({});
       setCategoryInput('');
       
@@ -59,7 +92,7 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
         titleInputRef.current?.focus();
       }, 100);
     }
-  }, [isOpen]);
+  }, [isOpen, editMode, existingProblem]);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
@@ -76,14 +109,6 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
       newErrors.category = 'At least one category is required';
     }
 
-    // Validate examples have both input and output
-    const invalidExamples = formData.examples.some(example => 
-      !example.input.trim() || !example.output.trim()
-    );
-    if (invalidExamples) {
-      newErrors.examples = 'All examples must have both input and output';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -98,24 +123,40 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
     setIsLoading(true);
 
     try {
-      // Prepare the request data
-      const request: CreateProblemRequest = {
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        difficulty: formData.difficulty,
-        category: formData.category,
-        leetcode_url: formData.leetcodeUrl.trim() || undefined,
-        constraints: formData.constraints.filter(c => c.trim()),
-        examples: formData.examples.filter(e => e.input.trim() && e.output.trim()),
-        hints: formData.hints.filter(h => h.trim())
-      };
+      if (editMode && existingProblem) {
+        // Update existing problem
+        const updateRequest: UpdateProblemRequest = {
+          id: existingProblem.id,
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          difficulty: formData.difficulty,
+          category: formData.category,
+          leetcode_url: formData.leetcodeUrl.trim() || undefined,
+          constraints: formData.constraints.filter(c => c.trim()),
+          hints: formData.hints.filter(h => h.trim())
+        };
 
-      const newProblem = await invoke<Problem>('create_problem', { request });
+        const updatedProblem = await invoke<Problem>('update_problem', { request: updateRequest });
+        onSave(updatedProblem);
+      } else {
+        // Create new problem
+        const createRequest: CreateProblemRequest = {
+          title: formData.title.trim(),
+          description: formData.description.trim(),
+          difficulty: formData.difficulty,
+          category: formData.category,
+          leetcode_url: formData.leetcodeUrl.trim() || undefined,
+          constraints: formData.constraints.filter(c => c.trim()),
+          hints: formData.hints.filter(h => h.trim())
+        };
+
+        const newProblem = await invoke<Problem>('create_problem', { request: createRequest });
+        onSave(newProblem);
+      }
       
-      onSave(newProblem);
       onClose();
     } catch (error) {
-      console.error('Failed to create problem:', error);
+      console.error(`Failed to ${editMode ? 'update' : 'create'} problem:`, error);
       // You could add a toast notification here
     } finally {
       setIsLoading(false);
@@ -160,28 +201,6 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
     }));
   };
 
-  const addExample = () => {
-    setFormData(prev => ({
-      ...prev,
-      examples: [...prev.examples, { input: '', output: '', explanation: '' }]
-    }));
-  };
-
-  const updateExample = (index: number, field: keyof typeof formData.examples[0], value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      examples: prev.examples.map((example, i) => 
-        i === index ? { ...example, [field]: value } : example
-      )
-    }));
-  };
-
-  const removeExample = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      examples: prev.examples.filter((_, i) => i !== index)
-    }));
-  };
 
   if (!isOpen) return null;
 
@@ -191,7 +210,7 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Create New Problem
+            {editMode ? 'Edit Problem' : 'Create New Problem'}
           </h2>
           <button
             onClick={onClose}
@@ -326,86 +345,6 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
               />
             </div>
 
-            {/* Examples */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Examples
-                </label>
-                <button
-                  type="button"
-                  onClick={addExample}
-                  className="text-primary-500 hover:text-primary-600 text-sm flex items-center gap-1"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  Add Example
-                </button>
-              </div>
-
-              {formData.examples.map((example, index) => (
-                <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium text-gray-700 dark:text-gray-300">
-                      Example {index + 1}
-                    </h4>
-                    {formData.examples.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeExample(index)}
-                        className="text-red-500 hover:text-red-600"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Input
-                      </label>
-                      <textarea
-                        value={example.input}
-                        onChange={(e) => updateExample(index, 'input', e.target.value)}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
-                        placeholder="Input for this example"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                        Output
-                      </label>
-                      <textarea
-                        value={example.output}
-                        onChange={(e) => updateExample(index, 'output', e.target.value)}
-                        rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
-                        placeholder="Expected output"
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4">
-                    <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
-                      Explanation (optional)
-                    </label>
-                    <textarea
-                      value={example.explanation || ''}
-                      onChange={(e) => updateExample(index, 'explanation', e.target.value)}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
-                      placeholder="Explain this example (optional)"
-                    />
-                  </div>
-                </div>
-              ))}
-              
-              {errors.examples && (
-                <p className="mt-1 text-sm text-red-600">{errors.examples}</p>
-              )}
-            </div>
 
             {/* Constraints */}
             <div>
@@ -502,10 +441,10 @@ export default function NewProblemModal({ isOpen, onClose, onSave }: NewProblemM
             {isLoading ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Creating...
+                {editMode ? 'Updating...' : 'Creating...'}
               </>
             ) : (
-              'Create Problem'
+              editMode ? 'Update Problem' : 'Create Problem'
             )}
           </button>
         </div>

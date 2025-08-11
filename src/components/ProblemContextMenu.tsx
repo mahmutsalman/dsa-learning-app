@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { TagIcon } from '@heroicons/react/24/outline';
+import { TagIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { ProblemContextMenuProps } from '../types';
 
 export default function ProblemContextMenu({
   isOpen,
   onClose,
   onManageTags,
+  onEditProblem,
   position,
   problemId,
 }: ProblemContextMenuProps) {
@@ -39,7 +40,7 @@ export default function ProblemContextMenu({
   // Calculate positioning to avoid viewport overflow
   const getMenuStyle = (): React.CSSProperties => {
     const menuWidth = 200;
-    const menuHeight = 120;
+    const menuHeight = 160;
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
@@ -81,6 +82,18 @@ export default function ProblemContextMenu({
       <button
         onClick={(e) => {
           e.stopPropagation();
+          onEditProblem();
+          onClose();
+        }}
+        className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
+      >
+        <PencilIcon className="h-4 w-4" />
+        Edit Problem
+      </button>
+      
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
           onManageTags();
           onClose();
         }}
@@ -89,8 +102,6 @@ export default function ProblemContextMenu({
         <TagIcon className="h-4 w-4" />
         Manage Tags
       </button>
-      
-      {/* Future menu items can be added here */}
     </div>
   );
 }

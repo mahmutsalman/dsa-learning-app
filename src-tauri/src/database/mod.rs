@@ -309,13 +309,12 @@ impl DatabaseManager {
         
         let category_json = serde_json::to_string(&req.category)?;
         let constraints_json = serde_json::to_string(&req.constraints)?;
-        let examples_json = serde_json::to_string(&req.examples)?;
         let hints_json = serde_json::to_string(&req.hints)?;
         let leetcode_url = req.leetcode_url.as_ref().map(|s| s.as_str()).unwrap_or("");
         
         self.connection.execute(
-            "INSERT INTO problems (id, title, description, difficulty, category, leetcode_url, constraints, examples, hints, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO problems (id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 &id,
                 &req.title,
@@ -324,7 +323,6 @@ impl DatabaseManager {
                 &category_json,
                 leetcode_url,
                 &constraints_json,
-                &examples_json,
                 &hints_json,
                 &now.to_rfc3339(),
             ],
@@ -338,7 +336,6 @@ impl DatabaseManager {
             category: category_json,
             leetcode_url: req.leetcode_url,
             constraints: constraints_json,
-            examples: examples_json,
             hints: hints_json,
             created_at: now,
         })
@@ -346,7 +343,7 @@ impl DatabaseManager {
     
     pub fn get_problems(&self) -> anyhow::Result<Vec<Problem>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, examples, hints, created_at FROM problems ORDER BY created_at DESC"
+            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at FROM problems ORDER BY created_at DESC"
         )?;
         
         let problem_iter = stmt.query_map([], |row| {
@@ -358,9 +355,8 @@ impl DatabaseManager {
                 category: row.get(4)?,
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
-                examples: row.get(7)?,
-                hints: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                hints: row.get(7)?,
+                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
             })
         })?;
         
@@ -374,7 +370,7 @@ impl DatabaseManager {
     
     pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<Problem>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, examples, hints, created_at FROM problems WHERE id = ?1"
+            "SELECT id, title, description, difficulty, category, leetcode_url, constraints, hints, created_at FROM problems WHERE id = ?1"
         )?;
         
         let mut problem_iter = stmt.query_map([id], |row| {
@@ -386,9 +382,8 @@ impl DatabaseManager {
                 category: row.get(4)?,
                 leetcode_url: row.get(5)?,
                 constraints: row.get(6)?,
-                examples: row.get(7)?,
-                hints: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                hints: row.get(7)?,
+                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
             })
         })?;
         
@@ -439,12 +434,6 @@ impl DatabaseManager {
             let constraints_json = serde_json::to_string(constraints)?;
             update_fields.push("constraints = ?");
             update_values.push(Box::new(constraints_json));
-        }
-
-        if let Some(ref examples) = req.examples {
-            let examples_json = serde_json::to_string(examples)?;
-            update_fields.push("examples = ?");
-            update_values.push(Box::new(examples_json));
         }
 
         if let Some(ref hints) = req.hints {
