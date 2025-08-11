@@ -9,7 +9,7 @@ pub struct AppState {
     pub current_timer: Arc<Mutex<Option<TimerSession>>>,
 }
 
-// Database models matching the frontend types
+// Database models matching the database schema
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Problem {
     pub id: String,
@@ -21,6 +21,21 @@ pub struct Problem {
     pub constraints: String, // JSON string for array
     pub hints: String,       // JSON string for array
     pub created_at: DateTime<Utc>,
+}
+
+// Frontend-compatible version with parsed arrays
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FrontendProblem {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub difficulty: String, // 'Easy', 'Medium', 'Hard'
+    pub topic: Vec<String>,
+    pub leetcode_url: Option<String>,
+    pub constraints: Vec<String>,
+    pub hints: Vec<String>,
+    pub created_at: DateTime<Utc>,
+    pub tags: Vec<String>, // For compatibility with frontend expectations
 }
 
 #[derive(Debug, Serialize, Deserialize)]

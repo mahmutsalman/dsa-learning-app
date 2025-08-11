@@ -11,14 +11,10 @@ import {
 import { useEnhancedWorkspaceLayoutOptional } from './workspace/EnhancedWorkspaceContext';
 import { useAppSidebarOptional } from '../contexts/AppLayoutContext';
 import ImageThumbnails from './ImageThumbnails';
+import { Problem } from '../types';
 
 export interface EnhancedProblemDescriptionPanelProps {
-  problem: {
-    id: string;
-    title: string;
-    description: string;
-    leetcode_url?: string;
-  } | null;
+  problem: Problem | null;
   onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
   className?: string;
 }
@@ -317,6 +313,38 @@ export default function EnhancedProblemDescriptionPanel({
             isEditing={isEditing}
             className="mb-6"
           />
+
+          {/* Constraints - Only show when not editing and constraints exist */}
+          {!isEditing && Array.isArray(problem.constraints) && problem.constraints.length > 0 && problem.constraints.some(c => c && c.trim()) && (
+            <div className="mb-6">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Constraints</h4>
+              <div className="space-y-2">
+                {problem.constraints.filter(c => c && c.trim()).map((constraint, index) => (
+                  <div key={index} className="flex items-start">
+                    <span className="text-primary-600 dark:text-primary-400 mr-2 mt-1 text-xs">•</span>
+                    <span className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{constraint}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Hints - Only show when not editing and hints exist */}
+          {!isEditing && Array.isArray(problem.hints) && problem.hints.length > 0 && problem.hints.some(h => h && h.trim()) && (
+            <div className="mb-6">
+              <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Hints</h4>
+              <div className="space-y-3">
+                {problem.hints.filter(h => h && h.trim()).map((hint, index) => (
+                  <div key={index} className="flex items-start">
+                    <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 text-xs font-medium px-2 py-1 rounded-md mr-3 mt-0.5 flex-shrink-0">
+                      {index + 1}
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{hint}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* LeetCode Link - Only show when not editing */}
           {!isEditing && problem.leetcode_url && (

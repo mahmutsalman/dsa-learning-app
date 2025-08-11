@@ -1,12 +1,8 @@
 import EnhancedProblemDescriptionPanel from '../EnhancedProblemDescriptionPanel';
+import { Problem } from '../../types';
 
 interface EnhancedWorkspaceProblemPanelProps {
-  problem: {
-    id: string;
-    title: string;
-    description: string;
-    leetcode_url?: string;
-  } | null;
+  problem: Problem | null;
   onDescriptionUpdate?: (problemId: string, newDescription: string) => Promise<boolean>;
 }
 

@@ -7,6 +7,42 @@ use uuid::Uuid;
 use crate::models::*;
 use schema::{CREATE_TABLES_SQL, CREATE_INDEXES_SQL};
 
+// Helper functions for JSON parsing
+fn parse_json_array(json_str: &str) -> Vec<String> {
+    if json_str.is_empty() || json_str == "null" {
+        return Vec::new();
+    }
+    
+    match serde_json::from_str::<Vec<String>>(json_str) {
+        Ok(array) => array,
+        Err(_) => {
+            // If parsing fails, try to handle as a single string or comma-separated values
+            if json_str.starts_with('[') && json_str.ends_with(']') {
+                // It looks like JSON but failed to parse, return empty
+                Vec::new()
+            } else {
+                // Treat as comma-separated string
+                json_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+            }
+        }
+    }
+}
+
+fn convert_problem_to_frontend(db_problem: Problem) -> FrontendProblem {
+    FrontendProblem {
+        id: db_problem.id,
+        title: db_problem.title,
+        description: db_problem.description,
+        difficulty: db_problem.difficulty,
+        topic: parse_json_array(&db_problem.topic),
+        leetcode_url: db_problem.leetcode_url,
+        constraints: parse_json_array(&db_problem.constraints),
+        hints: parse_json_array(&db_problem.hints),
+        created_at: db_problem.created_at,
+        tags: Vec::new(), // Will be populated separately if needed
+    }
+}
+
 pub struct DatabaseManager {
     connection: Connection,
 }
@@ -427,7 +463,7 @@ impl DatabaseManager {
     }
 
     // Problem operations
-    pub fn create_problem(&mut self, req: CreateProblemRequest) -> anyhow::Result<Problem> {
+    pub fn create_problem(&mut self, req: CreateProblemRequest) -> anyhow::Result<FrontendProblem> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         
@@ -452,26 +488,28 @@ impl DatabaseManager {
             ],
         )?;
         
-        Ok(Problem {
+        // Return the frontend-compatible version
+        Ok(FrontendProblem {
             id,
             title: req.title,
             description: req.description,
             difficulty: req.difficulty,
-            topic: topic_json,
+            topic: req.topic,
             leetcode_url: req.leetcode_url,
-            constraints: constraints_json,
-            hints: hints_json,
+            constraints: req.constraints,
+            hints: req.hints,
             created_at: now,
+            tags: Vec::new(), // Empty for newly created problems
         })
     }
     
-    pub fn get_problems(&self) -> anyhow::Result<Vec<Problem>> {
+    pub fn get_problems(&self) -> anyhow::Result<Vec<FrontendProblem>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems ORDER BY created_at DESC"
         )?;
         
         let problem_iter = stmt.query_map([], |row| {
-            Ok(Problem {
+            let db_problem = Problem {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 description: row.get(2)?,
@@ -481,7 +519,8 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
-            })
+            };
+            Ok(convert_problem_to_frontend(db_problem))
         })?;
         
         let mut problems = Vec::new();
@@ -492,13 +531,13 @@ impl DatabaseManager {
         Ok(problems)
     }
     
-    pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<Problem>> {
+    pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<FrontendProblem>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at FROM problems WHERE id = ?1"
         )?;
         
         let mut problem_iter = stmt.query_map([id], |row| {
-            Ok(Problem {
+            let db_problem = Problem {
                 id: row.get(0)?,
                 title: row.get(1)?,
                 description: row.get(2)?,
@@ -508,7 +547,8 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
-            })
+            };
+            Ok(convert_problem_to_frontend(db_problem))
         })?;
         
         match problem_iter.next() {
@@ -517,7 +557,7 @@ impl DatabaseManager {
         }
     }
 
-    pub fn update_problem(&mut self, req: UpdateProblemRequest) -> anyhow::Result<Option<Problem>> {
+    pub fn update_problem(&mut self, req: UpdateProblemRequest) -> anyhow::Result<Option<FrontendProblem>> {
         // First check if problem exists
         let existing_problem = self.get_problem_by_id(&req.id)?;
         if existing_problem.is_none() {
