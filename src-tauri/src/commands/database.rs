@@ -196,6 +196,50 @@ pub async fn get_tag_suggestions(
     db.get_tag_suggestions(&query, limit.unwrap_or(10)).map_err(|e| e.to_string())
 }
 
+// Search commands for Name/Topic/Tags search system
+#[tauri::command]
+pub async fn search_problems_by_name(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.search_problems_by_title(&query, 50, None).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn search_problems_by_topic(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.search_problems_by_topic(&query).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn search_problems_by_tags(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.search_problems_by_tags(&query).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_search_suggestions(
+    state: State<'_, AppState>,
+    query: String,
+    search_type: String,
+) -> Result<Vec<String>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    match search_type.as_str() {
+        "name" => db.get_title_suggestions(&query).map_err(|e| e.to_string()),
+        "topic" => db.get_topic_suggestions(&query).map_err(|e| e.to_string()),
+        "tags" => db.get_tag_suggestions(&query, 10).map_err(|e| e.to_string()),
+        _ => Err("Invalid search type".to_string()),
+    }
+}
+
 // Problem connection commands
 #[tauri::command]
 pub async fn search_problems_for_connection(

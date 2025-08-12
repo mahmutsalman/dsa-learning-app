@@ -1759,4 +1759,143 @@ impl DatabaseManager {
         }
         Ok(())
     }
+
+    // Search operations for Name/Topic/Tags system
+    pub fn search_problems_by_topic(&self, query: &str) -> anyhow::Result<Vec<FrontendProblem>> {
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
+        
+        let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
+                          FROM problems 
+                          WHERE LOWER(topic) LIKE ?1 
+                          ORDER BY title 
+                          LIMIT 50", related_column_sql);
+        
+        let mut stmt = self.connection.prepare(&sql)?;
+        let problem_iter = stmt.query_map([search_pattern], |row| {
+            let problem = Problem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                difficulty: row.get(3)?,
+                topic: row.get(4)?,
+                leetcode_url: row.get(5)?,
+                constraints: row.get(6)?,
+                hints: row.get(7)?,
+                related_problem_ids: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+            };
+            Ok(convert_problem_to_frontend(problem))
+        })?;
+
+        let mut problems = Vec::new();
+        for problem in problem_iter {
+            problems.push(problem?);
+        }
+
+        Ok(problems)
+    }
+
+    pub fn search_problems_by_tags(&self, query: &str) -> anyhow::Result<Vec<FrontendProblem>> {
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
+        
+        // Search in both problem_tags table (normalized tags) and problems.tags column (legacy)
+        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, p.{}, p.created_at 
+                          FROM problems p
+                          LEFT JOIN problem_tags pt ON p.id = pt.problem_id
+                          LEFT JOIN tags t ON pt.tag_id = t.id
+                          WHERE LOWER(t.name) LIKE ?1 OR LOWER(p.tags) LIKE ?1
+                          ORDER BY p.title 
+                          LIMIT 50", related_column_sql);
+        
+        let mut stmt = self.connection.prepare(&sql)?;
+        let problem_iter = stmt.query_map([&search_pattern, &search_pattern], |row| {
+            let problem = Problem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                difficulty: row.get(3)?,
+                topic: row.get(4)?,
+                leetcode_url: row.get(5)?,
+                constraints: row.get(6)?,
+                hints: row.get(7)?,
+                related_problem_ids: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+            };
+            Ok(convert_problem_to_frontend(problem))
+        })?;
+
+        let mut problems = Vec::new();
+        for problem in problem_iter {
+            problems.push(problem?);
+        }
+
+        Ok(problems)
+    }
+
+    pub fn get_title_suggestions(&self, query: &str) -> anyhow::Result<Vec<String>> {
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        
+        let sql = "SELECT DISTINCT title 
+                   FROM problems 
+                   WHERE LOWER(title) LIKE ?1 
+                   ORDER BY title 
+                   LIMIT 10";
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let suggestion_iter = stmt.query_map([search_pattern], |row| {
+            Ok(row.get::<_, String>(0)?)
+        })?;
+
+        let mut suggestions = Vec::new();
+        for suggestion in suggestion_iter {
+            suggestions.push(suggestion?);
+        }
+
+        Ok(suggestions)
+    }
+
+    pub fn get_topic_suggestions(&self, query: &str) -> anyhow::Result<Vec<String>> {
+        let search_pattern = format!("%{}%", query.to_lowercase());
+        
+        // Since topic is stored as JSON array, we need to search within the JSON content
+        let sql = "SELECT DISTINCT topic 
+                   FROM problems 
+                   WHERE LOWER(topic) LIKE ?1 AND topic IS NOT NULL AND topic != '[]'
+                   ORDER BY topic 
+                   LIMIT 10";
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let topic_iter = stmt.query_map([search_pattern], |row| {
+            let topic_json: String = row.get(0)?;
+            Ok(topic_json)
+        })?;
+
+        let mut suggestions = Vec::new();
+        for topic_result in topic_iter {
+            let topic_json = topic_result?;
+            // Parse JSON array and extract individual topics
+            let topics: Vec<String> = parse_json_array(&topic_json);
+            for topic in topics {
+                if topic.to_lowercase().contains(&query.to_lowercase()) && !suggestions.contains(&topic) {
+                    suggestions.push(topic);
+                    if suggestions.len() >= 10 {
+                        break;
+                    }
+                }
+            }
+            if suggestions.len() >= 10 {
+                break;
+            }
+        }
+
+        Ok(suggestions)
+    }
 }

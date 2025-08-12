@@ -280,3 +280,25 @@ export interface RemoveProblemRelationRequest {
 export interface GetRelatedProblemsRequest {
   problem_id: string;
 }
+
+// Search-related types for the Name/Topic/Tags search system
+export type SearchType = 'name' | 'topic' | 'tags';
+
+export interface SearchState {
+  query: string;
+  searchType: SearchType;
+  isSearching: boolean;
+}
+
+export interface SearchWithAutocompleteProps {
+  onSearch: (query: string, searchType: SearchType) => void;
+  onSuggestionSelect?: (suggestion: string) => void;
+  placeholder?: string;
+  className?: string;
+}
+
+export interface SearchSuggestion {
+  value: string;
+  type: SearchType;
+  count?: number; // Number of problems matching this suggestion
+}

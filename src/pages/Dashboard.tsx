@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon } from '@heroicons/react/24/outline';
-import { Problem, Difficulty, Card, Tag } from '../types';
+import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
+import SearchWithAutocomplete from '../components/SearchWithAutocomplete';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
 import { useStats } from '../contexts/StatsContext';
 
@@ -24,14 +25,22 @@ interface ProblemWithStudyTime extends Problem {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
+  const [filteredProblems, setFilteredProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Search state
+  const [searchState, setSearchState] = useState<SearchState>({
+    query: '',
+    searchType: 'name',
+    isSearching: false
+  });
   
   // Use stats context
   const { showStats } = useStats();
   
   // Calculate dashboard height for proper scrolling
-  const { containerHeight, screenSize } = useDashboardHeight({
+  const { containerHeight } = useDashboardHeight({
     headerHeight: showStats ? 200 : 120, // Adjust based on stats visibility
     paddingTotal: 80,  // Container padding
     minimumHeight: 500,
@@ -103,6 +112,7 @@ export default function Dashboard() {
       );
       
       setProblems(problemsWithStudyTime);
+      setFilteredProblems(problemsWithStudyTime); // Initialize filtered problems
       setError(null);
     } catch (err) {
       setError(err as string);
@@ -187,6 +197,52 @@ export default function Dashboard() {
     setProblemToEdit(null);
   };
 
+  // Handle search functionality
+  const handleSearch = async (query: string, searchType: SearchType) => {
+    if (!query.trim()) {
+      // If empty query, show all problems
+      setFilteredProblems(problems);
+      setSearchState({ query: '', searchType, isSearching: false });
+      return;
+    }
+
+    setSearchState({ query, searchType, isSearching: true });
+
+    try {
+      let searchResults: Problem[] = [];
+      
+      switch (searchType) {
+        case 'name':
+          searchResults = await invoke<Problem[]>('search_problems_by_name', { query });
+          break;
+        case 'topic':
+          searchResults = await invoke<Problem[]>('search_problems_by_topic', { query });
+          break;
+        case 'tags':
+          searchResults = await invoke<Problem[]>('search_problems_by_tags', { query });
+          break;
+        default:
+          console.error('Invalid search type:', searchType);
+          return;
+      }
+
+      // Convert search results to ProblemWithStudyTime format by finding matches in current problems
+      const searchResultIds = new Set(searchResults.map(p => p.id));
+      const filteredProblemsWithStudyTime = problems.filter(p => searchResultIds.has(p.id));
+      
+      setFilteredProblems(filteredProblemsWithStudyTime);
+      setSearchState({ query, searchType, isSearching: false });
+    } catch (error) {
+      console.error('Search failed:', error);
+      setSearchState({ query, searchType, isSearching: false });
+    }
+  };
+
+  // Handle suggestion selection
+  const handleSuggestionSelect = (suggestion: string) => {
+    handleSearch(suggestion, searchState.searchType);
+  };
+
   // Close context menu when clicking elsewhere
   useEffect(() => {
     const handleClickOutside = () => {
@@ -246,7 +302,7 @@ export default function Dashboard() {
 
         {/* Stats */}
         {showStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
               <div className="flex items-center">
                 <AcademicCapIcon className="h-8 w-8 text-primary-500" />
@@ -282,6 +338,39 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        {/* Search Interface */}
+        <div className="mb-6">
+          <SearchWithAutocomplete
+            onSearch={handleSearch}
+            onSuggestionSelect={handleSuggestionSelect}
+            className="mb-4"
+          />
+          
+          {/* Search Results Info */}
+          {searchState.query && (
+            <div className="text-sm text-gray-600 dark:text-gray-400 text-center">
+              {searchState.isSearching ? (
+                <span className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                  Searching...
+                </span>
+              ) : (
+                <span>
+                  Found {filteredProblems.length} result{filteredProblems.length !== 1 ? 's' : ''} for "{searchState.query}" in {searchState.searchType}
+                  {filteredProblems.length !== problems.length && (
+                    <button
+                      onClick={() => handleSearch('', searchState.searchType)}
+                      className="ml-2 text-blue-500 hover:text-blue-600 underline"
+                    >
+                      Clear search
+                    </button>
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Scrollable Problems Grid Container */}
@@ -290,26 +379,45 @@ export default function Dashboard() {
         style={{ maxHeight: `${containerHeight}px` }}
       >
         <div className="h-full overflow-y-auto">
-          {problems.length === 0 ? (
+          {filteredProblems.length === 0 ? (
             <div className="text-center py-12">
               <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No problems</h3>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Get started by creating your first problem.
-              </p>
-              <div className="mt-6">
-                <button
-                  onClick={createNewProblem}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-                >
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  New Problem
-                </button>
-              </div>
+              {problems.length === 0 ? (
+                <>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No problems</h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Get started by creating your first problem.
+                  </p>
+                  <div className="mt-6">
+                    <button
+                      onClick={createNewProblem}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                    >
+                      <PlusIcon className="h-4 w-4 mr-2" />
+                      New Problem
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No results found</h3>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    No problems match your search criteria for "{searchState.query}".
+                  </p>
+                  <div className="mt-6">
+                    <button
+                      onClick={() => handleSearch('', searchState.searchType)}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900 dark:text-blue-400 dark:hover:bg-blue-800"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
-              {problems.map((problem) => (
+              {filteredProblems.map((problem) => (
                 <div
                   key={problem.id}
                   onClick={(e) => handleCardClick(e, problem.id)}

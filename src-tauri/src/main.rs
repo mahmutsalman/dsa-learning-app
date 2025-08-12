@@ -5,6 +5,7 @@ mod commands;
 mod database;
 mod models;
 
+#[cfg(debug_assertions)]
 use tauri::Manager;
 use std::sync::{Arc, Mutex};
 use models::AppState;
@@ -56,6 +57,11 @@ async fn main() {
             commands::database::add_problem_tag,
             commands::database::remove_problem_tag,
             commands::database::get_tag_suggestions,
+            // Search commands for Name/Topic/Tags system
+            commands::database::search_problems_by_name,
+            commands::database::search_problems_by_topic,
+            commands::database::search_problems_by_tags,
+            commands::database::get_search_suggestions,
             // Problem connection commands
             commands::database::search_problems_for_connection,
             commands::database::add_problem_relation,
@@ -77,10 +83,10 @@ async fn main() {
             commands::images::get_image_path,
             commands::images::get_image_data_url
         ])
-        .setup(|app| {
+        .setup(|_app| {
             #[cfg(debug_assertions)]
             {
-                let window = app.get_webview_window("main").unwrap();
+                let window = _app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())
