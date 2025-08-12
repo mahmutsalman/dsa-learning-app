@@ -1,6 +1,7 @@
-import { ReactNode, useCallback, useRef, useState, cloneElement, isValidElement } from 'react';
+import { ReactNode, useCallback, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useAppLayout } from '../contexts/AppLayoutContext';
+import { useStats } from '../contexts/StatsContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
@@ -13,12 +14,10 @@ interface ResizableLayoutProps {
 export default function ResizableLayout({ children, isDark, onToggleDarkMode }: ResizableLayoutProps) {
   const layoutRef = useRef<HTMLDivElement>(null);
   
-  // Stats view toggle state
-  const [showStats, setShowStats] = useState(true);
-  
-  // Use app layout context
+  // Use contexts
   const { state, actions } = useAppLayout();
   const { sidebar } = state;
+  const { showStats, toggleStats } = useStats();
   
   // Calculate actual sidebar size based on collapsed state
   const actualSidebarSize = sidebar.isCollapsed ? sidebar.collapsedSize : sidebar.size;
@@ -37,11 +36,6 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
   const handleSidebarToggle = useCallback(() => {
     actions.toggleSidebar();
   }, [actions]);
-  
-  // Handle stats view toggle
-  const handleStatsToggle = useCallback(() => {
-    setShowStats(prev => !prev);
-  }, []);
   
   // Handle resize start/end for performance
   const handleResizeStart = useCallback(() => {
@@ -102,13 +96,10 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
             isDark={isDark} 
             onToggleDarkMode={onToggleDarkMode}
             showStats={showStats}
-            onToggleStatsView={handleStatsToggle}
+            onToggleStatsView={toggleStats}
           />
           <main className="flex-1 overflow-hidden">
-            {isValidElement(children) && children.type.name === 'Dashboard' 
-              ? cloneElement(children, { showStats })
-              : children
-            }
+            {children}
           </main>
         </Panel>
       </PanelGroup>
