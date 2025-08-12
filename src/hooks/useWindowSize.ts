@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface WindowSize {
   width: number;
@@ -11,39 +11,33 @@ export const useWindowSize = (): WindowSize => {
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
   });
 
+  const timeoutRef = useRef<NodeJS.Timeout>();
+
   const handleResize = useCallback(() => {
-    setWindowSize({
-      width: window.innerWidth,
-      height: window.innerHeight,
-    });
-  }, []);
-
-  // Debounce the resize handler for optimal performance (100ms)
-  const debouncedHandleResize = useCallback(() => {
-    let timeoutId: NodeJS.Timeout;
-    return () => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(handleResize, 100);
-    };
-  }, [handleResize])();
-
-  useEffect(() => {
-    // Set initial size
-    if (typeof window !== 'undefined') {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    timeoutRef.current = setTimeout(() => {
       setWindowSize({
         width: window.innerWidth,
         height: window.innerHeight,
       });
-    }
+    }, 100);
+  }, []);
 
+  useEffect(() => {
     // Add event listener with debounced handler
-    window.addEventListener('resize', debouncedHandleResize);
+    window.addEventListener('resize', handleResize);
 
     // Cleanup
     return () => {
-      window.removeEventListener('resize', debouncedHandleResize);
+      window.removeEventListener('resize', handleResize);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
     };
-  }, [debouncedHandleResize]);
+  }, [handleResize]);
 
   return windowSize;
 };

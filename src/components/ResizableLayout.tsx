@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useRef } from 'react';
+import { ReactNode, useCallback, useRef, useState, cloneElement, isValidElement } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useAppLayout } from '../contexts/AppLayoutContext';
 import Sidebar from './Sidebar';
@@ -12,6 +12,9 @@ interface ResizableLayoutProps {
 
 export default function ResizableLayout({ children, isDark, onToggleDarkMode }: ResizableLayoutProps) {
   const layoutRef = useRef<HTMLDivElement>(null);
+  
+  // Stats view toggle state
+  const [showStats, setShowStats] = useState(true);
   
   // Use app layout context
   const { state, actions } = useAppLayout();
@@ -34,6 +37,11 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
   const handleSidebarToggle = useCallback(() => {
     actions.toggleSidebar();
   }, [actions]);
+  
+  // Handle stats view toggle
+  const handleStatsToggle = useCallback(() => {
+    setShowStats(prev => !prev);
+  }, []);
   
   // Handle resize start/end for performance
   const handleResizeStart = useCallback(() => {
@@ -90,9 +98,17 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
           minSize={60} // Minimum space for main content
           className="flex flex-col bg-gray-50 dark:bg-gray-900"
         >
-          <Header isDark={isDark} onToggleDarkMode={onToggleDarkMode} />
+          <Header 
+            isDark={isDark} 
+            onToggleDarkMode={onToggleDarkMode}
+            showStats={showStats}
+            onToggleStatsView={handleStatsToggle}
+          />
           <main className="flex-1 overflow-hidden">
-            {children}
+            {isValidElement(children) && children.type.name === 'Dashboard' 
+              ? cloneElement(children, { showStats })
+              : children
+            }
           </main>
         </Panel>
       </PanelGroup>
