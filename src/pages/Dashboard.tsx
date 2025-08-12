@@ -20,7 +20,11 @@ interface ProblemWithStudyTime extends Problem {
   problemTags?: Tag[]; // Optional tags for the problem
 }
 
-export default function Dashboard() {
+interface DashboardProps {
+  showStats?: boolean;
+}
+
+export default function Dashboard({ showStats = true }: DashboardProps) {
   const navigate = useNavigate();
   const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +32,7 @@ export default function Dashboard() {
   
   // Calculate dashboard height for proper scrolling
   const { containerHeight, screenSize } = useDashboardHeight({
-    headerHeight: 200, // Header + stats section + margins
+    headerHeight: showStats ? 200 : 120, // Adjust based on stats visibility
     paddingTotal: 80,  // Container padding
     minimumHeight: 500,
     maximumHeight: 1200,
@@ -241,41 +245,43 @@ export default function Dashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <AcademicCapIcon className="h-8 w-8 text-primary-500" />
-              <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {problems.length}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
+        {showStats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center">
+                <AcademicCapIcon className="h-8 w-8 text-primary-500" />
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {problems.length}
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center">
+                <ClockIcon className="h-8 w-8 text-green-500" />
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
+                  </h3>
+                  <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center">
+                <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
+                <div className="ml-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
+                  <p className="text-gray-600 dark:text-gray-400">Completed</p>
+                </div>
               </div>
             </div>
           </div>
-          
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <ClockIcon className="h-8 w-8 text-green-500" />
-              <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center">
-              <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
-              <div className="ml-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
-                <p className="text-gray-600 dark:text-gray-400">Completed</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Scrollable Problems Grid Container */}
