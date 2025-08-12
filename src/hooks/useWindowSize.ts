@@ -11,7 +11,7 @@ export const useWindowSize = (): WindowSize => {
     height: typeof window !== 'undefined' ? window.innerHeight : 800,
   });
 
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<number>();
 
   const handleResize = useCallback(() => {
     if (timeoutRef.current) {
