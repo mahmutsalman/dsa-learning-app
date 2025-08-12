@@ -6,6 +6,7 @@ import { Problem, Difficulty, Card, Tag } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
+import { useDashboardHeight } from '../hooks/useDashboardHeight';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -24,6 +25,14 @@ export default function Dashboard() {
   const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Calculate dashboard height for proper scrolling
+  const { containerHeight, screenSize } = useDashboardHeight({
+    headerHeight: 200, // Header + stats section + margins
+    paddingTotal: 80,  // Container padding
+    minimumHeight: 500,
+    maximumHeight: 1200,
+  });
   
   // Context menu and tag modal state
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -211,141 +220,150 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex-1 overflow-auto p-6">
+    <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Track your DSA learning progress
-          </p>
+      <div className="flex-shrink-0 p-6 pb-4">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
+              Track your DSA learning progress
+            </p>
+          </div>
+          
+          <button
+            onClick={createNewProblem}
+            className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+          >
+            <PlusIcon className="h-5 w-5 mr-2" />
+            New Problem
+          </button>
         </div>
-        
-        <button
-          onClick={createNewProblem}
-          className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-        >
-          <PlusIcon className="h-5 w-5 mr-2" />
-          New Problem
-        </button>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
-            <AcademicCapIcon className="h-8 w-8 text-primary-500" />
-            <div className="ml-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {problems.length}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
-            <ClockIcon className="h-8 w-8 text-green-500" />
-            <div className="ml-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex items-center">
-            <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
-            <div className="ml-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
-              <p className="text-gray-600 dark:text-gray-400">Completed</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Problems Grid */}
-      {problems.length === 0 ? (
-        <div className="text-center py-12">
-          <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No problems</h3>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Get started by creating your first problem.
-          </p>
-          <div className="mt-6">
-            <button
-              onClick={createNewProblem}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
-            >
-              <PlusIcon className="h-4 w-4 mr-2" />
-              New Problem
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {problems.map((problem) => (
-            <div
-              key={problem.id}
-              onClick={(e) => handleCardClick(e, problem.id)}
-              onContextMenu={(e) => handleRightClick(e, problem.id)}
-              className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors group cursor-pointer select-none"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
-                  {problem.title}
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center">
+              <AcademicCapIcon className="h-8 w-8 text-primary-500" />
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {problems.length}
                 </h3>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  difficultyColors[problem.difficulty as Difficulty] || 'bg-gray-100 text-gray-800'
-                }`}>
-                  {problem.difficulty}
-                </span>
-              </div>
-              
-              <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
-                {problem.description}
-              </p>
-              
-              {/* Tags display */}
-              {problem.problemTags && problem.problemTags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {problem.problemTags.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag.id}
-                      className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
-                    >
-                      <TagIcon className="h-3 w-3" />
-                      {tag.name}
-                    </span>
-                  ))}
-                  {problem.problemTags.length > 3 && (
-                    <span className="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
-                      +{problem.problemTags.length - 3} more
-                    </span>
-                  )}
-                </div>
-              )}
-              
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-gray-500 dark:text-gray-400">
-                  <span>{problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied</span>
-                  {problem.related_problem_ids && problem.related_problem_ids.length > 0 && (
-                    <span className="ml-2">
-                      • {problem.related_problem_ids.length} related {problem.related_problem_ids.length === 1 ? 'question' : 'questions'}
-                    </span>
-                  )}
-                </div>
-                <span className="text-primary-500 dark:text-primary-400">
-                  Open →
-                </span>
+                <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
               </div>
             </div>
-          ))}
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center">
+              <ClockIcon className="h-8 w-8 text-green-500" />
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center">
+              <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
+              <div className="ml-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
+                <p className="text-gray-600 dark:text-gray-400">Completed</p>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* Scrollable Problems Grid Container */}
+      <div 
+        className="flex-1 px-6 pb-6"
+        style={{ maxHeight: `${containerHeight}px` }}
+      >
+        <div className="h-full overflow-y-auto">
+          {problems.length === 0 ? (
+            <div className="text-center py-12">
+              <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No problems</h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                Get started by creating your first problem.
+              </p>
+              <div className="mt-6">
+                <button
+                  onClick={createNewProblem}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
+                >
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  New Problem
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
+              {problems.map((problem) => (
+                <div
+                  key={problem.id}
+                  onClick={(e) => handleCardClick(e, problem.id)}
+                  onContextMenu={(e) => handleRightClick(e, problem.id)}
+                  className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors group cursor-pointer select-none"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
+                      {problem.title}
+                    </h3>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      difficultyColors[problem.difficulty as Difficulty] || 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {problem.difficulty}
+                    </span>
+                  </div>
+                  
+                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4 line-clamp-2">
+                    {problem.description}
+                  </p>
+                  
+                  {/* Tags display */}
+                  {problem.problemTags && problem.problemTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {problem.problemTags.slice(0, 3).map((tag) => (
+                        <span
+                          key={tag.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full"
+                        >
+                          <TagIcon className="h-3 w-3" />
+                          {tag.name}
+                        </span>
+                      ))}
+                      {problem.problemTags.length > 3 && (
+                        <span className="inline-flex items-center px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                          +{problem.problemTags.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="text-gray-500 dark:text-gray-400">
+                      <span>{problem.cardCount} cards • {formatTimeDisplay(problem.totalStudyTime)} studied</span>
+                      {problem.related_problem_ids && problem.related_problem_ids.length > 0 && (
+                        <span className="ml-2">
+                          • {problem.related_problem_ids.length} related {problem.related_problem_ids.length === 1 ? 'question' : 'questions'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-primary-500 dark:text-primary-400">
+                      Open →
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Context Menu */}
       <ProblemContextMenu
