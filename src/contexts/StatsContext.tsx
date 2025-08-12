@@ -12,7 +12,7 @@ interface StatsProviderProps {
 }
 
 export function StatsProvider({ children }: StatsProviderProps) {
-  const [showStats, setShowStats] = useState(true);
+  const [showStats, setShowStats] = useState(false);
 
   const toggleStats = () => {
     setShowStats(prev => !prev);
