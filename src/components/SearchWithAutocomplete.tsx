@@ -136,7 +136,7 @@ export default function SearchWithAutocomplete({
 
   return (
     <div className={`relative max-w-2xl mx-auto ${className}`}>
-      <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm overflow-hidden">
+      <div className="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm">
         {/* Search Type Dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
