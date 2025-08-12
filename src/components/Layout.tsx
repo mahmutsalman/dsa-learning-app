@@ -18,9 +18,9 @@ export default function Layout({ children, isDark, onToggleDarkMode }: LayoutPro
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
       <Sidebar isCollapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 grid grid-rows-[auto_1fr]">
         <Header isDark={isDark} onToggleDarkMode={onToggleDarkMode} />
-        <main className="flex-1 overflow-hidden">
+        <main className="overflow-y-auto">
           {children}
         </main>
       </div>
