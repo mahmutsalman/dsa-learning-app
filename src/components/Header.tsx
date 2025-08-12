@@ -1,4 +1,4 @@
-import { MoonIcon, SunIcon, Cog6ToothIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { MoonIcon, SunIcon, Cog6ToothIcon, ChartBarIcon, ChartBarSquareIcon } from '@heroicons/react/24/outline';
 
 interface HeaderProps {
   isDark: boolean;
@@ -25,9 +25,9 @@ export default function Header({ isDark, onToggleDarkMode, showStats, onToggleSt
             aria-label={showStats ? "Hide dashboard stats" : "Show dashboard stats"}
           >
             {showStats ? (
-              <EyeIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+              <ChartBarIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             ) : (
-              <EyeSlashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+              <ChartBarSquareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             )}
           </button>
           
