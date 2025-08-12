@@ -7,6 +7,7 @@ import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
+import { useStats } from '../contexts/StatsContext';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -20,15 +21,14 @@ interface ProblemWithStudyTime extends Problem {
   problemTags?: Tag[]; // Optional tags for the problem
 }
 
-interface DashboardProps {
-  showStats?: boolean;
-}
-
-export default function Dashboard({ showStats = true }: DashboardProps) {
+export default function Dashboard() {
   const navigate = useNavigate();
   const [problems, setProblems] = useState<ProblemWithStudyTime[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use stats context
+  const { showStats } = useStats();
   
   // Calculate dashboard height for proper scrolling
   const { containerHeight, screenSize } = useDashboardHeight({

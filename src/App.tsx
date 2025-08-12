@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import ResizableLayout from "./components/ResizableLayout";
 import { AppLayoutProvider } from "./contexts/AppLayoutContext";
+import { StatsProvider } from "./contexts/StatsContext";
 import Dashboard from "./pages/Dashboard";
 import ProblemCard from "./pages/ProblemCard";
 
@@ -91,13 +92,15 @@ function App() {
         isDark ? 'dark bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'
       }`}>
         <AppLayoutProvider>
-          <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/problem/:problemId" element={<ProblemCard />} />
-              <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
-            </Routes>
-          </ResizableLayout>
+          <StatsProvider>
+            <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/problem/:problemId" element={<ProblemCard />} />
+                <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
+              </Routes>
+            </ResizableLayout>
+          </StatsProvider>
         </AppLayoutProvider>
       </div>
     </Router>
