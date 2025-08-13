@@ -12,7 +12,7 @@ const searchTypeOptions = [
 
 export default function SearchWithAutocomplete({
   onSearch,
-  onSuggestionSelect,
+  onSuggestionSelect: _onSuggestionSelect,
   placeholder,
   className = ''
 }: SearchWithAutocompleteProps) {

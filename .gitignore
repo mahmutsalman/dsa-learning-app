@@ -42,8 +42,8 @@ data/
 *.db-shm
 *.db-wal
 
-# Audio recordings
-recordings/
+# Development data (ignored in version control)
+dev-data/
 
 # Temporary files
 *.tmp
@@ -51,10 +51,6 @@ recordings/
 
 # Backup files from previous implementation
 localResources_backup/
-
-# Attachment files (keep folder structure but ignore contents)
-src-tauri/attachments/*/*/*
-!src-tauri/attachments/*/
 
 # Development and testing utilities
 add-sample-data.js

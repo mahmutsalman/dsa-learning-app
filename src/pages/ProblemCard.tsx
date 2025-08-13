@@ -18,8 +18,11 @@ import { EnhancedWorkspaceProvider } from '../components/workspace/EnhancedWorks
 import { useWorkspaceLayout } from '../components/workspace/useWorkspaceLayout';
 import DeleteCardModal from '../components/DeleteCardModal';
 import SessionHistory from '../components/SessionHistory';
+import RecordingHistory from '../components/RecordingHistory';
+import GlobalAudioPlayer from '../components/GlobalAudioPlayer';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
+import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 
 export default function ProblemCard() {
@@ -30,9 +33,10 @@ export default function ProblemCard() {
   const [currentCard, setCurrentCard] = useState<Card | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [recordingState, setRecordingState] = useState({ isRecording: false });
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
+  const [recordingHistory, setRecordingHistory] = useState({ isOpen: false });
+  const [audioPlayer, setAudioPlayer] = useState({ isVisible: false, recording: null as any });
   const [previousProblemId, setPreviousProblemId] = useState<string | null>(null);
   
   // Enhanced workspace feature flag
@@ -40,6 +44,9 @@ export default function ProblemCard() {
   
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
+  
+  // Recording functionality - integrated with backend
+  const recording = useRecording(currentCard?.id);
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
@@ -89,6 +96,12 @@ export default function ProblemCard() {
     });
     setNotes(newNotes);
   }, [notes, currentCard]);
+  
+  // Audio player callback to handle playing recordings
+  const handleRecordingPlay = useCallback((recording: any) => {
+    setAudioPlayer({ isVisible: true, recording });
+  }, []);
+  
   const [isDark, setIsDark] = useState<boolean>(false);
 
   // Ref for the main content container to help calculate dynamic constraints
@@ -443,18 +456,16 @@ export default function ProblemCard() {
 
   const toggleRecording = async () => {
     try {
-      console.warn('Recording functionality not implemented yet');
-      // For now, just toggle local state
-      setRecordingState(prev => ({
-        isRecording: !prev.isRecording
-      }));
-      
-      // TODO: Implement when audio backend is ready
-      // if (recordingState.isRecording) {
-      //   await invoke('stop_recording');
-      // } else {
-      //   await invoke('start_recording');
-      // }
+      if (!currentCard) {
+        console.error('No card selected for recording');
+        return;
+      }
+
+      if (recording.recordingState.isRecording) {
+        await recording.stopRecording(currentCard.id);
+      } else {
+        await recording.startRecording(currentCard.id);
+      }
     } catch (err) {
       console.error('Recording error:', err);
     }
@@ -511,12 +522,13 @@ export default function ProblemCard() {
                 codeAutoSave={codeAutoSave}
                 notesAutoSave={notesAutoSave}
                 languageAutoSave={languageAutoSave}
-                recordingState={recordingState}
+                recordingState={recording.recordingState}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
                 onNavigateCard={navigateToCard}
                 onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
                 onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
+                onOpenRecordingHistory={() => setRecordingHistory({ isOpen: true })}
                 formatTimeDisplay={formatTimeDisplay}
                 getSiblingCards={getSiblingCards}
                 previousProblemId={previousProblemId}
@@ -599,6 +611,21 @@ export default function ProblemCard() {
             onClose={() => setSessionHistory({ isOpen: false })}
             onSessionDeleted={refreshCardData}
           />
+          
+          {/* Recording History Modal */}
+          <RecordingHistory
+            cardId={currentCard?.id}
+            isOpen={recordingHistory.isOpen}
+            onClose={() => setRecordingHistory({ isOpen: false })}
+            onRecordingPlay={handleRecordingPlay}
+          />
+          
+          {/* Global Audio Player */}
+          <GlobalAudioPlayer
+            recording={audioPlayer.recording}
+            isVisible={audioPlayer.isVisible}
+            onClose={() => setAudioPlayer({ isVisible: false, recording: null })}
+          />
         </div>
       </EnhancedWorkspaceProvider>
     );
@@ -622,12 +649,13 @@ export default function ProblemCard() {
               codeAutoSave={codeAutoSave}
               notesAutoSave={notesAutoSave}
               languageAutoSave={languageAutoSave}
-              recordingState={recordingState}
+              recordingState={recording.recordingState}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}
               onNavigateCard={navigateToCard}
               onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
               onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
+              onOpenRecordingHistory={() => setRecordingHistory({ isOpen: true })}
               formatTimeDisplay={formatTimeDisplay}
               getSiblingCards={getSiblingCards}
               previousProblemId={previousProblemId}
@@ -706,6 +734,21 @@ export default function ProblemCard() {
         isOpen={sessionHistory.isOpen}
         onClose={() => setSessionHistory({ isOpen: false })}
         onSessionDeleted={refreshCardData}
+      />
+      
+      {/* Recording History Modal */}
+      <RecordingHistory
+        cardId={currentCard?.id}
+        isOpen={recordingHistory.isOpen}
+        onClose={() => setRecordingHistory({ isOpen: false })}
+        onRecordingPlay={handleRecordingPlay}
+      />
+      
+      {/* Global Audio Player */}
+      <GlobalAudioPlayer
+        recording={audioPlayer.recording}
+        isVisible={audioPlayer.isVisible}
+        onClose={() => setAudioPlayer({ isVisible: false, recording: null })}
       />
     </div>
     </WorkspaceContext.Provider>

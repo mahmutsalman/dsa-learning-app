@@ -8,7 +8,8 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
   TrashIcon,
-  ClockIcon
+  ClockIcon,
+  SpeakerWaveIcon
 } from '@heroicons/react/24/outline';
 import { LanguageSelector } from './LanguageSelector';
 import type { Problem, Card } from '../types';
@@ -25,12 +26,17 @@ interface WorkspaceHeaderProps {
   codeAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
   notesAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
   languageAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
-  recordingState: { isRecording: boolean };
+  recordingState: { 
+    isRecording: boolean; 
+    isPaused: boolean; 
+    elapsedRecordingTime: number; 
+  };
   onToggleTimer: () => void;
   onToggleRecording: () => void;
   onNavigateCard: (direction: 'prev' | 'next') => void;
   onDeleteCard: () => void;
   onOpenSessionHistory: () => void;
+  onOpenRecordingHistory: () => void;
   formatTimeDisplay: (seconds: number, showSeconds?: boolean) => string;
   getSiblingCards: (currentCard: Card, cards: Card[]) => Card[];
   previousProblemId?: string | null;
@@ -53,6 +59,7 @@ export function WorkspaceHeader({
   onNavigateCard,
   onDeleteCard,
   onOpenSessionHistory,
+  onOpenRecordingHistory,
   formatTimeDisplay,
   getSiblingCards,
   previousProblemId,
@@ -253,17 +260,40 @@ export function WorkspaceHeader({
             <ClockIcon className="h-4 w-4" />
           </button>
 
+          {/* Recording History */}
+          <button
+            onClick={onOpenRecordingHistory}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="View recording history"
+          >
+            <SpeakerWaveIcon className="h-4 w-4" />
+          </button>
+
           {/* Recording */}
           <button
             onClick={onToggleRecording}
-            className={`p-2 rounded-lg transition-colors ${
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
               recordingState.isRecording
                 ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
             }`}
-            title="Recording (UI only - backend integration pending)"
+            title={recordingState.isRecording ? "Stop recording" : "Start recording"}
+            aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
+            aria-pressed={recordingState.isRecording}
           >
-            <MicrophoneIcon className="h-4 w-4" />
+            {/* Mic Icon */}
+            <div className="flex-shrink-0">
+              <MicrophoneIcon className="h-4 w-4" />
+            </div>
+            
+            {/* Recording Timer Display */}
+            {recordingState.isRecording && (
+              <div className="flex flex-col items-center min-w-0">
+                <span className="text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap">
+                  Recording: {formatTimeDisplay(recordingState.elapsedRecordingTime, false)}
+                </span>
+              </div>
+            )}
           </button>
         </div>
       </div>

@@ -1169,16 +1169,66 @@ impl DatabaseManager {
         }
     }
 
-    // Recording operations (disabled until recordings table is added)
-    #[allow(dead_code)]
+    // Recording operations
     pub fn save_recording(&mut self, card_id: &str, filename: &str, filepath: &str, duration: Option<i32>) -> anyhow::Result<Recording> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         
-        // Get file size
-        let file_size = std::fs::metadata(filepath)
-            .map(|m| m.len() as i64)
-            .ok();
+        // Get file size - resolve relative path to absolute path
+        let file_size = if filepath.starts_with("dev-data/") || filepath.starts_with("app-data/") || filepath.starts_with("attachments/") {
+            // Convert relative path to absolute path based on environment
+            let absolute_path = if filepath.starts_with("dev-data/") {
+                // Development path: project_root/dev-data/...
+                let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                current_dir.join(filepath)
+            } else if filepath.starts_with("app-data/") {
+                // Production path: resolve to actual app data directory
+                if cfg!(debug_assertions) {
+                    // In development, this shouldn't happen, but handle it
+                    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                    current_dir.join("dev-data").join(&filepath[9..]) // Remove "app-data/" prefix
+                } else {
+                    // Production: resolve to actual app data directory
+                    let app_data_dir = if cfg!(target_os = "macos") {
+                        dirs::home_dir()
+                            .context("Failed to get home directory")?
+                            .join("Library")
+                            .join("Application Support")
+                            .join("com.dsalearning.app")
+                    } else if cfg!(target_os = "windows") {
+                        dirs::data_dir()
+                            .context("Failed to get data directory")?
+                            .join("com.dsalearning.app")
+                    } else {
+                        dirs::data_local_dir()
+                            .context("Failed to get local data directory")?
+                            .join("com.dsalearning.app")
+                    };
+                    app_data_dir.join(&filepath[9..]) // Remove "app-data/" prefix
+                }
+            } else {
+                // Legacy "attachments/" path - assume project root for backward compatibility
+                let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                current_dir.join(filepath)
+            };
+            
+            std::fs::metadata(&absolute_path)
+                .map(|m| m.len() as i64)
+                .map_err(|e| {
+                    println!("Warning: Failed to get file metadata for {}: {}", absolute_path.display(), e);
+                    e
+                })
+                .ok()
+        } else {
+            // Already an absolute path
+            std::fs::metadata(filepath)
+                .map(|m| m.len() as i64)
+                .map_err(|e| {
+                    println!("Warning: Failed to get file metadata for {}: {}", filepath, e);
+                    e
+                })
+                .ok()
+        };
         
         self.connection.execute(
             "INSERT INTO recordings (id, card_id, audio_url, filename, filepath, duration, file_size, created_at)
@@ -1209,7 +1259,6 @@ impl DatabaseManager {
         })
     }
     
-    #[allow(dead_code)]
     pub fn get_recordings(&self) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, card_id, time_session_id, audio_url, duration, transcript, created_at, filename, filepath, file_size 
@@ -1225,6 +1274,37 @@ impl DatabaseManager {
                 duration: row.get(4)?,
                 transcript: row.get(5)?,
                 created_at: row.get::<_, String>(6)?.parse().unwrap_or_else(|_| Utc::now()),
+                filename: row.get(7)?,
+                filepath: row.get(8)?,
+                file_size: row.get(9)?,
+            })
+        })?;
+        
+        let mut recordings = Vec::new();
+        for recording in recording_iter {
+            recordings.push(recording?);
+        }
+        
+        Ok(recordings)
+    }
+    
+    pub fn get_recordings_for_card(&self, card_id: &str) -> anyhow::Result<Vec<Recording>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, card_id, time_session_id, audio_url, duration, transcript, created_at, filename, filepath, file_size 
+             FROM recordings WHERE card_id = ?1 ORDER BY created_at DESC"
+        )?;
+        
+        let recording_iter = stmt.query_map([card_id], |row| {
+            Ok(Recording {
+                id: row.get(0)?,
+                card_id: row.get(1)?,
+                time_session_id: row.get(2)?,
+                audio_url: row.get(3)?,
+                duration: row.get(4)?,
+                transcript: row.get(5)?,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
+                    .map_err(|e| rusqlite::Error::InvalidColumnType(6, e.to_string().into(), rusqlite::types::Type::Text))?
+                    .with_timezone(&chrono::Utc),
                 filename: row.get(7)?,
                 filepath: row.get(8)?,
                 file_size: row.get(9)?,

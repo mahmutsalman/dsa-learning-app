@@ -157,15 +157,15 @@ impl RecordingHandle {
 
 // Utility functions
 pub fn get_recordings_directory() -> Result<PathBuf> {
-    let app_data_dir = std::env::current_dir()
+    let recordings_dir = std::env::current_dir()
         .context("Failed to get current directory")?
-        .join("data")
+        .join("attachments")
         .join("recordings");
     
-    std::fs::create_dir_all(&app_data_dir)
+    std::fs::create_dir_all(&recordings_dir)
         .context("Failed to create recordings directory")?;
     
-    Ok(app_data_dir)
+    Ok(recordings_dir)
 }
 
 pub fn generate_recording_filename() -> String {
@@ -182,4 +182,8 @@ pub fn get_audio_duration(filepath: &str) -> Result<i32> {
     let duration_seconds = samples as f64 / (spec.sample_rate as f64 * spec.channels as f64);
     
     Ok(duration_seconds as i32)
+}
+
+pub fn get_relative_path_for_recording(filename: &str) -> String {
+    format!("attachments/recordings/{}", filename)
 }
