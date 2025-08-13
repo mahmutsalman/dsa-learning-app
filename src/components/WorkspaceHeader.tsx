@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ArrowLeftIcon, 
   ArrowRightIcon, 
@@ -9,7 +10,8 @@ import {
   ExclamationCircleIcon,
   TrashIcon,
   ClockIcon,
-  SpeakerWaveIcon
+  SpeakerWaveIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { LanguageSelector } from './LanguageSelector';
 import type { Problem, Card } from '../types';
@@ -43,6 +45,137 @@ interface WorkspaceHeaderProps {
   onBackToPreviousProblem?: () => void;
 }
 
+// Hook to measure container available width with enhanced stability controls
+function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
+  const [availableWidth, setAvailableWidth] = useState<number>(200); // Default fallback
+  const [screenSize, setScreenSize] = useState<'xs' | 'sm' | 'md' | 'lg' | 'xl'>('lg');
+  const lastWidthRef = useRef<number>(200);
+  const measurementTimeoutRef = useRef<NodeJS.Timeout>();
+  const stabilityTimeoutRef = useRef<NodeJS.Timeout>();
+  const measurementHistoryRef = useRef<number[]>([]);
+  const lastStableWidthRef = useRef<number>(200);
+  const stabilityCountRef = useRef<number>(0);
+  
+  const updateMeasurements = useCallback(() => {
+    if (ref.current) {
+      const containerWidth = ref.current.offsetWidth;
+      const windowWidth = window.innerWidth;
+      
+      // Add to measurement history for averaging
+      measurementHistoryRef.current.push(containerWidth);
+      if (measurementHistoryRef.current.length > 5) {
+        measurementHistoryRef.current.shift(); // Keep only last 5 measurements
+      }
+      
+      // Calculate average width to smooth fluctuations
+      const avgWidth = measurementHistoryRef.current.reduce((sum, w) => sum + w, 0) / measurementHistoryRef.current.length;
+      
+      // Enhanced stability check with larger hysteresis and averaging
+      const widthDiff = Math.abs(avgWidth - lastStableWidthRef.current);
+      const isSignificantChange = widthDiff > 15; // Increased from 5px to 15px
+      const isInitial = lastWidthRef.current === 200;
+      
+      // Only update if change is significant or this is initial measurement
+      if (isSignificantChange || isInitial) {
+        // Reset stability counter on significant change
+        stabilityCountRef.current = 0;
+        
+        // Clear any pending stability timeout
+        clearTimeout(stabilityTimeoutRef.current);
+        
+        // Set a stability timeout - only apply change after width is stable
+        stabilityTimeoutRef.current = setTimeout(() => {
+          const finalWidth = Math.round(avgWidth);
+          lastStableWidthRef.current = finalWidth;
+          lastWidthRef.current = finalWidth;
+          setAvailableWidth(finalWidth);
+          
+          if ((import.meta as any).env?.MODE === 'development') {
+            console.log('Timer width stabilized:', { 
+              finalWidth,
+              avgWidth,
+              widthDiff,
+              measurements: measurementHistoryRef.current,
+              windowWidth
+            });
+          }
+        }, 200); // Wait 200ms for stability
+      } else {
+        stabilityCountRef.current++;
+        
+        if ((import.meta as any).env?.MODE === 'development' && stabilityCountRef.current % 10 === 0) {
+          console.log('Timer width stable:', {
+            currentWidth: containerWidth,
+            avgWidth,
+            lastStable: lastStableWidthRef.current,
+            widthDiff,
+            stabilityCount: stabilityCountRef.current
+          });
+        }
+      }
+      
+      // Screen size detection for non-timer elements (less frequent)
+      let newSize: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+      if (windowWidth < 480) newSize = 'xs';
+      else if (windowWidth < 640) newSize = 'sm';
+      else if (windowWidth < 900) newSize = 'md';
+      else if (windowWidth < 1400) newSize = 'lg';
+      else newSize = 'xl';
+      
+      setScreenSize(newSize);
+    }
+  }, [ref]);
+  
+  const debouncedUpdateMeasurements = useCallback(() => {
+    clearTimeout(measurementTimeoutRef.current);
+    measurementTimeoutRef.current = setTimeout(updateMeasurements, 100); // Reduced debounce for responsiveness
+  }, [updateMeasurements]);
+  
+  useEffect(() => {
+    // Initial measurement after component mount
+    const initialTimeout = setTimeout(updateMeasurements, 50);
+    
+    // Set up ResizeObserver with debouncing to prevent feedback loops
+    let resizeObserver: ResizeObserver | null = null;
+    
+    if (ref.current && 'ResizeObserver' in window) {
+      resizeObserver = new ResizeObserver((entries) => {
+        // Debounce ResizeObserver to prevent infinite loops
+        debouncedUpdateMeasurements();
+      });
+      
+      // Use setTimeout to avoid immediate observation that can cause loops
+      setTimeout(() => {
+        if (ref.current && resizeObserver) {
+          resizeObserver.observe(ref.current);
+        }
+      }, 100);
+    }
+    
+    // Fallback window resize listener with longer debounce
+    let windowTimeoutId: NodeJS.Timeout;
+    const throttledWindowUpdate = () => {
+      clearTimeout(windowTimeoutId);
+      windowTimeoutId = setTimeout(updateMeasurements, 300);
+    };
+    
+    window.addEventListener('resize', throttledWindowUpdate);
+    
+    return () => {
+      clearTimeout(initialTimeout);
+      clearTimeout(measurementTimeoutRef.current);
+      clearTimeout(stabilityTimeoutRef.current);
+      clearTimeout(windowTimeoutId);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      window.removeEventListener('resize', throttledWindowUpdate);
+    };
+  }, [updateMeasurements, debouncedUpdateMeasurements]);
+  
+  return { availableWidth, screenSize };
+}
+
 export function WorkspaceHeader({
   problem,
   currentCard,
@@ -66,9 +199,167 @@ export function WorkspaceHeader({
   onBackToPreviousProblem,
 }: WorkspaceHeaderProps) {
   const navigate = useNavigate();
+  const timerButtonRef = useRef<HTMLButtonElement>(null);
+  const { availableWidth, screenSize } = useTimerContainerWidth(timerButtonRef);
+  const [showTimerDropdown, setShowTimerDropdown] = useState(false);
+  const [showRecordingDropdown, setShowRecordingDropdown] = useState(false);
+  
+  // Smart dynamic timer display logic based on available container width
+  const getTimerDisplayConfig = () => {
+    const liveTotalDuration = timer.timerState.isRunning 
+      ? timer.totalDuration + timer.timerState.elapsedTime
+      : timer.totalDuration;
+    
+    // Determine compact level with enhanced hysteresis to prevent oscillation
+    let compactLevel: number;
+    let format: string;
+    
+    // Use much wider thresholds with large hysteresis gaps to prevent bouncing
+    // Added buffer zones around problematic ranges (130-155px)
+    if (availableWidth < 85) {
+      // Level 0: Ultra compact - single time only
+      compactLevel = 0;
+      format = 'Single';
+      return {
+        showSingle: true,
+        primaryTime: timer.timerState.isRunning ? timer.timerState.elapsedTime : liveTotalDuration,
+        primaryLabel: '',
+        showSeconds: false,
+        compactLevel,
+        format
+      };
+    } else if (availableWidth < 110) {
+      // Level 1: Minutes format - "22m/0m"
+      compactLevel = 1;
+      format = 'Minutes';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: '',
+        secondaryLabel: '',
+        showSeconds: false,
+        useMinutesFormat: true,
+        compactLevel,
+        format
+      };
+    } else if (availableWidth < 125) {
+      // Level 2: Slash format - "22:45/0:00" (moved down from 135)
+      compactLevel = 2;
+      format = 'Slash';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: '',
+        secondaryLabel: '',
+        showSeconds: false,
+        compactLevel,
+        format
+      };
+    } else if (availableWidth < 165) {
+      // Level 3: No-space abbreviated - "Tot:22:45 Now:0:00" (wider range to avoid 130-155 problem zone)
+      compactLevel = 3;
+      format = 'NoSpaceAbbrev';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: 'Tot:',
+        secondaryLabel: 'Now:',
+        showSeconds: false,
+        noSpacing: true,
+        compactLevel,
+        format
+      };
+    } else if (availableWidth < 200) {
+      // Level 4: Minimal abbreviated - "Tot: 22:45 Now: 0:00"
+      compactLevel = 4;
+      format = 'Abbreviated';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: 'Tot:',
+        secondaryLabel: 'Now:',
+        showSeconds: false,
+        compactLevel,
+        format
+      };
+    } else if (availableWidth < 240) {
+      // Level 5: Full compact - "Total: 22:45 Current: 0:00"
+      compactLevel = 5;
+      format = 'Compact';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: 'Total:',
+        secondaryLabel: 'Current:',
+        showSeconds: false,
+        compactLevel,
+        format
+      };
+    } else {
+      // Level 6: Spacious - "Total: 22:45    Current: 0:00"
+      compactLevel = 6;
+      format = 'Spacious';
+      return {
+        showSingle: false,
+        primaryTime: liveTotalDuration,
+        secondaryTime: timer.timerState.elapsedTime,
+        primaryLabel: 'Total:',
+        secondaryLabel: 'Current:',
+        showSeconds: false,
+        spacious: true,
+        compactLevel,
+        format
+      };
+    }
+  };
+  
+  const timerConfig = getTimerDisplayConfig();
+
+  // Helper function to format time based on timer config
+  const formatTime = (seconds: number, useMinutes?: boolean, noSpacing?: boolean) => {
+    if (useMinutes) {
+      const minutes = Math.floor(seconds / 60);
+      return `${minutes}m`;
+    }
+    
+    const formatted = formatTimeDisplay(seconds, false);
+    return noSpacing ? formatted.replace(/\s/g, '') : formatted;
+  };
+
+  // Debug logging in development
+  if ((import.meta as any).env?.MODE === 'development') {
+    console.log('WorkspaceHeader Debug:', {
+      screenSize,
+      windowWidth: window.innerWidth,
+      availableWidth,
+      timerConfig,
+      timerState: timer.timerState,
+      totalDuration: timer.totalDuration,
+      showTimerDropdown,
+      showRecordingDropdown,
+      dropdownVisibilityCondition: screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl'
+    });
+  }
 
   return (
-    <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center">
+    <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative">
+      {/* Debug information - only visible in development */}
+      {(import.meta as any).env?.MODE === 'development' && (
+        <div className="fixed top-0 left-0 bg-black bg-opacity-75 text-white text-xs p-2 rounded-br-lg" style={{ zIndex: 'var(--z-debug)' }}>
+          <div>Screen: {screenSize} ({window.innerWidth}px)</div>
+          <div>Available: {availableWidth}px</div>
+          <div>Timer: {timerConfig.showSingle ? 'Single' : 'Dual'}</div>
+          <div>Level: {timerConfig.compactLevel} ({timerConfig.format})</div>
+          <div>Labels: {timerConfig.primaryLabel} / {timerConfig.secondaryLabel}</div>
+          <div>Timer DD: {showTimerDropdown ? '✅' : '❌'} | Rec DD: {showRecordingDropdown ? '✅' : '❌'}</div>
+          <div>DD Visible: {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') ? '✅' : '❌'}</div>
+        </div>
+      )}
       <div className="workspace-header-grid">
         {/* Navigation Section */}
         <div className="header-navigation">
@@ -114,21 +405,30 @@ export function WorkspaceHeader({
           </div>
         </div>
 
-        {/* Language Selector Section */}
-        <div className="header-language-selector">
+        {/* Language Selector Section - responsive width */}
+        <div className={`header-language-selector ${
+          screenSize === 'xs' ? 'header-language-xs' : 
+          screenSize === 'sm' ? 'header-language-sm' : ''
+        }`}>
           <LanguageSelector
             value={language}
             onChange={onLanguageChange}
-            className="w-full max-w-[120px]"
+            className={`w-full ${
+              screenSize === 'xs' ? 'max-w-[80px] text-xs' : 
+              screenSize === 'sm' ? 'max-w-[100px] text-sm' : 'max-w-[120px]'
+            }`}
           />
         </div>
 
-        {/* Save Indicators Section */}
-        <div className="header-save-indicators">
+        {/* Save Indicators Section - hide text on small screens */}
+        <div className={`header-save-indicators ${
+          screenSize === 'xs' ? 'header-save-xs' : 
+          screenSize === 'sm' ? 'header-save-sm' : ''
+        }`}>
           {(codeAutoSave.isLoading || notesAutoSave.isLoading || languageAutoSave.isLoading) && (
             <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
               <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
-              <span className="text-xs">Saving...</span>
+              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Saving...</span>}
             </div>
           )}
           
@@ -136,47 +436,54 @@ export function WorkspaceHeader({
             !codeAutoSave.isLoading && !notesAutoSave.isLoading && !languageAutoSave.isLoading) && (
             <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
               <CheckCircleIcon className="h-3 w-3" />
-              <span className="text-xs">Saved</span>
+              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Saved</span>}
             </div>
           )}
           
           {(codeAutoSave.error || notesAutoSave.error || languageAutoSave.error) && (
             <div className="flex items-center space-x-1 text-red-600 dark:text-red-400">
               <ExclamationCircleIcon className="h-3 w-3" />
-              <span className="text-xs">Error</span>
+              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Error</span>}
             </div>
           )}
         </div>
 
-        {/* Card Navigation Section */}
-        <div className="header-card-navigation">
+        {/* Card Navigation Section - responsive layout */}
+        <div className={`header-card-navigation ${
+          screenSize === 'xs' ? 'header-nav-xs' : 
+          screenSize === 'sm' ? 'header-nav-sm' : ''
+        }`}>
           <button
             onClick={() => onNavigateCard('prev')}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             disabled={currentCard ? (() => {
               const allProblemCards = getSiblingCards(currentCard, cards);
               const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
               return currentIndex === 0; // Disabled if at first card
             })() : true}
+            title="Previous card"
           >
-            <ArrowLeftIcon className="h-4 w-4" />
+            <ArrowLeftIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
           </button>
           
-          <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
+          <span className={`${
+            screenSize === 'xs' ? 'text-xs px-1' : 
+            screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
+          } text-gray-500 dark:text-gray-400`}>
             {currentCard ? (() => {
               const allProblemCards = getSiblingCards(currentCard, cards);
               const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
               
-              return `${currentIndex + 1} / ${allProblemCards.length}`;
-            })() : '1 / 1'}
+              return `${currentIndex + 1}/${allProblemCards.length}`;
+            })() : '1/1'}
           </span>
           
           <button
             onClick={() => onNavigateCard('next')}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
             title="Navigate to next card or create new card"
           >
-            <ArrowRightIcon className="h-4 w-4" />
+            <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
           </button>
         </div>
 
@@ -194,107 +501,272 @@ export function WorkspaceHeader({
             </button>
           </div>
 
-          {/* Timer - Fully Clickable */}
-          <button
-            onClick={onToggleTimer}
-            disabled={timer.isLoading}
-            className="flex items-center space-x-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-            title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-            aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-            aria-pressed={timer.timerState.isRunning}
+          {/* Timer with integrated Session History */}
+          <div 
+            className="relative" 
+            onMouseLeave={(e) => {
+              // Add small delay and check if mouse is moving to dropdown
+              const rect = e.currentTarget.getBoundingClientRect();
+              const mouseY = e.clientY;
+              const mouseX = e.clientX;
+              
+              // If mouse is below the container (moving toward dropdown), delay closing
+              if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
+                setTimeout(() => {
+                  setShowTimerDropdown(false);
+                }, 200);
+              } else {
+                setShowTimerDropdown(false);
+              }
+            }}
+            style={{ position: 'relative', zIndex: 1 }}
           >
-            {/* Play/Stop Icon */}
-            <div className="flex-shrink-0">
-              {timer.timerState.isRunning ? (
-                <StopIcon className="h-4 w-4 text-red-500" />
-              ) : (
-                <PlayIcon className="h-4 w-4 text-green-500" />
-              )}
-            </div>
-            
-            {/* Timer Display */}
-            <div className="flex flex-col items-center min-w-0">
-              {/* Total duration on top - Live during recording */}
-              <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                {(() => {
-                  // Show live total duration when timer is running
-                  const liveTotalDuration = timer.timerState.isRunning 
-                    ? timer.totalDuration + timer.timerState.elapsedTime
-                    : timer.totalDuration;
-                  
-                  return formatTimeDisplay(liveTotalDuration);
-                })()}
-              </span>
-              {/* Current session below in red and smaller */}
-              <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
-                timer.timerState.isRunning 
-                  ? 'text-red-500 dark:text-red-400' 
-                  : 'text-gray-500 dark:text-gray-400'
-              }`}>
-                {formatTimeDisplay(timer.timerState.elapsedTime, false)}
-              </span>
-            </div>
-            
-            {/* Error and Debug Info */}
-            <div className="flex items-center space-x-1">
-              {timer.error && (
-                <div className="text-xs text-red-500" title={timer.error}>
-                  ⚠️
+            <div className="flex items-center">
+              {/* Main Timer Button */}
+              <button
+                ref={timerButtonRef}
+                onClick={onToggleTimer}
+                disabled={timer.isLoading}
+                className="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
+                title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+                aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+                aria-pressed={timer.timerState.isRunning}
+              >
+                {/* Play/Stop Icon */}
+                <div className="flex-shrink-0">
+                  {timer.timerState.isRunning ? (
+                    <StopIcon className="h-4 w-4 text-red-500" />
+                  ) : (
+                    <PlayIcon className="h-4 w-4 text-green-500" />
+                  )}
                 </div>
-              )}
-              {/* Debug info - remove in production */}
-              {(import.meta as any).env?.MODE === 'development' && (
-                <div className="text-xs text-blue-500" title={`Debug: totalDuration=${timer.totalDuration}, elapsedTime=${timer.timerState.elapsedTime}, isRunning=${timer.timerState.isRunning}`}>
-                  🔍
+                
+                {/* Smart Dynamic Timer Display - 6 Levels */}
+                <div className={`flex ${timerConfig.showSingle ? 'items-center' : 'flex-col items-center'} min-w-0 ${timerConfig.compactLevel && timerConfig.compactLevel <= 4 ? 'gap-0' : timerConfig.spacious ? 'gap-1' : ''}`}>
+                  {timerConfig.showSingle ? (
+                    // Level 0: Single time display for ultra compact spaces (<80px)
+                    <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                      {formatTime(timerConfig.primaryTime)}
+                    </span>
+                  ) : (
+                    // Multi-level displays based on available width
+                    <>
+                      {/* Primary time display */}
+                      <span className={`text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap ${
+                        timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''
+                      }`}>
+                        {(() => {
+                          const primaryFormatted = formatTime(timerConfig.primaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                          const secondaryFormatted = formatTime(timerConfig.secondaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                          
+                          // Level 1: Minutes format "22m/0m"
+                          if (timerConfig.compactLevel === 1) {
+                            return `${primaryFormatted}/${secondaryFormatted}`;
+                          }
+                          // Level 2: Slash format "22:45/0:00"
+                          else if (timerConfig.compactLevel === 2) {
+                            return `${primaryFormatted}/${secondaryFormatted}`;
+                          }
+                          // Level 3+: Label formats
+                          else {
+                            const spacing = timerConfig.noSpacing ? '' : ' ';
+                            return `${timerConfig.primaryLabel}${spacing}${primaryFormatted}`;
+                          }
+                        })()} 
+                      </span>
+                      
+                      {/* Secondary time display - only for levels 3+ */}
+                      {timerConfig.compactLevel >= 3 && (
+                        <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
+                          timer.timerState.isRunning 
+                            ? 'text-red-500 dark:text-red-400' 
+                            : 'text-gray-500 dark:text-gray-400'
+                        } ${timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''}`}>
+                          {(() => {
+                            const secondaryFormatted = formatTime(timerConfig.secondaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                            const spacing = timerConfig.noSpacing ? '' : ' ';
+                            return `${timerConfig.secondaryLabel}${spacing}${secondaryFormatted}`;
+                          })()} 
+                        </span>
+                      )}
+                    </>
+                  )}
                 </div>
+                
+                {/* Error and Debug Info - hidden on xs */}
+                {screenSize !== 'xs' && (
+                  <div className="flex items-center space-x-1">
+                    {timer.error && (
+                      <div className="text-xs text-red-500" title={timer.error}>
+                        ⚠️
+                      </div>
+                    )}
+                    {/* Debug info - remove in production */}
+                    {(import.meta as any).env?.MODE === 'development' && (
+                      <div className="text-xs text-blue-500" title={`Debug: availableWidth=${availableWidth}px, screenSize=${screenSize}, showSingle=${timerConfig.showSingle}, compactLevel=${timerConfig.compactLevel}, format=${timerConfig.format}`}>
+                        🔍
+                      </div>
+                    )}
+                  </div>
+                )}
+              </button>
+              
+              {/* Session History Dropdown Trigger */}
+              {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
+                <button
+                  onClick={() => setShowTimerDropdown(!showTimerDropdown)}
+                  onMouseEnter={() => setShowTimerDropdown(true)}
+                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  title="Timer options"
+                >
+                  <ChevronDownIcon className="h-3 w-3" />
+                </button>
               )}
-            </div>
-          </button>
-
-          {/* Session History */}
-          <button
-            onClick={onOpenSessionHistory}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title="View session history"
-          >
-            <ClockIcon className="h-4 w-4" />
-          </button>
-
-          {/* Recording History */}
-          <button
-            onClick={onOpenRecordingHistory}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            title="View recording history"
-          >
-            <SpeakerWaveIcon className="h-4 w-4" />
-          </button>
-
-          {/* Recording */}
-          <button
-            onClick={onToggleRecording}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-              recordingState.isRecording
-                ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
-            }`}
-            title={recordingState.isRecording ? "Stop recording" : "Start recording"}
-            aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
-            aria-pressed={recordingState.isRecording}
-          >
-            {/* Mic Icon */}
-            <div className="flex-shrink-0">
-              <MicrophoneIcon className="h-4 w-4" />
             </div>
             
-            {/* Recording Timer Display */}
-            {recordingState.isRecording && (
-              <div className="flex flex-col items-center min-w-0">
-                <span className="text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap">
-                  Recording: {formatTimeDisplay(recordingState.elapsedRecordingTime, false)}
-                </span>
+            {/* Session History Dropdown */}
+            {showTimerDropdown && (
+              <div 
+                className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[120px]" 
+                style={{ 
+                  zIndex: 'var(--z-dropdown)', 
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '0.125rem' // Reduced gap to make it easier to reach
+                }}
+                onMouseEnter={() => setShowTimerDropdown(true)}
+                onMouseLeave={() => setShowTimerDropdown(false)}
+              >
+                <button
+                  onClick={() => {
+                    onOpenSessionHistory();
+                    setShowTimerDropdown(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                >
+                  <ClockIcon className="h-4 w-4" />
+                  <span>Session History</span>
+                </button>
               </div>
             )}
-          </button>
+            
+            {/* Standalone Session History for small screens */}
+            {(screenSize === 'xs' || screenSize === 'sm') && (
+              <button
+                onClick={onOpenSessionHistory}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                title="View session history"
+              >
+                <ClockIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Recording with integrated Recording History */}
+          <div 
+            className="relative" 
+            onMouseLeave={(e) => {
+              // Add small delay and check if mouse is moving to dropdown
+              const rect = e.currentTarget.getBoundingClientRect();
+              const mouseY = e.clientY;
+              const mouseX = e.clientX;
+              
+              // If mouse is below the container (moving toward dropdown), delay closing
+              if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
+                setTimeout(() => {
+                  setShowRecordingDropdown(false);
+                }, 200);
+              } else {
+                setShowRecordingDropdown(false);
+              }
+            }}
+            style={{ position: 'relative', zIndex: 1 }}
+          >
+            <div className="flex items-center">
+              {/* Main Recording Button */}
+              <button
+                onClick={onToggleRecording}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                  recordingState.isRecording
+                    ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                    : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
+                }`}
+                title={recordingState.isRecording ? "Stop recording" : "Start recording"}
+                aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
+                aria-pressed={recordingState.isRecording}
+              >
+                {/* Mic Icon */}
+                <div className="flex-shrink-0">
+                  <MicrophoneIcon className="h-4 w-4" />
+                </div>
+                
+                {/* Recording Timer Display - responsive */}
+                {recordingState.isRecording && (
+                  <div className="flex flex-col items-center min-w-0">
+                    <span className={`text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap ${
+                      screenSize === 'xs' ? 'hidden' : ''
+                    }`}>
+                      {screenSize === 'sm' ? formatTimeDisplay(recordingState.elapsedRecordingTime, false) : `Recording: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`}
+                    </span>
+                  </div>
+                )}
+              </button>
+              
+              {/* Recording History Dropdown Trigger */}
+              {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
+                <button
+                  onClick={() => setShowRecordingDropdown(!showRecordingDropdown)}
+                  onMouseEnter={() => setShowRecordingDropdown(true)}
+                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  title="Recording options"
+                >
+                  <ChevronDownIcon className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            
+            {/* Recording History Dropdown */}
+            {showRecordingDropdown && (
+              <div 
+                className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[140px]" 
+                style={{ 
+                  zIndex: 'var(--z-dropdown)', 
+                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '0.125rem' // Reduced gap to make it easier to reach
+                }}
+                onMouseEnter={() => setShowRecordingDropdown(true)}
+                onMouseLeave={() => setShowRecordingDropdown(false)}
+              >
+                <button
+                  onClick={() => {
+                    onOpenRecordingHistory();
+                    setShowRecordingDropdown(false);
+                  }}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                >
+                  <SpeakerWaveIcon className="h-4 w-4" />
+                  <span>Recording History</span>
+                </button>
+              </div>
+            )}
+            
+            {/* Standalone Recording History for small screens */}
+            {(screenSize === 'xs' || screenSize === 'sm') && (
+              <button
+                onClick={onOpenRecordingHistory}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                title="View recording history"
+              >
+                <SpeakerWaveIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
