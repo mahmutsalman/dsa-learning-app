@@ -250,6 +250,18 @@ export default function ProblemCard() {
       cardsWithNotes: cards.filter(c => c.notes).map(c => ({ id: c.id, notesLength: c.notes?.length }))
     });
     
+    // Production logging for card selection issues
+    if (cards.length === 0) {
+      console.warn('ProblemCard: No cards available for selection', {
+        problemId,
+        cardId,
+        loadingState: loading
+      });
+      // Ensure currentCard is null when no cards available
+      setCurrentCard(null);
+      return;
+    }
+    
     if (cardId && cards.length > 0) {
       const card = cards.find(c => c.id === cardId);
       console.debug('ProblemCard: Found card by ID', {
@@ -258,7 +270,17 @@ export default function ProblemCard() {
         hasNotes: !!card?.notes,
         notesContent: card?.notes
       });
-      setCurrentCard(card || cards[0]);
+      
+      if (card) {
+        setCurrentCard(card);
+      } else {
+        console.warn('ProblemCard: Requested cardId not found, using first card', {
+          requestedCardId: cardId,
+          availableCardIds: cards.map(c => c.id),
+          usingCard: cards[0].id
+        });
+        setCurrentCard(cards[0]);
+      }
     } else if (cards.length > 0) {
       console.debug('ProblemCard: Using first card', {
         firstCard: cards[0].id,
@@ -266,8 +288,21 @@ export default function ProblemCard() {
         notesContent: cards[0].notes
       });
       setCurrentCard(cards[0]);
+      
+      // Auto-navigate to proper URL with card ID for consistency
+      if (!cardId) {
+        console.log('ProblemCard: Navigating to first card URL for consistency');
+        navigate(`/problem/${problemId}/card/${cards[0].id}`, { replace: true });
+      }
+    } else {
+      console.warn('ProblemCard: No cards available and no fallback possible', {
+        cardsLength: cards.length,
+        problemId,
+        cardId
+      });
+      setCurrentCard(null);
     }
-  }, [cardId, cards]);
+  }, [cardId, cards, problemId, loading, navigate]);
 
   // Sync editor state when current card changes
   useEffect(() => {
@@ -289,13 +324,18 @@ export default function ProblemCard() {
   const loadProblem = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('ProblemCard: Loading problem and cards', { problemId });
+      
       const [problemResult, cardsResult] = await Promise.all([
         invoke<Problem>('get_problem_by_id', { id: problemId }),
         invoke<Card[]>('get_cards_for_problem', { problemId })
       ]);
       
-      console.debug('ProblemCard: Loaded cards from backend', {
+      console.log('ProblemCard: Loaded from backend', {
         problemId,
+        problemTitle: problemResult.title,
         cardCount: cardsResult.length,
         cardsData: cardsResult.map(c => ({
           id: c.id,
@@ -306,17 +346,44 @@ export default function ProblemCard() {
       });
       
       setProblem(problemResult);
-      setCards(cardsResult);
       
-      // If no cards exist, create the first one
+      // If no cards exist, create the first one before setting cards
       if (cardsResult.length === 0) {
-        await createNewCard();
+        console.warn('ProblemCard: No cards found, creating first card');
+        try {
+          const newCard = await invoke<Card>('create_card', {
+            request: {
+              problem_id: problemId,
+              language: 'javascript',
+              parent_card_id: null
+            }
+          });
+          
+          console.log('ProblemCard: Created first card', {
+            cardId: newCard.id,
+            problemId: newCard.problem_id
+          });
+          
+          setCards([newCard]);
+          setCurrentCard(newCard);
+          
+          // Navigate to the new card URL
+          navigate(`/problem/${problemId}/card/${newCard.id}`, { replace: true });
+        } catch (createErr) {
+          console.error('ProblemCard: Failed to create first card', createErr);
+          setError(`Failed to create card: ${createErr}`);
+          setCards([]);
+        }
+      } else {
+        setCards(cardsResult);
       }
       
-      setError(null);
     } catch (err) {
-      setError(err as string);
-      console.error('Failed to load problem:', err);
+      const errorMessage = err as string;
+      setError(errorMessage);
+      console.error('ProblemCard: Failed to load problem', { problemId, error: errorMessage });
+      setCards([]);
+      setCurrentCard(null);
     } finally {
       setLoading(false);
     }
@@ -347,6 +414,8 @@ export default function ProblemCard() {
     if (!problemId) return;
     
     try {
+      console.log('ProblemCard: Creating new card', { problemId });
+      
       const newCard = await invoke<Card>('create_card', {
         request: {
           problem_id: problemId,
@@ -355,11 +424,16 @@ export default function ProblemCard() {
         }
       });
       
+      console.log('ProblemCard: New card created successfully', {
+        cardId: newCard.id,
+        problemId: newCard.problem_id
+      });
+      
       setCards(prev => [...prev, newCard]);
       setCurrentCard(newCard);
       navigate(`/problem/${problemId}/card/${newCard.id}`);
     } catch (err) {
-      console.error('Failed to create card:', err);
+      console.error('ProblemCard: Failed to create new card:', err);
     }
   };
 
