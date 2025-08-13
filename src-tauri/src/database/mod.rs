@@ -55,10 +55,28 @@ pub struct DatabaseManager {
 
 impl DatabaseManager {
     pub async fn new() -> anyhow::Result<Self> {
-        // Create database directory in user data directory
-        let app_data_dir = std::env::current_dir()
-            .context("Failed to get current directory")?
-            .join("data");
+        // Create database directory in proper app data directory
+        let app_data_dir = if cfg!(debug_assertions) {
+            // Development: use project data folder
+            std::env::current_dir()
+                .context("Failed to get current directory")?
+                .join("data")
+        } else {
+            // Production: use proper app data directory
+            dirs::data_dir()
+                .context("Failed to get data directory")?
+                .join("com.dsalearning.dsaapp")
+        };
+        
+        std::fs::create_dir_all(&app_data_dir)
+            .context("Failed to create app data directory")?;
+            
+        Self::new_with_path(app_data_dir).await
+    }
+    
+    // New method that accepts a custom path for Tauri-resolved directories
+    pub async fn new_with_path(app_data_dir: std::path::PathBuf) -> anyhow::Result<Self> {
+        println!("🔧 [Database] Initializing database with path: {}", app_data_dir.display());
         
         std::fs::create_dir_all(&app_data_dir)
             .context("Failed to create app data directory")?;
@@ -85,9 +103,24 @@ impl DatabaseManager {
     pub async fn connect_existing() -> anyhow::Result<Self> {
         println!("🔧 [Database] Attempting to connect to existing database...");
         
-        let app_data_dir = std::env::current_dir()
-            .context("Failed to get current directory")?
-            .join("data");
+        let app_data_dir = if cfg!(debug_assertions) {
+            // Development: use project data folder
+            std::env::current_dir()
+                .context("Failed to get current directory")?
+                .join("data")
+        } else {
+            // Production: use proper app data directory
+            dirs::data_dir()
+                .context("Failed to get data directory")?
+                .join("com.dsalearning.dsaapp")
+        };
+        
+        Self::connect_existing_with_path(app_data_dir).await
+    }
+    
+    // New method that accepts a custom path for Tauri-resolved directories
+    pub async fn connect_existing_with_path(app_data_dir: std::path::PathBuf) -> anyhow::Result<Self> {
+        println!("🔧 [Database] Attempting to connect to existing database with path: {}", app_data_dir.display());
         
         let db_path = app_data_dir.join("database.db");
         
