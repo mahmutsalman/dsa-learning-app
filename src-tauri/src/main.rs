@@ -111,7 +111,8 @@ async fn main() {
             commands::audio::get_all_recordings,
             commands::audio::get_card_recordings,
             commands::audio::get_audio_data,
-            commands::audio::get_current_dir
+            commands::audio::get_current_dir,
+            commands::audio::delete_recording
         ])
         .setup(|app| {
             // Initialize app data directories

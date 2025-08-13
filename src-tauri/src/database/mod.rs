@@ -1318,6 +1318,21 @@ impl DatabaseManager {
         
         Ok(recordings)
     }
+    
+    pub fn delete_recording(&mut self, recording_id: &str) -> anyhow::Result<()> {
+        // Check if recording exists before attempting deletion
+        let rows_affected = self.connection.execute(
+            "DELETE FROM recordings WHERE id = ?1",
+            [recording_id]
+        )?;
+        
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Recording with id '{}' not found", recording_id));
+        }
+        
+        println!("Successfully deleted recording '{}'", recording_id);
+        Ok(())
+    }
 
     // Database analysis functions
     pub fn get_database_stats(&self) -> anyhow::Result<DatabaseStats> {

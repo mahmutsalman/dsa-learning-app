@@ -477,3 +477,50 @@ pub async fn get_current_dir() -> Result<String, String> {
     let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
     Ok(current_dir.to_string_lossy().to_string())
 }
+
+#[tauri::command]
+pub async fn delete_recording(state: State<'_, AppState>, recording_id: String) -> Result<String, String> {
+    // First, get the recording details from database to get the filepath
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let recording = {
+        let recordings = db.get_recordings().map_err(|e| e.to_string())?;
+        recordings.into_iter().find(|r| r.id == recording_id)
+            .ok_or("Recording not found")?
+    };
+    drop(db);
+    
+    // Convert relative path to absolute path for file deletion
+    let app_data_dir = get_app_data_dir();
+    let file_path = if recording.filepath.starts_with("dev-data/") || recording.filepath.starts_with("app-data/") {
+        // Strip the prefix and use our app_data_dir
+        let relative_path = recording.filepath.split('/').skip(1).collect::<Vec<&str>>().join("/");
+        app_data_dir.join(relative_path)
+    } else {
+        // Assume it's already relative to app_data_dir
+        app_data_dir.join(&recording.filepath)
+    };
+    
+    // Attempt to delete the physical file (don't fail if file doesn't exist)
+    let file_deleted = match fs::remove_file(&file_path) {
+        Ok(()) => {
+            println!("Successfully deleted audio file: {}", file_path.display());
+            true
+        }
+        Err(e) => {
+            println!("Warning: Failed to delete audio file {}: {}. Continuing with database deletion.", file_path.display(), e);
+            false
+        }
+    };
+    
+    // Delete from database
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    db.delete_recording(&recording_id).map_err(|e| e.to_string())?;
+    
+    let message = if file_deleted {
+        "Recording deleted successfully from database and file system"
+    } else {
+        "Recording deleted from database (file was already missing or inaccessible)"
+    };
+    
+    Ok(message.to_string())
+}
