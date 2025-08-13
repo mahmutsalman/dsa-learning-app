@@ -199,6 +199,8 @@ export default function Dashboard() {
 
   // Handle search functionality
   const handleSearch = async (query: string, searchType: SearchType) => {
+    console.log('DEBUG: handleSearch called with:', { query, searchType, stackTrace: new Error().stack });
+    
     if (!query.trim()) {
       // If empty query, show all problems
       setFilteredProblems(problems);
@@ -207,24 +209,30 @@ export default function Dashboard() {
     }
 
     setSearchState({ query, searchType, isSearching: true });
+    console.log('DEBUG: Updated searchState:', { query, searchType, isSearching: true });
 
     try {
       let searchResults: Problem[] = [];
       
       switch (searchType) {
         case 'name':
+          console.log('DEBUG: Executing name search');
           searchResults = await invoke<Problem[]>('search_problems_by_name', { query });
           break;
         case 'topic':
+          console.log('DEBUG: Executing topic search');
           searchResults = await invoke<Problem[]>('search_problems_by_topic', { query });
           break;
         case 'tags':
+          console.log('DEBUG: Executing tags search');
           searchResults = await invoke<Problem[]>('search_problems_by_tags', { query });
           break;
         default:
           console.error('Invalid search type:', searchType);
           return;
       }
+      
+      console.log('DEBUG: Search results received:', searchResults.length);
 
       // Convert search results to ProblemWithStudyTime format by finding matches in current problems
       const searchResultIds = new Set(searchResults.map(p => p.id));
@@ -240,6 +248,7 @@ export default function Dashboard() {
 
   // Handle suggestion selection
   const handleSuggestionSelect = (suggestion: string) => {
+    console.log('DEBUG: handleSuggestionSelect called with:', { suggestion, searchStateType: searchState.searchType });
     handleSearch(suggestion, searchState.searchType);
   };
 

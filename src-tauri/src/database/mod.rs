@@ -1801,22 +1801,41 @@ impl DatabaseManager {
 
     pub fn search_problems_by_tags(&self, query: &str) -> anyhow::Result<Vec<FrontendProblem>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
+        println!("DEBUG: Tag search query: '{}', pattern: '{}'", query, search_pattern);
         
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
         let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
         
-        // Search in both problem_tags table (normalized tags) and problems.tags column (legacy)
-        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, p.{}, p.created_at 
+        // Search in problem_tags table (normalized tags)
+        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at 
                           FROM problems p
-                          LEFT JOIN problem_tags pt ON p.id = pt.problem_id
-                          LEFT JOIN tags t ON pt.tag_id = t.id
-                          WHERE LOWER(t.name) LIKE ?1 OR LOWER(p.tags) LIKE ?1
+                          INNER JOIN problem_tags pt ON p.id = pt.problem_id
+                          INNER JOIN tags t ON pt.tag_id = t.id
+                          WHERE LOWER(t.name) LIKE ?1
                           ORDER BY p.title 
                           LIMIT 50", related_column_sql);
         
+        println!("DEBUG: Executing SQL: {}", sql);
+        
+        // Debug: Check if the tag exists at all
+        let tag_exists: Option<String> = self.connection.query_row(
+            "SELECT name FROM tags WHERE LOWER(name) LIKE ?1",
+            [&search_pattern],
+            |row| Ok(row.get::<_, String>(0)?)
+        ).optional()?;
+        println!("DEBUG: Tag exists check: {:?}", tag_exists);
+        
+        // Debug: Check problem_tags relationships
+        let relationship_count: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problem_tags pt INNER JOIN tags t ON pt.tag_id = t.id WHERE LOWER(t.name) LIKE ?1",
+            [&search_pattern],
+            |row| Ok(row.get(0)?)
+        )?;
+        println!("DEBUG: Problem-tag relationships found: {}", relationship_count);
+        
         let mut stmt = self.connection.prepare(&sql)?;
-        let problem_iter = stmt.query_map([&search_pattern, &search_pattern], |row| {
+        let problem_iter = stmt.query_map([&search_pattern], |row| {
             let problem = Problem {
                 id: row.get(0)?,
                 title: row.get(1)?,
@@ -1835,6 +1854,11 @@ impl DatabaseManager {
         let mut problems = Vec::new();
         for problem in problem_iter {
             problems.push(problem?);
+        }
+
+        println!("DEBUG: Tag search found {} problems", problems.len());
+        for problem in &problems {
+            println!("DEBUG: Found problem: {} (ID: {})", problem.title, problem.id);
         }
 
         Ok(problems)

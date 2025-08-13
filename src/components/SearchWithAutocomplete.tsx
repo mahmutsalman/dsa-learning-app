@@ -79,19 +79,26 @@ export default function SearchWithAutocomplete({
 
   // Handle search type change
   const handleSearchTypeChange = (type: SearchType) => {
+    console.log('DEBUG SearchWithAutocomplete: handleSearchTypeChange called', { from: searchType, to: type, currentQuery: query });
     setSearchType(type);
     setShowDropdown(false);
     // Clear suggestions when search type changes
     setSuggestions([]);
     setShowSuggestions(false);
-    // Refetch suggestions for current query with new type
+    // If there's an existing query, automatically trigger search with new type
     if (query.trim()) {
+      console.log('DEBUG SearchWithAutocomplete: Auto-triggering search with new type', { query: query.trim(), type });
       fetchSuggestions(query, type);
+      // Trigger search with new type to provide immediate feedback
+      onSearch(query.trim(), type);
+    } else {
+      console.log('DEBUG SearchWithAutocomplete: No query to auto-search with');
     }
   };
 
   // Handle search submission
   const handleSearch = () => {
+    console.log('DEBUG SearchWithAutocomplete: handleSearch called', { query: query.trim(), searchType });
     if (query.trim()) {
       onSearch(query.trim(), searchType);
       setShowSuggestions(false);
@@ -100,12 +107,11 @@ export default function SearchWithAutocomplete({
 
   // Handle suggestion selection
   const handleSuggestionSelect = (suggestion: string) => {
+    console.log('DEBUG SearchWithAutocomplete: handleSuggestionSelect called', { suggestion, searchType });
     setQuery(suggestion);
     setShowSuggestions(false);
+    // Only call onSearch, don't call onSuggestionSelect as it would cause duplicate search
     onSearch(suggestion, searchType);
-    if (onSuggestionSelect) {
-      onSuggestionSelect(suggestion);
-    }
   };
 
   // Handle key press events
@@ -141,31 +147,44 @@ export default function SearchWithAutocomplete({
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
-            onClick={() => setShowDropdown(!showDropdown)}
-            className="flex items-center px-4 py-3 bg-blue-500 text-white font-medium text-sm hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+            onClick={() => {
+              console.log('DEBUG SearchWithAutocomplete: Dropdown button clicked', { currentShowDropdown: showDropdown });
+              setShowDropdown(!showDropdown);
+            }}
+            className="flex items-center px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-medium text-sm rounded-l-lg shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300 ease-out focus:outline-none focus:ring-3 focus:ring-blue-400/50 focus:ring-offset-2 dark:focus:ring-offset-gray-800 active:scale-[0.98]"
           >
             {currentOption.label}
-            <ChevronDownIcon className={`ml-2 h-4 w-4 transition-transform duration-200 ${
-              showDropdown ? 'rotate-180' : ''
+            <ChevronDownIcon className={`ml-2 h-4 w-4 transition-transform duration-300 ease-out ${
+              showDropdown ? 'rotate-180 scale-110' : 'scale-100'
             }`} />
           </button>
 
           {/* Dropdown Menu */}
           {showDropdown && (
-            <div className="absolute top-full left-0 z-20 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg mt-1">
-              {searchTypeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleSearchTypeChange(option.value)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
-                    option.value === searchType
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-700 dark:text-gray-200'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+            <div className="absolute top-full left-0 z-20 w-36 bg-white dark:bg-gray-800 border border-gray-200/50 dark:border-gray-600/50 rounded-lg shadow-2xl mt-2 backdrop-blur-sm animate-in slide-in-from-top-2 fade-in duration-300 overflow-hidden">
+              <div className="py-1">
+                {searchTypeOptions.map((option, index) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      console.log('DEBUG SearchWithAutocomplete: Dropdown option clicked', { option: option.value, label: option.label });
+                      handleSearchTypeChange(option.value);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm font-medium transition-all duration-200 ease-out hover:translate-x-1 ${
+                      option.value === searchType
+                        ? 'bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20 text-blue-700 dark:text-blue-300 border-r-2 border-blue-500'
+                        : 'text-gray-700 dark:text-gray-200 hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 dark:hover:from-gray-700/50 dark:hover:to-gray-600/50'
+                    } ${index === 0 ? 'rounded-t-lg' : ''} ${index === searchTypeOptions.length - 1 ? 'rounded-b-lg' : ''}`}
+                  >
+                    <span className="flex items-center">
+                      {option.label}
+                      {option.value === searchType && (
+                        <div className="ml-auto w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
