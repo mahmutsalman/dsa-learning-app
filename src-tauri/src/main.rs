@@ -52,23 +52,32 @@ async fn main() {
         let _ = file.flush();
     }
     
-    // Macro for dual logging
-    macro_rules! log_dual {
-        ($($arg:tt)*) => {
-            let msg = format!($($arg)*);
-            eprintln!("{}", msg);
-            if let Some(ref mut file) = log_file {
-                let _ = writeln!(file, "{}", msg);
-                let _ = file.flush();
-            }
-        };
-    }
+    // Simple logging function that doesn't borrow issues
+    let log_to_file = |msg: &str| {
+        eprintln!("{}", msg);
+        // Write directly to file instead of using mutable reference
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_file_path) 
+        {
+            let _ = writeln!(file, "{}", msg);
+            let _ = file.flush();
+        }
+    };
     
-    log_dual!("DSA Learning App: Creating Tauri application...");
+    log_to_file("DSA Learning App: Creating Tauri application...");
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![
+    let tauri_builder = match tauri::Builder::default().plugin(tauri_plugin_shell::init()) {
+        builder => {
+            log_to_file("DSA Learning App: Tauri builder created successfully");
+            builder
+        }
+    };
+
+    log_to_file("DSA Learning App: Adding command handlers...");
+    
+    let tauri_app = tauri_builder.invoke_handler(tauri::generate_handler![
             // Database commands only (working implementations)
             commands::database::init_database,
             commands::database::connect_database,
@@ -127,8 +136,24 @@ async fn main() {
             commands::audio::get_audio_data,
             commands::audio::get_current_dir,
             commands::audio::delete_recording
-        ])
-        .setup(|app| {
+        ]);
+    
+    log_to_file("DSA Learning App: Command handlers registered");
+    log_to_file("DSA Learning App: Setting up Tauri application...");
+    
+    let tauri_app_with_setup = tauri_app.setup(|app| {
+            let log_to_file = |msg: &str| {
+                eprintln!("{}", msg);
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open("/tmp/dsa-learning-app-crash.log") 
+                {
+                    let _ = writeln!(file, "{}", msg);
+                    let _ = file.flush();
+                }
+            };
+            log_to_file("DSA Learning App: Setup function called");
             // Enable logging for production debugging
             eprintln!("DSA Learning App: Setup phase starting");
             
@@ -239,11 +264,16 @@ async fn main() {
             }
             
             eprintln!("DSA Learning App: Setup completed successfully");
+            log_to_file("DSA Learning App: Setup completed successfully");
             Ok(())
-        })
+        });
+    
+    log_to_file("DSA Learning App: Starting Tauri application run phase...");
+    
+    tauri_app_with_setup
         .run(tauri::generate_context!())
         .map_err(|e| {
-            log_dual!("DSA Learning App: FATAL - Failed to run Tauri application: {}", e);
+            log_to_file(&format!("DSA Learning App: FATAL - Failed to run Tauri application: {}", e));
             e
         })
         .expect("error while running tauri application");

@@ -885,21 +885,41 @@ impl DatabaseManager {
         ).unwrap_or(1);
         
         let language = req.language.as_ref().map(|s| s.as_str()).unwrap_or("javascript");
-        let parent_card_id = req.parent_card_id.as_ref().map(|s| s.as_str()).unwrap_or("");
         
-        self.connection.execute(
-            "INSERT INTO cards (id, problem_id, card_number, language, status, total_duration, created_at, last_modified, parent_card_id)
-             VALUES (?1, ?2, ?3, ?4, 'In Progress', 0, ?5, ?6, ?7)",
-            params![
-                &id,
-                &req.problem_id,
-                card_number,
-                language,
-                &now.to_rfc3339(),
-                &now.to_rfc3339(),
-                parent_card_id,
-            ],
-        )?;
+        // Fix FOREIGN KEY constraint: use NULL instead of empty string for parent_card_id
+        match req.parent_card_id.as_ref() {
+            Some(parent_id) if !parent_id.is_empty() => {
+                // Insert with parent_card_id value
+                self.connection.execute(
+                    "INSERT INTO cards (id, problem_id, card_number, language, status, total_duration, created_at, last_modified, parent_card_id)
+                     VALUES (?1, ?2, ?3, ?4, 'In Progress', 0, ?5, ?6, ?7)",
+                    params![
+                        &id,
+                        &req.problem_id,
+                        card_number,
+                        language,
+                        &now.to_rfc3339(),
+                        &now.to_rfc3339(),
+                        parent_id,
+                    ],
+                )?;
+            }
+            _ => {
+                // Insert with NULL parent_card_id
+                self.connection.execute(
+                    "INSERT INTO cards (id, problem_id, card_number, language, status, total_duration, created_at, last_modified, parent_card_id)
+                     VALUES (?1, ?2, ?3, ?4, 'In Progress', 0, ?5, ?6, NULL)",
+                    params![
+                        &id,
+                        &req.problem_id,
+                        card_number,
+                        language,
+                        &now.to_rfc3339(),
+                        &now.to_rfc3339(),
+                    ],
+                )?;
+            }
+        }
         
         Ok(Card {
             id,

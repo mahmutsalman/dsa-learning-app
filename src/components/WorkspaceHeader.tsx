@@ -50,8 +50,8 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
   const [availableWidth, setAvailableWidth] = useState<number>(200); // Default fallback
   const [screenSize, setScreenSize] = useState<'xs' | 'sm' | 'md' | 'lg' | 'xl'>('lg');
   const lastWidthRef = useRef<number>(200);
-  const measurementTimeoutRef = useRef<NodeJS.Timeout>();
-  const stabilityTimeoutRef = useRef<NodeJS.Timeout>();
+  const measurementTimeoutRef = useRef<number>();
+  const stabilityTimeoutRef = useRef<number>();
   const measurementHistoryRef = useRef<number[]>([]);
   const lastStableWidthRef = useRef<number>(200);
   const stabilityCountRef = useRef<number>(0);
@@ -139,7 +139,7 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
     let resizeObserver: ResizeObserver | null = null;
     
     if (ref.current && 'ResizeObserver' in window) {
-      resizeObserver = new ResizeObserver((entries) => {
+      resizeObserver = new ResizeObserver(() => {
         // Debounce ResizeObserver to prevent infinite loops
         debouncedUpdateMeasurements();
       });
@@ -153,7 +153,7 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
     }
     
     // Fallback window resize listener with longer debounce
-    let windowTimeoutId: NodeJS.Timeout;
+    let windowTimeoutId: number;
     const throttledWindowUpdate = () => {
       clearTimeout(windowTimeoutId);
       windowTimeoutId = setTimeout(updateMeasurements, 300);
@@ -348,18 +348,6 @@ export function WorkspaceHeader({
 
   return (
     <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative">
-      {/* Debug information - only visible in development */}
-      {(import.meta as any).env?.MODE === 'development' && (
-        <div className="fixed top-0 left-0 bg-black bg-opacity-75 text-white text-xs p-2 rounded-br-lg" style={{ zIndex: 'var(--z-debug)' }}>
-          <div>Screen: {screenSize} ({window.innerWidth}px)</div>
-          <div>Available: {availableWidth}px</div>
-          <div>Timer: {timerConfig.showSingle ? 'Single' : 'Dual'}</div>
-          <div>Level: {timerConfig.compactLevel} ({timerConfig.format})</div>
-          <div>Labels: {timerConfig.primaryLabel} / {timerConfig.secondaryLabel}</div>
-          <div>Timer DD: {showTimerDropdown ? '✅' : '❌'} | Rec DD: {showRecordingDropdown ? '✅' : '❌'}</div>
-          <div>DD Visible: {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') ? '✅' : '❌'}</div>
-        </div>
-      )}
       <div className="workspace-header-grid">
         {/* Navigation Section */}
         <div className="header-navigation">
@@ -547,7 +535,7 @@ export function WorkspaceHeader({
                   {timerConfig.showSingle ? (
                     // Level 0: Single time display for ultra compact spaces (<80px)
                     <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {formatTime(timerConfig.primaryTime)}
+                      {formatTime(timerConfig.primaryTime || 0)}
                     </span>
                   ) : (
                     // Multi-level displays based on available width
@@ -557,8 +545,8 @@ export function WorkspaceHeader({
                         timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''
                       }`}>
                         {(() => {
-                          const primaryFormatted = formatTime(timerConfig.primaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
-                          const secondaryFormatted = formatTime(timerConfig.secondaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                          const primaryFormatted = formatTime(timerConfig.primaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                          const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
                           
                           // Level 1: Minutes format "22m/0m"
                           if (timerConfig.compactLevel === 1) {
@@ -584,7 +572,7 @@ export function WorkspaceHeader({
                             : 'text-gray-500 dark:text-gray-400'
                         } ${timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''}`}>
                           {(() => {
-                            const secondaryFormatted = formatTime(timerConfig.secondaryTime, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                            const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
                             const spacing = timerConfig.noSpacing ? '' : ' ';
                             return `${timerConfig.secondaryLabel}${spacing}${secondaryFormatted}`;
                           })()} 
