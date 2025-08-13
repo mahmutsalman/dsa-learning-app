@@ -5,7 +5,6 @@ mod commands;
 mod database;
 mod models;
 
-#[cfg(debug_assertions)]
 use tauri::Manager;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
@@ -31,29 +30,44 @@ fn get_app_data_dir() -> PathBuf {
 
 #[tokio::main]
 async fn main() {
-    // Try to connect to existing database first, fallback to initialization
-    let db_manager = match DatabaseManager::connect_existing().await {
-        Ok(manager) => {
-            println!("Connected to existing database successfully");
-            manager
-        },
-        Err(_) => {
-            println!("No existing database found, initializing new one");
-            DatabaseManager::new().await
-                .expect("Failed to initialize database")
-        }
+    // Enable logging for production debugging - write to a log file for GUI launches
+    let log_file_path = "/tmp/dsa-learning-app-crash.log";
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    
+    let mut log_file = match OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file_path) 
+    {
+        Ok(file) => Some(file),
+        Err(_) => None,
     };
     
-    let app_state = AppState {
-        db: Arc::new(Mutex::new(db_manager)),
-        current_timer: Arc::new(Mutex::new(None)),
-        recording_state: Arc::new(Mutex::new(None)),
-        audio_thread_sender: Arc::new(Mutex::new(None)),
-    };
+    // Log to both stderr and file
+    let log_msg = format!("DSA Learning App: Main function starting at {:?}\n", std::time::SystemTime::now());
+    eprintln!("{}", log_msg.trim());
+    if let Some(ref mut file) = log_file {
+        let _ = file.write_all(log_msg.as_bytes());
+        let _ = file.flush();
+    }
+    
+    // Macro for dual logging
+    macro_rules! log_dual {
+        ($($arg:tt)*) => {
+            let msg = format!($($arg)*);
+            eprintln!("{}", msg);
+            if let Some(ref mut file) = log_file {
+                let _ = writeln!(file, "{}", msg);
+                let _ = file.flush();
+            }
+        };
+    }
+    
+    log_dual!("DSA Learning App: Creating Tauri application...");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             // Database commands only (working implementations)
             commands::database::init_database,
@@ -115,38 +129,122 @@ async fn main() {
             commands::audio::delete_recording
         ])
         .setup(|app| {
+            // Enable logging for production debugging
+            eprintln!("DSA Learning App: Setup phase starting");
+            
             // Initialize app data directories
             let app_data_dir = if cfg!(debug_assertions) {
+                eprintln!("DSA Learning App: Development mode detected");
                 // Development: use project dev-data folder
                 std::env::current_dir()
                     .expect("Failed to get current directory")
                     .join("dev-data")
             } else {
+                eprintln!("DSA Learning App: Production mode detected");
                 // Production: use proper app data directory
-                use tauri::Manager;
-                app.path().app_data_dir()
-                    .expect("Failed to get app data directory")
+                match app.path().app_data_dir() {
+                    Ok(dir) => {
+                        eprintln!("DSA Learning App: App data dir resolved: {}", dir.display());
+                        dir
+                    }
+                    Err(e) => {
+                        eprintln!("DSA Learning App: FATAL - Failed to get app data directory: {}", e);
+                        panic!("Failed to get app data directory: {}", e);
+                    }
+                }
             };
 
             // Create necessary directories
             let recordings_dir = app_data_dir.join("recordings");
             let images_dir = app_data_dir.join("images");
             
-            std::fs::create_dir_all(&recordings_dir)
-                .expect("Failed to create recordings directory");
-            std::fs::create_dir_all(&images_dir)
-                .expect("Failed to create images directory");
-
-            println!("App data directory initialized: {}", app_data_dir.display());
-            println!("Development mode: {}", cfg!(debug_assertions));
-
-            #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
+            match std::fs::create_dir_all(&app_data_dir) {
+                Ok(_) => eprintln!("DSA Learning App: Created app data directory"),
+                Err(e) => {
+                    eprintln!("DSA Learning App: FATAL - Failed to create app data directory: {}", e);
+                    panic!("Failed to create app data directory: {}", e);
+                }
             }
+            
+            match std::fs::create_dir_all(&recordings_dir) {
+                Ok(_) => eprintln!("DSA Learning App: Created recordings directory"),
+                Err(e) => {
+                    eprintln!("DSA Learning App: FATAL - Failed to create recordings directory: {}", e);
+                    panic!("Failed to create recordings directory: {}", e);
+                }
+            }
+            
+            match std::fs::create_dir_all(&images_dir) {
+                Ok(_) => eprintln!("DSA Learning App: Created images directory"),
+                Err(e) => {
+                    eprintln!("DSA Learning App: FATAL - Failed to create images directory: {}", e);
+                    panic!("Failed to create images directory: {}", e);
+                }
+            }
+
+            eprintln!("DSA Learning App: App data directory initialized: {}", app_data_dir.display());
+            eprintln!("DSA Learning App: Development mode: {}", cfg!(debug_assertions));
+            
+            // Now initialize database with proper app data directory
+            eprintln!("DSA Learning App: Initializing database...");
+            
+            // Use blocking task for async database initialization
+            let app_data_dir_clone = app_data_dir.clone();
+            let db_manager = tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    // Try to connect to existing database first, fallback to initialization
+                    match DatabaseManager::connect_existing_with_path(app_data_dir_clone.clone()).await {
+                        Ok(manager) => {
+                            eprintln!("DSA Learning App: Connected to existing database successfully");
+                            manager
+                        },
+                        Err(e) => {
+                            eprintln!("DSA Learning App: No existing database found, initializing new one. Error: {}", e);
+                            match DatabaseManager::new_with_path(app_data_dir_clone).await {
+                                Ok(manager) => {
+                                    eprintln!("DSA Learning App: Database initialization completed successfully");
+                                    manager
+                                }
+                                Err(e) => {
+                                    eprintln!("DSA Learning App: FATAL - Failed to initialize database: {}", e);
+                                    panic!("Database initialization failed: {}", e);
+                                }
+                            }
+                        }
+                    }
+                })
+            });
+            
+            // Create and manage app state with the initialized database
+            let app_state = AppState {
+                db: Arc::new(Mutex::new(db_manager)),
+                current_timer: Arc::new(Mutex::new(None)),
+                recording_state: Arc::new(Mutex::new(None)),
+                audio_thread_sender: Arc::new(Mutex::new(None)),
+            };
+            
+            app.manage(app_state);
+            eprintln!("DSA Learning App: App state with database initialized successfully");
+
+            // Always try to get the main window
+            match app.get_webview_window("main") {
+                Some(_window) => {
+                    eprintln!("DSA Learning App: Main window found successfully");
+                    eprintln!("DSA Learning App: Window initialization complete");
+                }
+                None => {
+                    eprintln!("DSA Learning App: WARNING - Main window not found!");
+                    eprintln!("DSA Learning App: This could indicate a window configuration issue");
+                }
+            }
+            
+            eprintln!("DSA Learning App: Setup completed successfully");
             Ok(())
         })
         .run(tauri::generate_context!())
+        .map_err(|e| {
+            log_dual!("DSA Learning App: FATAL - Failed to run Tauri application: {}", e);
+            e
+        })
         .expect("error while running tauri application");
 }

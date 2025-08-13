@@ -1,7 +1,7 @@
 {
   "productName": "DSA Learning App",
   "version": "0.1.0",
-  "identifier": "com.dsalearning.app",
+  "identifier": "com.dsalearning.dsaapp",
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
@@ -33,7 +33,15 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["app"],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": null,
+      "hardenedRuntime": true,
+      "entitlements": "./entitlements.plist"
+    }
   },
   "plugins": {
     "shell": {
