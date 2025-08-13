@@ -1,12 +1,39 @@
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use crate::database::DatabaseManager;
+
+// Audio command types (moved here to avoid circular dependency)
+#[derive(Debug)]
+pub enum AudioCommand {
+    StartRecording {
+        filepath: String,
+        sample_rate: u32,
+        channels: u16,
+    },
+    StopRecording,
+    PauseRecording,
+    ResumeRecording,
+}
 
 // App state shared across Tauri commands
 pub struct AppState {
     pub db: Arc<Mutex<DatabaseManager>>,
     pub current_timer: Arc<Mutex<Option<TimerSession>>>,
+    pub recording_state: Arc<Mutex<Option<RecordingSession>>>,
+    pub audio_thread_sender: Arc<Mutex<Option<mpsc::Sender<AudioCommand>>>>,
+}
+
+// Recording session state (without the non-Send cpal Stream)
+#[derive(Debug, Clone)]
+pub struct RecordingSession {
+    pub id: String,
+    pub card_id: String,
+    pub start_time: DateTime<Utc>,
+    pub is_paused: bool,
+    pub filename: String,
+    pub filepath: String,
 }
 
 // Database models matching the database schema
@@ -229,4 +256,25 @@ pub struct TimerSession {
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
     pub pause_duration: i32, // in seconds
+}
+
+// Recording-specific models for in-memory recording state
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RecordingState {
+    #[serde(rename = "isRecording")]
+    pub is_recording: bool,
+    #[serde(rename = "isPaused")]
+    pub is_paused: bool,
+    #[serde(rename = "currentRecordingId")]
+    pub current_recording_id: Option<String>,
+    #[serde(rename = "recordingStartTime")]
+    pub recording_start_time: Option<DateTime<Utc>>,
+    #[serde(rename = "elapsedRecordingTime")]
+    pub elapsed_recording_time: i32, // in seconds
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RecordingInfo {
+    pub filename: String,
+    pub filepath: String,
 }

@@ -8,8 +8,26 @@ mod models;
 #[cfg(debug_assertions)]
 use tauri::Manager;
 use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
 use models::AppState;
 use database::DatabaseManager;
+
+/// Get the app data directory based on environment
+/// Development: uses project_root/dev-data/
+/// Production: uses platform-standard app data directory
+fn get_app_data_dir() -> PathBuf {
+    if cfg!(debug_assertions) {
+        // Development: use project dev-data folder (outside watched directories)
+        std::env::current_dir()
+            .expect("Failed to get current directory")
+            .join("dev-data")
+    } else {
+        // Production: use proper app data directory
+        // This will be updated in setup() to use app.path_resolver()
+        // For now, return a placeholder - will be overridden in setup
+        PathBuf::new()
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -29,6 +47,8 @@ async fn main() {
     let app_state = AppState {
         db: Arc::new(Mutex::new(db_manager)),
         current_timer: Arc::new(Mutex::new(None)),
+        recording_state: Arc::new(Mutex::new(None)),
+        audio_thread_sender: Arc::new(Mutex::new(None)),
     };
 
     tauri::Builder::default()
@@ -81,12 +101,47 @@ async fn main() {
             commands::images::delete_problem_image,
             commands::images::update_image_positions,
             commands::images::get_image_path,
-            commands::images::get_image_data_url
+            commands::images::get_image_data_url,
+            // Audio commands
+            commands::audio::start_recording,
+            commands::audio::stop_recording,
+            commands::audio::pause_recording,
+            commands::audio::resume_recording,
+            commands::audio::get_recording_state,
+            commands::audio::get_all_recordings,
+            commands::audio::get_card_recordings,
+            commands::audio::get_audio_data,
+            commands::audio::get_current_dir
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            // Initialize app data directories
+            let app_data_dir = if cfg!(debug_assertions) {
+                // Development: use project dev-data folder
+                std::env::current_dir()
+                    .expect("Failed to get current directory")
+                    .join("dev-data")
+            } else {
+                // Production: use proper app data directory
+                use tauri::Manager;
+                app.path().app_data_dir()
+                    .expect("Failed to get app data directory")
+            };
+
+            // Create necessary directories
+            let recordings_dir = app_data_dir.join("recordings");
+            let images_dir = app_data_dir.join("images");
+            
+            std::fs::create_dir_all(&recordings_dir)
+                .expect("Failed to create recordings directory");
+            std::fs::create_dir_all(&images_dir)
+                .expect("Failed to create images directory");
+
+            println!("App data directory initialized: {}", app_data_dir.display());
+            println!("Development mode: {}", cfg!(debug_assertions));
+
             #[cfg(debug_assertions)]
             {
-                let window = _app.get_webview_window("main").unwrap();
+                let window = app.get_webview_window("main").unwrap();
                 window.open_devtools();
             }
             Ok(())
