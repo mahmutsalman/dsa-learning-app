@@ -59,8 +59,8 @@ const EDITOR_OPTIONS = {
     enabled: true
   },
   guides: {
-    bracketPairs: true,
-    indentation: true
+    bracketPairs: false,    // Disables the connecting lines
+    indentation: true       // Keeps indentation guides
   }
 };
 
