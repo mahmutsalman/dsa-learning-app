@@ -107,20 +107,43 @@ pub async fn delete_problem_image(
     state: State<'_, AppState>,
     request: DeleteImageRequest,
 ) -> Result<(), String> {
-    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    println!("🗑️ Backend: Starting image deletion for image_id: {}", request.image_id);
+    
+    let mut db = state.db.lock().map_err(|e| {
+        let error_msg = format!("Failed to lock database: {}", e);
+        println!("❌ Backend: {}", error_msg);
+        error_msg
+    })?;
     
     // Get the image path from database and delete the record
+    println!("🔄 Backend: Querying database for image path and deleting record...");
     let image_path = db.delete_problem_image(&request.image_id)
-        .map_err(|e| format!("Failed to delete image from database: {}", e))?;
+        .map_err(|e| {
+            let error_msg = format!("Failed to delete image from database: {}", e);
+            println!("❌ Backend: {}", error_msg);
+            error_msg
+        })?;
+    
+    println!("✅ Backend: Database record deleted, image_path: {}", image_path);
     
     // Delete the actual file using PathResolver
     let full_path = state.path_resolver.resolve_relative_path(&image_path);
+    println!("🔄 Backend: Resolving file path: {} -> {}", image_path, full_path.display());
     
     if full_path.exists() {
-        fs::remove_file(full_path)
-            .map_err(|e| format!("Failed to delete image file: {}", e))?;
+        println!("🔄 Backend: File exists, attempting to delete...");
+        fs::remove_file(&full_path)
+            .map_err(|e| {
+                let error_msg = format!("Failed to delete image file: {}", e);
+                println!("❌ Backend: {}", error_msg);
+                error_msg
+            })?;
+        println!("✅ Backend: File deleted successfully");
+    } else {
+        println!("⚠️ Backend: File doesn't exist at path: {}", full_path.display());
     }
     
+    println!("✅ Backend: Image deletion completed successfully");
     Ok(())
 }
 

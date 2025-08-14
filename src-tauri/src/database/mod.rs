@@ -1555,23 +1555,37 @@ impl DatabaseManager {
     }
     
     pub fn delete_problem_image(&mut self, image_id: &str) -> anyhow::Result<String> {
+        println!("🗃️ Database: Attempting to delete image with id: {}", image_id);
+        
         // First get the image path so we can delete the file
         let image_path: String = self.connection.query_row(
             "SELECT image_path FROM problem_images WHERE id = ?1",
             [image_id],
             |row| row.get(0),
-        )?;
+        ).map_err(|e| {
+            println!("❌ Database: Failed to find image with id '{}': {}", image_id, e);
+            e
+        })?;
+        
+        println!("✅ Database: Found image path: {}", image_path);
         
         // Delete from database
         let rows_affected = self.connection.execute(
             "DELETE FROM problem_images WHERE id = ?1",
             [image_id]
-        )?;
+        ).map_err(|e| {
+            println!("❌ Database: Failed to execute delete query: {}", e);
+            e
+        })?;
+        
+        println!("🔄 Database: Delete query executed, rows_affected: {}", rows_affected);
         
         if rows_affected == 0 {
+            println!("❌ Database: No rows were affected - image not found");
             return Err(anyhow::anyhow!("Image not found"));
         }
         
+        println!("✅ Database: Image deleted successfully from database");
         Ok(image_path)
     }
     
