@@ -4,12 +4,14 @@
 mod commands;
 mod database;
 mod models;
+mod path_resolver;
 
 use tauri::Manager;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use models::AppState;
 use database::DatabaseManager;
+use path_resolver::PathResolver;
 
 /// Get the app data directory based on environment
 /// Development: uses project_root/dev-data/
@@ -210,6 +212,19 @@ async fn main() {
             eprintln!("DSA Learning App: App data directory initialized: {}", app_data_dir.display());
             eprintln!("DSA Learning App: Development mode: {}", cfg!(debug_assertions));
             
+            // Initialize path resolver
+            let app_handle = app.handle().clone();
+            let path_resolver = match PathResolver::new(&app_handle) {
+                Ok(resolver) => {
+                    eprintln!("DSA Learning App: Path resolver initialized successfully");
+                    Arc::new(resolver)
+                }
+                Err(e) => {
+                    eprintln!("DSA Learning App: FATAL - Failed to initialize path resolver: {}", e);
+                    panic!("Failed to initialize path resolver: {}", e);
+                }
+            };
+            
             // Now initialize database with proper app data directory
             eprintln!("DSA Learning App: Initializing database...");
             
@@ -246,6 +261,7 @@ async fn main() {
                 current_timer: Arc::new(Mutex::new(None)),
                 recording_state: Arc::new(Mutex::new(None)),
                 audio_thread_sender: Arc::new(Mutex::new(None)),
+                path_resolver,
             };
             
             app.manage(app_state);

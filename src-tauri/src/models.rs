@@ -3,6 +3,7 @@ use std::sync::mpsc;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 use crate::database::DatabaseManager;
+use crate::path_resolver::PathResolver;
 
 // Audio command types (moved here to avoid circular dependency)
 #[derive(Debug)]
@@ -23,6 +24,7 @@ pub struct AppState {
     pub current_timer: Arc<Mutex<Option<TimerSession>>>,
     pub recording_state: Arc<Mutex<Option<RecordingSession>>>,
     pub audio_thread_sender: Arc<Mutex<Option<mpsc::Sender<AudioCommand>>>>,
+    pub path_resolver: Arc<PathResolver>,
 }
 
 // Recording session state (without the non-Send cpal Stream)
