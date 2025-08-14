@@ -1,26 +1,23 @@
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
-/// Production-ready path resolver that uses Tauri's native path resolution
-/// instead of std::env::current_dir() which doesn't work in production bundles
+/// Production-ready path resolver that handles development vs production paths
+/// Development uses local dev-data folder, production uses proper app data directory
 pub struct PathResolver {
     app_data_dir: PathBuf,
 }
 
 impl PathResolver {
-    /// Create a new path resolver using Tauri's app handle
-    pub fn new(app_handle: &AppHandle) -> Result<Self, String> {
+    /// Create a new path resolver
+    pub fn new(_app_handle: &AppHandle) -> Result<Self, String> {
         let app_data_dir = if cfg!(debug_assertions) {
             // Development: use project dev-data folder
             std::env::current_dir()
                 .map_err(|e| format!("Failed to get current directory: {}", e))?
                 .join("dev-data")
         } else {
-            // Production: use proper app data directory via Tauri
-            app_handle
-                .path()
-                .app_data_dir()
-                .map_err(|e| format!("Failed to get app data directory: {}", e))?
+            // Production: use proper app data directory
+            Self::get_production_app_data_dir()?
         };
 
         // Ensure the directory exists
@@ -28,6 +25,26 @@ impl PathResolver {
             .map_err(|e| format!("Failed to create app data directory: {}", e))?;
 
         Ok(Self { app_data_dir })
+    }
+
+    /// Get production app data directory using dirs crate
+    fn get_production_app_data_dir() -> Result<PathBuf, String> {
+        let app_data_dir = if cfg!(target_os = "macos") {
+            dirs::data_dir()
+                .ok_or("Failed to get data directory")?
+                .join("com.dsalearning.dsaapp")
+        } else if cfg!(target_os = "windows") {
+            dirs::data_dir()
+                .ok_or("Failed to get data directory")?
+                .join("com.dsalearning.dsaapp")
+        } else {
+            // Linux
+            dirs::data_local_dir()
+                .ok_or("Failed to get local data directory")?
+                .join("com.dsalearning.dsaapp")
+        };
+
+        Ok(app_data_dir)
     }
 
     /// Get the base app data directory
@@ -109,15 +126,15 @@ pub fn get_app_data_dir_fallback() -> PathBuf {
                 .expect("Failed to get home directory")
                 .join("Library")
                 .join("Application Support")
-                .join("com.dsalearning.app")
+                .join("com.dsalearning.dsaapp")
         } else if cfg!(target_os = "windows") {
             dirs::data_dir()
                 .expect("Failed to get data directory")
-                .join("com.dsalearning.app")
+                .join("com.dsalearning.dsaapp")
         } else {
             dirs::data_local_dir()
                 .expect("Failed to get local data directory")
-                .join("com.dsalearning.app")
+                .join("com.dsalearning.dsaapp")
         }
     }
 }

@@ -137,7 +137,13 @@ async fn main() {
             commands::audio::get_card_recordings,
             commands::audio::get_audio_data,
             commands::audio::get_current_dir,
-            commands::audio::delete_recording
+            commands::audio::delete_recording,
+            // Debug commands
+            commands::debug::debug_paths,
+            commands::debug::debug_recording_paths,
+            commands::debug::debug_audio_loading,
+            commands::debug::get_absolute_path,
+            commands::debug::check_microphone_permission
         ]);
     
     log_to_file("DSA Learning App: Command handlers registered");
