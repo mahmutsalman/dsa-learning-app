@@ -182,3 +182,9 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 *.lnk
+
+# Development and debugging files
+ICON_SYSTEM.md
+debug-paths.html
+build-dmg.sh
+BUILD_GUIDE.md

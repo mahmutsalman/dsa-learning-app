@@ -52,9 +52,10 @@ export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({
           
           if (strategy === 'convertFileSrc') {
             // Strategy 1: Use Tauri's convertFileSrc (faster, less memory)
-            // Convert relative path to absolute path for convertFileSrc
-            const currentDir = await invoke<string>('get_current_dir');
-            const absolutePath = `${currentDir}/${recording.filepath}`;
+            // Get proper absolute path from PathResolver
+            const absolutePath = await invoke<string>('get_absolute_path', { 
+              relativePath: recording.filepath 
+            });
             audioUrl = convertFileSrc(absolutePath);
           } else {
             // Strategy 2: Use data URL (more compatible, higher memory usage)
