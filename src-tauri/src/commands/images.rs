@@ -5,49 +5,22 @@ use std::fs;
 use tauri::State;
 use uuid::Uuid;
 
-/// Get the app data directory based on environment
-/// Development: uses project_root/dev-data/
-/// Production: would use app data directory (need app context for that)
+/// Legacy fallback - will be removed once all functions use PathResolver
+/// DO NOT USE - use state.path_resolver instead
+#[deprecated(note = "Use state.path_resolver instead")]
 fn get_app_data_dir() -> PathBuf {
-    if cfg!(debug_assertions) {
-        // Development: use project dev-data folder (outside watched directories)
-        std::env::current_dir()
-            .expect("Failed to get current directory")
-            .join("dev-data")
-    } else {
-        // Production: This is a fallback, but ideally we'd use app.path_resolver()
-        // For now, use a sensible default - this should be updated when we have app context
-        if cfg!(target_os = "macos") {
-            dirs::home_dir()
-                .expect("Failed to get home directory")
-                .join("Library")
-                .join("Application Support")
-                .join("com.dsalearning.app")
-        } else if cfg!(target_os = "windows") {
-            dirs::data_dir()
-                .expect("Failed to get data directory")
-                .join("com.dsalearning.app")
-        } else {
-            dirs::data_local_dir()
-                .expect("Failed to get local data directory")
-                .join("com.dsalearning.app")
-        }
-    }
+    crate::path_resolver::get_app_data_dir_fallback()
 }
 
-// Helper function to get the images directory with cross-platform support
-fn get_images_dir() -> anyhow::Result<PathBuf> {
-    let app_data_dir = get_app_data_dir().join("images");
-    
-    // Create directory if it doesn't exist
-    fs::create_dir_all(&app_data_dir)?;
-    
-    Ok(app_data_dir)
+// Helper function to get the images directory using PathResolver
+fn get_images_dir_with_resolver(path_resolver: &crate::path_resolver::PathResolver) -> anyhow::Result<PathBuf> {
+    path_resolver.ensure_subdir("images").map_err(|e| anyhow::anyhow!(e))
 }
 
-// Helper function to ensure problem-specific directory exists
-fn ensure_problem_dir(problem_id: &str) -> anyhow::Result<PathBuf> {
-    let problem_dir = get_images_dir()?.join(format!("problem_{}", problem_id));
+// Helper function to ensure problem-specific directory exists using PathResolver
+fn ensure_problem_dir_with_resolver(path_resolver: &crate::path_resolver::PathResolver, problem_id: &str) -> anyhow::Result<PathBuf> {
+    let images_dir = get_images_dir_with_resolver(path_resolver)?;
+    let problem_dir = images_dir.join(format!("problem_{}", problem_id));
     fs::create_dir_all(&problem_dir)?;
     Ok(problem_dir)
 }
@@ -94,7 +67,7 @@ pub async fn save_problem_image(
     let filename = format!("{}.{}", Uuid::new_v4(), format);
     
     // Ensure problem directory exists
-    let problem_dir = ensure_problem_dir(&request.problem_id)
+    let problem_dir = ensure_problem_dir_with_resolver(&state.path_resolver, &request.problem_id)
         .map_err(|e| format!("Failed to create problem directory: {}", e))?;
     
     // Full path for file storage
@@ -104,12 +77,8 @@ pub async fn save_problem_image(
     fs::write(&full_path, decoded_data)
         .map_err(|e| format!("Failed to save image file: {}", e))?;
     
-    // Create relative path for database storage (environment-aware)
-    let relative_path = if cfg!(debug_assertions) {
-        format!("dev-data/images/problem_{}/{}", request.problem_id, filename)
-    } else {
-        format!("app-data/images/problem_{}/{}", request.problem_id, filename)
-    };
+    // Create relative path for database storage using PathResolver
+    let relative_path = state.path_resolver.to_relative_path(&full_path);
     
     // Save to database
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
@@ -144,33 +113,8 @@ pub async fn delete_problem_image(
     let image_path = db.delete_problem_image(&request.image_id)
         .map_err(|e| format!("Failed to delete image from database: {}", e))?;
     
-    // Delete the actual file - handle environment-aware path resolution
-    let full_path = if image_path.starts_with("dev-data/") || image_path.starts_with("app-data/") || image_path.starts_with("images/") {
-        // Convert relative path to absolute path based on environment
-        if image_path.starts_with("dev-data/") {
-            // Development path: project_root/dev-data/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&image_path)
-        } else if image_path.starts_with("app-data/") {
-            // Production path: resolve to actual app data directory
-            get_app_data_dir().join(&image_path[9..]) // Remove "app-data/" prefix
-        } else if image_path.starts_with("images/") {
-            // Legacy path: attachments/images/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join("attachments")
-                .join(&image_path)
-        } else {
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&image_path)
-        }
-    } else {
-        std::env::current_dir()
-            .map_err(|e| e.to_string())?
-            .join(&image_path)
-    };
+    // Delete the actual file using PathResolver
+    let full_path = state.path_resolver.resolve_relative_path(&image_path);
     
     if full_path.exists() {
         fs::remove_file(full_path)
@@ -192,34 +136,9 @@ pub async fn update_image_positions(
 
 // Helper command to get the full path for an image (for displaying in frontend)
 #[tauri::command]
-pub async fn get_image_path(relative_path: String) -> Result<String, String> {
-    // Handle environment-aware path resolution
-    let full_path = if relative_path.starts_with("dev-data/") || relative_path.starts_with("app-data/") || relative_path.starts_with("images/") {
-        // Convert relative path to absolute path based on environment
-        if relative_path.starts_with("dev-data/") {
-            // Development path: project_root/dev-data/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&relative_path)
-        } else if relative_path.starts_with("app-data/") {
-            // Production path: resolve to actual app data directory
-            get_app_data_dir().join(&relative_path[9..]) // Remove "app-data/" prefix
-        } else if relative_path.starts_with("images/") {
-            // Legacy path: attachments/images/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join("attachments")
-                .join(&relative_path)
-        } else {
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&relative_path)
-        }
-    } else {
-        std::env::current_dir()
-            .map_err(|e| e.to_string())?
-            .join(&relative_path)
-    };
+pub async fn get_image_path(state: State<'_, AppState>, relative_path: String) -> Result<String, String> {
+    // Use PathResolver to handle environment-aware path resolution
+    let full_path = state.path_resolver.resolve_relative_path(&relative_path);
     
     // Convert to string and use the asset protocol
     let path_str = full_path.to_string_lossy().to_string();
@@ -236,34 +155,9 @@ pub async fn get_image_path(relative_path: String) -> Result<String, String> {
 
 // Alternative: Get image as base64 data URL
 #[tauri::command]
-pub async fn get_image_data_url(relative_path: String) -> Result<String, String> {
-    // Handle environment-aware path resolution
-    let full_path = if relative_path.starts_with("dev-data/") || relative_path.starts_with("app-data/") || relative_path.starts_with("images/") {
-        // Convert relative path to absolute path based on environment
-        if relative_path.starts_with("dev-data/") {
-            // Development path: project_root/dev-data/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&relative_path)
-        } else if relative_path.starts_with("app-data/") {
-            // Production path: resolve to actual app data directory
-            get_app_data_dir().join(&relative_path[9..]) // Remove "app-data/" prefix
-        } else if relative_path.starts_with("images/") {
-            // Legacy path: attachments/images/...
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join("attachments")
-                .join(&relative_path)
-        } else {
-            std::env::current_dir()
-                .map_err(|e| e.to_string())?
-                .join(&relative_path)
-        }
-    } else {
-        std::env::current_dir()
-            .map_err(|e| e.to_string())?
-            .join(&relative_path)
-    };
+pub async fn get_image_data_url(state: State<'_, AppState>, relative_path: String) -> Result<String, String> {
+    // Use PathResolver to handle environment-aware path resolution
+    let full_path = state.path_resolver.resolve_relative_path(&relative_path);
     
     // Read the image file
     let image_data = fs::read(&full_path)

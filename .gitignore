@@ -1,59 +1,184 @@
 # Dependencies
 node_modules/
 .npm
+.pnpm/
+.yarn/
+.pnp
+.pnp.js
+.yarn/build-state.yml
+.yarn/install-state.gz
 
 # Build outputs
 /dist/
-/target/
+/build/
+/out/
 
 # Environment variables
 .env
 .env.local
-.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE files
+# IDE and Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.vimrc
+.vim/
+.emacs.d/
+*.sublime-project
+*.sublime-workspace
 
 # OS files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+*.tmp
+*.temp
 
 # Runtime data
 *.pid
 *.seed
 *.pid.lock
 
-# Tauri build files
+# Tauri-specific patterns
 src-tauri/target/
 src-tauri/gen/
+WixTools/
 
-# Database and data files
-data/
+# Database files
 *.db
 *.db-shm
 *.db-wal
+*.sqlite
+*.sqlite3
 
-# Development data (ignored in version control)
+# Development data and resources (project-specific)
 dev-data/
+localResources/
 
-# Temporary files
-*.tmp
-*.temp
-
-# Backup files from previous implementation
-localResources_backup/
-
-# Development and testing utilities
-add-sample-data.js
-check-database-status.js
+# Migration and test scripts (development utilities)
+migrate-database*.js
+migrate-database*.cjs
 test-database.js
 test-sample-data.js
+add-sample-data.js
+check-database-status.js
+verify-migration.cjs
+
+# Audio/media files in development
+*.wav
+*.mp3
+*.mp4
+*.avi
+recordings/
+
+# Image uploads/generated content
+uploads/
+generated/
+user-content/
+
+# Backup files
+*.backup
+*.bak
+*_backup
+*.orig
+
+# Claude AI context files (development assistance)
+.claude/
+
+# MacOS specific
+.AppleDouble
+.LSOverride
+Icon?
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk

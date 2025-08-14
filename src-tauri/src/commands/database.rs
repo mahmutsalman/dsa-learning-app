@@ -62,8 +62,8 @@ pub async fn update_problem(
 
 #[tauri::command]
 pub async fn delete_problem(
-    state: State<'_, AppState>,
-    id: String,
+    _state: State<'_, AppState>,
+    _id: String,
 ) -> Result<String, String> {
     // TODO: Implement delete_problem in DatabaseManager
     Ok("Problem deleted successfully".to_string())

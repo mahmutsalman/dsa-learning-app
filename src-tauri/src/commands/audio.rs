@@ -164,7 +164,6 @@ fn start_recording_stream(
     
     // Create shared state for pause/resume
     let state_arc = Arc::new(Mutex::new(AudioStreamState::Recording));
-    let state_clone = Arc::clone(&state_arc);
     
     // Get the default input configuration
     let config = device.default_input_config()
@@ -256,43 +255,17 @@ fn start_recording_stream(
     Ok((stream, writer_arc, state_arc))
 }
 
-/// Get the app data directory based on environment
-/// Development: uses project_root/dev-data/
-/// Production: would use app data directory (need app context for that)
+/// Legacy fallback - will be removed once all functions use PathResolver
+/// DO NOT USE - use state.path_resolver instead
+#[deprecated(note = "Use state.path_resolver instead")]
 fn get_app_data_dir() -> PathBuf {
-    if cfg!(debug_assertions) {
-        // Development: use project dev-data folder (outside watched directories)
-        std::env::current_dir()
-            .expect("Failed to get current directory")
-            .join("dev-data")
-    } else {
-        // Production: This is a fallback, but ideally we'd use app.path_resolver()
-        // For now, use a sensible default - this should be updated when we have app context
-        if cfg!(target_os = "macos") {
-            dirs::home_dir()
-                .expect("Failed to get home directory")
-                .join("Library")
-                .join("Application Support")
-                .join("com.dsalearning.app")
-        } else if cfg!(target_os = "windows") {
-            dirs::data_dir()
-                .expect("Failed to get data directory")
-                .join("com.dsalearning.app")
-        } else {
-            dirs::data_local_dir()
-                .expect("Failed to get local data directory")
-                .join("com.dsalearning.app")
-        }
-    }
+    crate::path_resolver::get_app_data_dir_fallback()
 }
 
 #[tauri::command]
 pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Result<RecordingInfo, String> {
-    // Create recordings directory using environment-aware path
-    let app_data_dir = get_app_data_dir();
-    let recordings_dir = app_data_dir.join("recordings");
-    
-    std::fs::create_dir_all(&recordings_dir)
+    // Create recordings directory using the proper path resolver
+    let recordings_dir = state.path_resolver.ensure_subdir("recordings")
         .map_err(|e| format!("Failed to create recordings directory: {}", e))?;
     
     let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
@@ -326,11 +299,7 @@ pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Res
     
     Ok(RecordingInfo {
         filename: filename.clone(),
-        filepath: if cfg!(debug_assertions) {
-            format!("dev-data/recordings/{}", filename)
-        } else {
-            format!("app-data/recordings/{}", filename)
-        },
+        filepath: state.path_resolver.to_relative_path(&filepath),
     })
 }
 
@@ -351,12 +320,10 @@ pub async fn stop_recording(state: State<'_, AppState>, _card_id: String) -> Res
     // Calculate actual duration
     let duration = (Utc::now() - recording_session.start_time).num_seconds() as i32;
     
-    // Use recording session data
-    let relative_path = if cfg!(debug_assertions) {
-        format!("dev-data/recordings/{}", recording_session.filename)
-    } else {
-        format!("app-data/recordings/{}", recording_session.filename)
-    };
+    // Use recording session data and get proper relative path
+    let recordings_dir = state.path_resolver.get_recordings_dir();
+    let full_path = recordings_dir.join(&recording_session.filename);
+    let relative_path = state.path_resolver.to_relative_path(&full_path);
     
     // Save recording to database
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
@@ -456,14 +423,13 @@ pub async fn get_card_recordings(state: State<'_, AppState>, card_id: String) ->
 }
 
 #[tauri::command]
-pub async fn get_audio_data(filepath: String) -> Result<String, String> {
-    // Convert relative path to absolute path
-    let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
-    let absolute_path = current_dir.join(&filepath);
+pub async fn get_audio_data(state: State<'_, AppState>, filepath: String) -> Result<String, String> {
+    // Use the proper path resolver to convert relative path to absolute path
+    let absolute_path = state.path_resolver.resolve_relative_path(&filepath);
     
     // Read the audio file
     let audio_data = fs::read(&absolute_path)
-        .map_err(|e| format!("Failed to read audio file: {}", e))?;
+        .map_err(|e| format!("Failed to read audio file '{}': {}", absolute_path.display(), e))?;
     
     // Convert to base64 data URL
     let base64_data = general_purpose::STANDARD.encode(&audio_data);
@@ -489,16 +455,8 @@ pub async fn delete_recording(state: State<'_, AppState>, recording_id: String) 
     };
     drop(db);
     
-    // Convert relative path to absolute path for file deletion
-    let app_data_dir = get_app_data_dir();
-    let file_path = if recording.filepath.starts_with("dev-data/") || recording.filepath.starts_with("app-data/") {
-        // Strip the prefix and use our app_data_dir
-        let relative_path = recording.filepath.split('/').skip(1).collect::<Vec<&str>>().join("/");
-        app_data_dir.join(relative_path)
-    } else {
-        // Assume it's already relative to app_data_dir
-        app_data_dir.join(&recording.filepath)
-    };
+    // Convert relative path to absolute path for file deletion using proper path resolver
+    let file_path = state.path_resolver.resolve_relative_path(&recording.filepath);
     
     // Attempt to delete the physical file (don't fail if file doesn't exist)
     let file_deleted = match fs::remove_file(&file_path) {
