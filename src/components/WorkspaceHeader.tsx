@@ -331,20 +331,6 @@ export function WorkspaceHeader({
     return noSpacing ? formatted.replace(/\s/g, '') : formatted;
   };
 
-  // Debug logging in development
-  if ((import.meta as any).env?.MODE === 'development') {
-    console.log('WorkspaceHeader Debug:', {
-      screenSize,
-      windowWidth: window.innerWidth,
-      availableWidth,
-      timerConfig,
-      timerState: timer.timerState,
-      totalDuration: timer.totalDuration,
-      showTimerDropdown,
-      showRecordingDropdown,
-      dropdownVisibilityCondition: screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl'
-    });
-  }
 
   return (
     <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative">

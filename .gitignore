@@ -95,6 +95,16 @@ jspm_packages/
 .cache
 .parcel-cache
 
+# Vite cache and build artifacts
+.vite/
+.rollup.cache/
+
+# Turborepo cache
+.turbo/
+
+# SWC cache
+.swc/
+
 # Next.js build output
 .next
 
@@ -125,6 +135,22 @@ temp/
 src-tauri/target/
 src-tauri/gen/
 WixTools/
+
+# Tauri build artifacts and bundles
+*.app
+*.deb
+*.AppImage
+*.dmg
+*.msi
+*.msm
+*.msp
+*.rpm
+*.pkg
+bundle/
+
+# Rust-specific patterns
+**/target/
+**/*.rs.bk
 
 # Database files
 *.db
@@ -166,6 +192,32 @@ user-content/
 
 # Claude AI context files (development assistance)
 .claude/
+
+# Additional IDE and editor patterns
+.fleet/
+.vscode-insiders/
+.history/
+**/.vscode/settings.json
+**/.vscode/launch.json
+**/.vscode/extensions.json
+
+# JetBrains IDEs (additional patterns)
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.sln.docstates
+
+# Additional cache directories
+.cache/
+.temp/
+.tmp/
 
 # MacOS specific
 .AppleDouble

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ProblemImage } from '../types';
 import { XMarkIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import ConfirmationModal from './ConfirmationModal';
 
 interface ImageThumbnailsProps {
   problemId: string;
@@ -14,6 +15,11 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [imageDataUrls, setImageDataUrls] = useState<Map<string, string>>(new Map());
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    imageId: string | null;
+    imageName: string;
+  }>({ isOpen: false, imageId: null, imageName: '' });
 
   // Load images when problem changes
   useEffect(() => {
@@ -46,14 +52,30 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
     }
   };
 
-  const handleDeleteImage = async (imageId: string) => {
-    if (!confirm('Are you sure you want to delete this image?')) {
-      return;
-    }
+  const openDeleteConfirmation = (imageId: string) => {
+    const image = images.find(img => img.id === imageId);
+    const imageName = image?.caption || 'this image';
+    
+    setDeleteConfirmation({
+      isOpen: true,
+      imageId,
+      imageName
+    });
+  };
+
+  const closeDeleteConfirmation = () => {
+    setDeleteConfirmation({ isOpen: false, imageId: null, imageName: '' });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { imageId } = deleteConfirmation;
+    if (!imageId) return;
+
+    console.log('🗑️ Confirmed deletion for imageId:', imageId);
 
     try {
       await invoke('delete_problem_image', { 
-        request: { image_id: imageId } 
+        request: { image_id: imageId }
       });
       
       // Remove from local state
@@ -65,7 +87,19 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
       });
     } catch (error) {
       console.error('Failed to delete image:', error);
-      alert('Failed to delete image');
+      alert(`Failed to delete image: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  const handleImageClick = (imageId: string, imageDataUrl?: string) => {
+    if (isEditing) {
+      // In edit mode, clicking the image triggers deletion confirmation
+      openDeleteConfirmation(imageId);
+    } else {
+      // In view mode, clicking the image opens the full-size modal
+      if (imageDataUrl) {
+        setSelectedImage(imageDataUrl);
+      }
     }
   };
 
@@ -101,8 +135,13 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
             >
               {/* Thumbnail image */}
               <div 
-                className="aspect-square cursor-pointer"
-                onClick={() => setSelectedImage(imageDataUrl || '')}
+                className={`aspect-square cursor-pointer ${
+                  isEditing 
+                    ? 'hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors' 
+                    : ''
+                }`}
+                onClick={() => handleImageClick(image.id, imageDataUrl)}
+                title={isEditing ? 'Click to delete image' : 'Click to view full size'}
               >
                 {imageDataUrl ? (
                   <img 
@@ -125,14 +164,22 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
               {isEditing && (
                 <button
                   onClick={(e) => {
+                    console.log('🖱️ Delete button clicked for image:', image.id);
+                    e.preventDefault();
                     e.stopPropagation();
-                    handleDeleteImage(image.id);
+                    openDeleteConfirmation(image.id);
                   }}
-                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
                   title="Delete image"
+                  style={{ pointerEvents: 'auto' }}
                 >
-                  <XMarkIcon className="h-3 w-3" />
+                  <XMarkIcon className="h-3 w-3" style={{ pointerEvents: 'none' }} />
                 </button>
+              )}
+              
+              {/* Edit mode overlay indicator */}
+              {isEditing && (
+                <div className="absolute inset-0 border-2 border-red-300 dark:border-red-600 rounded-lg opacity-0 group-hover:opacity-50 transition-opacity pointer-events-none" />
               )}
 
               {/* Caption */}
@@ -168,6 +215,18 @@ export default function ImageThumbnails({ problemId, isEditing, className = '' }
           </div>
         </div>
       )}
+
+      {/* Delete confirmation modal */}
+      <ConfirmationModal
+        isOpen={deleteConfirmation.isOpen}
+        onClose={closeDeleteConfirmation}
+        onConfirm={handleConfirmDelete}
+        title="Delete Image"
+        message={`Are you sure you want to delete ${deleteConfirmation.imageName}? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }
