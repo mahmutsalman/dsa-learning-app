@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { MicrophoneIcon, CalendarDaysIcon, PlayIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useGlobalAudioPlayerContext } from '../contexts/GlobalAudioPlayerContext';
 
 interface Recording {
   id: string;
@@ -19,15 +20,17 @@ interface RecordingHistoryProps {
   cardId: string | undefined;
   isOpen: boolean;
   onClose: () => void;
-  onRecordingPlay?: (recording: Recording) => void; // Callback to play recording
 }
 
-export default function RecordingHistory({ cardId, isOpen, onClose, onRecordingPlay }: RecordingHistoryProps) {
+export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingHistoryProps) {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null); // Track which recording is being deleted
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; recording: Recording | null }>({ isOpen: false, recording: null });
+  
+  // Use global audio player context
+  const { playRecording } = useGlobalAudioPlayerContext();
 
   useEffect(() => {
     if (isOpen && cardId) {
@@ -136,6 +139,18 @@ export default function RecordingHistory({ cardId, isOpen, onClose, onRecordingP
     setDeleteConfirm({ isOpen: false, recording: null });
   };
 
+  const handlePlayRecording = (recording: Recording) => {
+    // Convert Recording to PlayingRecording format for the global player
+    playRecording({
+      id: recording.id,
+      filename: recording.filename,
+      filepath: recording.filepath,
+      duration: recording.duration,
+      file_size: recording.file_size,
+      created_at: recording.created_at,
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -237,15 +252,13 @@ export default function RecordingHistory({ cardId, isOpen, onClose, onRecordingP
                     </div>
 
                     <div className="flex items-center space-x-2 ml-4">
-                      {onRecordingPlay && (
-                        <button
-                          onClick={() => onRecordingPlay(recording)}
-                          className="p-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                          title="Play recording"
-                        >
-                          <PlayIcon className="h-4 w-4" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handlePlayRecording(recording)}
+                        className="p-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                        title="Play recording"
+                      >
+                        <PlayIcon className="h-4 w-4" />
+                      </button>
                       <button
                         onClick={() => handleDeleteClick(recording)}
                         disabled={deleting === recording.id}

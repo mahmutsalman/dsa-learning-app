@@ -1,0 +1,102 @@
+/* Global Audio Player Custom Styles */
+
+.global-audio-player .rhap_container {
+  background-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.global-audio-player .rhap_main {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 1.5rem !important;
+}
+
+.global-audio-player .rhap_controls-section {
+  margin: 0 !important;
+}
+
+.global-audio-player .rhap_main-controls {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+}
+
+.global-audio-player .rhap_play-pause-button {
+  width: 56px !important;
+  height: 56px !important;
+  font-size: 24px !important;
+  background-color: rgb(37 99 235) !important;
+  border-radius: 50% !important;
+  color: white !important;
+  border: none !important;
+}
+
+.global-audio-player .rhap_play-pause-button:hover {
+  background-color: rgb(29 78 216) !important;
+}
+
+.global-audio-player .rhap_skip-button {
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 20px !important;
+  background-color: rgb(75 85 99) !important;
+  border-radius: 50% !important;
+  color: white !important;
+  border: none !important;
+}
+
+.global-audio-player .rhap_skip-button:hover {
+  background-color: rgb(55 65 81) !important;
+}
+
+.global-audio-player .rhap_progress-section {
+  width: 100% !important;
+  max-width: 600px !important;
+  margin: 0 !important;
+}
+
+.global-audio-player .rhap_progress-container {
+  background-color: rgb(229 231 235) !important;
+  height: 8px !important;
+  border-radius: 4px !important;
+  margin: 0 1rem !important;
+}
+
+.global-audio-player .rhap_progress-bar {
+  background-color: rgb(37 99 235) !important;
+  border-radius: 4px !important;
+}
+
+.global-audio-player .rhap_progress-indicator {
+  width: 20px !important;
+  height: 20px !important;
+  background-color: rgb(37 99 235) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.global-audio-player .rhap_time {
+  color: rgb(75 85 99) !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  font-family: ui-monospace, monospace !important;
+}
+
+.global-audio-player .rhap_current-time {
+  margin-right: 0 !important;
+}
+
+.global-audio-player .rhap_total-time {
+  margin-left: 0 !important;
+}
+
+/* Dark mode styles */
+.dark .global-audio-player .rhap_progress-container {
+  background-color: rgb(55 65 81) !important;
+}
+
+.dark .global-audio-player .rhap_time {
+  color: rgb(156 163 175) !important;
+}

@@ -11,6 +11,18 @@
 
 /* Custom scrollbar styles */
 @layer utilities {
+  /* Custom backdrop blur utility */
+  .backdrop-blur-sm {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  
+  .backdrop-blur-md {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  /* Scroll utilities */
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: #6b7280 #f3f4f6;
@@ -61,33 +73,6 @@
 }
 
 /* Quill styles moved to component level to prevent conflicts */
-
-/* Audio player dark theme */
-.dark .rhap_container {
-  background-color: #1f2937 !important;
-  color: #f9fafb !important;
-}
-
-.dark .rhap_time {
-  color: #d1d5db !important;
-}
-
-.dark .rhap_progress-bar {
-  background-color: #374151 !important;
-}
-
-.dark .rhap_progress-filled,
-.dark .rhap_progress-indicator {
-  background-color: #3b82f6 !important;
-}
-
-.dark .rhap_button-clear {
-  color: #9ca3af !important;
-}
-
-.dark .rhap_button-clear:hover {
-  color: #d1d5db !important;
-}
 
 /* Resizable Monaco Editor Styles */
 .resizable-monaco-container {
@@ -276,6 +261,10 @@
     -webkit-hyphens: auto;
     -ms-hyphens: auto;
     overflow-wrap: anywhere;
+  }
+  
+  .hover\:scale-102:hover {
+    transform: scale(1.02);
   }
 }
 
@@ -1029,7 +1018,7 @@ textarea.text-wrap-responsive {
   }
 }
 
-/* Modal animations */
+/* Enhanced Modal animations */
 @keyframes modalEnter {
   from {
     opacity: 0;
@@ -1049,4 +1038,18 @@ textarea.text-wrap-responsive {
   to {
     opacity: 1;
   }
+}
+
+/* Pulse animation for loading dots */
+@keyframes loadingPulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse-custom {
+  animation: loadingPulse 1.5s ease-in-out infinite;
 }
