@@ -152,7 +152,7 @@ fn start_recording_stream(
     let spec = WavSpec {
         channels,
         sample_rate,
-        bits_per_sample: 16,
+        bits_per_sample: 24, // Improved bit depth for better audio quality
         sample_format: SampleFormat::Int,
     };
     
@@ -184,9 +184,11 @@ fn start_recording_stream(
                             if let Ok(mut writer_guard) = writer_clone.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
                                     for &sample in data {
-                                        // Convert f32 sample to i16
-                                        let sample_i16 = (sample * i16::MAX as f32) as i16;
-                                        let _ = writer.write_sample(sample_i16);
+                                        // Convert f32 sample to i32 for 24-bit recording with improved quality
+                                        // Apply basic gain normalization to improve voice recording quality
+                                        let normalized_sample = sample.clamp(-1.0, 1.0);
+                                        let sample_i32 = (normalized_sample * ((1i32 << 23) - 1) as f32) as i32;
+                                        let _ = writer.write_sample(sample_i32);
                                     }
                                 }
                             }
@@ -210,7 +212,9 @@ fn start_recording_stream(
                             if let Ok(mut writer_guard) = writer_clone_i16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
                                     for &sample in data {
-                                        let _ = writer.write_sample(sample);
+                                        // Convert i16 to i32 for 24-bit recording
+                                        let sample_i32 = (sample as i32) << 8; // Scale up to 24-bit range
+                                        let _ = writer.write_sample(sample_i32);
                                     }
                                 }
                             }
@@ -233,9 +237,9 @@ fn start_recording_stream(
                             if let Ok(mut writer_guard) = writer_clone_u16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
                                     for &sample in data {
-                                        // Convert u16 to i16
-                                        let sample_i16 = (sample as i32 - 32768) as i16;
-                                        let _ = writer.write_sample(sample_i16);
+                                        // Convert u16 to i32 for 24-bit recording
+                                        let sample_i32 = (sample as i32 - 32768) << 8; // Convert to signed and scale to 24-bit
+                                        let _ = writer.write_sample(sample_i32);
                                     }
                                 }
                             }
@@ -269,7 +273,9 @@ pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Res
         .map_err(|e| format!("Failed to create recordings directory: {}", e))?;
     
     let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
-    let filename = format!("recording_{}.wav", timestamp);
+    // Include card ID in filename to prevent conflicts between cards
+    let card_prefix = &card_id[..8.min(card_id.len())]; // Use first 8 chars of card ID for brevity
+    let filename = format!("recording_{}_{}.wav", card_prefix, timestamp);
     let filepath = recordings_dir.join(&filename);
     
     // Store recording session in AppState
@@ -288,11 +294,11 @@ pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Res
     // Start real audio recording
     let audio_sender = ensure_audio_thread_started(&state)?;
     
-    // Send start recording command to audio thread
+    // Send start recording command to audio thread with improved audio settings
     audio_sender.send(AudioCommand::StartRecording {
         filepath: filepath.to_string_lossy().to_string(),
-        sample_rate: 44100, // Standard CD quality
-        channels: 1, // Mono recording for voice
+        sample_rate: 48000, // Professional audio quality (48kHz)
+        channels: 1, // Mono recording for voice (optimal for speech)
     }).map_err(|e| format!("Failed to send start command to audio thread: {}", e))?;
     
     println!("Started real audio recording: {}", filepath.display());
@@ -443,6 +449,7 @@ pub async fn get_current_dir() -> Result<String, String> {
     let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
     Ok(current_dir.to_string_lossy().to_string())
 }
+
 
 #[tauri::command]
 pub async fn delete_recording(state: State<'_, AppState>, recording_id: String) -> Result<String, String> {

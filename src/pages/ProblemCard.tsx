@@ -19,7 +19,6 @@ import { useWorkspaceLayout } from '../components/workspace/useWorkspaceLayout';
 import DeleteCardModal from '../components/DeleteCardModal';
 import SessionHistory from '../components/SessionHistory';
 import RecordingHistory from '../components/RecordingHistory';
-import GlobalAudioPlayer from '../components/GlobalAudioPlayer';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
 import { useRecording } from '../hooks/useRecording';
@@ -36,7 +35,6 @@ export default function ProblemCard() {
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
   const [recordingHistory, setRecordingHistory] = useState({ isOpen: false });
-  const [audioPlayer, setAudioPlayer] = useState({ isVisible: false, recording: null as any });
   const [previousProblemId, setPreviousProblemId] = useState<string | null>(null);
   
   // Enhanced workspace feature flag
@@ -97,10 +95,6 @@ export default function ProblemCard() {
     setNotes(newNotes);
   }, [notes, currentCard]);
   
-  // Audio player callback to handle playing recordings
-  const handleRecordingPlay = useCallback((recording: any) => {
-    setAudioPlayer({ isVisible: true, recording });
-  }, []);
   
   const [isDark, setIsDark] = useState<boolean>(false);
 
@@ -319,6 +313,7 @@ export default function ProblemCard() {
       setNotes(currentCard.notes || '');
       setLanguage(currentCard.language || 'javascript');
     }
+    
   }, [currentCard]);
 
   const loadProblem = async () => {
@@ -691,15 +686,9 @@ export default function ProblemCard() {
             cardId={currentCard?.id}
             isOpen={recordingHistory.isOpen}
             onClose={() => setRecordingHistory({ isOpen: false })}
-            onRecordingPlay={handleRecordingPlay}
           />
           
-          {/* Global Audio Player */}
-          <GlobalAudioPlayer
-            recording={audioPlayer.recording}
-            isVisible={audioPlayer.isVisible}
-            onClose={() => setAudioPlayer({ isVisible: false, recording: null })}
-          />
+          {/* Global Audio Player - REMOVED FOR REBUILD */}
         </div>
       </EnhancedWorkspaceProvider>
     );
@@ -815,15 +804,9 @@ export default function ProblemCard() {
         cardId={currentCard?.id}
         isOpen={recordingHistory.isOpen}
         onClose={() => setRecordingHistory({ isOpen: false })}
-        onRecordingPlay={handleRecordingPlay}
       />
       
-      {/* Global Audio Player */}
-      <GlobalAudioPlayer
-        recording={audioPlayer.recording}
-        isVisible={audioPlayer.isVisible}
-        onClose={() => setAudioPlayer({ isVisible: false, recording: null })}
-      />
+      {/* Global Audio Player - REMOVED FOR REBUILD */}
     </div>
     </WorkspaceContext.Provider>
   );

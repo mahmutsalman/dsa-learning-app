@@ -1,202 +1,208 @@
-import React, { useEffect, useState } from 'react';
-import AudioPlayerComponent, { RHAP_UI } from 'react-h5-audio-player';
+import { useRef, useEffect, useCallback } from 'react';
+import AudioPlayer from 'react-h5-audio-player';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { UseGlobalAudioPlayerReturn } from '../hooks/useGlobalAudioPlayer';
 import 'react-h5-audio-player/lib/styles.css';
-import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+import './GlobalAudioPlayer.css';
 
-interface Recording {
-  id: string;
-  card_id: string;
-  time_session_id?: string;
-  audio_url: string;
-  duration?: number;
-  transcript?: string;
-  created_at: string;
-  filename: string;
-  filepath: string;
-  file_size?: number;
-}
+interface GlobalAudioPlayerProps extends UseGlobalAudioPlayerReturn {}
 
-interface GlobalAudioPlayerProps {
-  recording: Recording | null;
-  isVisible: boolean;
-  onClose: () => void;
-}
+export default function GlobalAudioPlayer({
+  playerState,
+  currentRecording,
+  closePlayer,
+  updatePlayerState,
+  setPlaybackRate,
+  setAudioElementRef,
+}: GlobalAudioPlayerProps) {
 
-export const GlobalAudioPlayer: React.FC<GlobalAudioPlayerProps> = ({
-  recording,
-  isVisible,
-  onClose,
-}) => {
-  const [audioUrl, setAudioUrl] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+  const audioPlayerRef = useRef<AudioPlayer>(null);
 
-  // Load audio URL when component mounts or recording changes
+  // Format duration from seconds to MM:SS
+  const formatTime = (seconds: number | undefined): string => {
+    if (!seconds || seconds <= 0) return '0:00';
+    
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Format file size
+  const formatFileSize = (bytes: number | undefined): string => {
+    if (!bytes) return '0 B';
+    
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Format creation date
+  const formatDate = (dateTime: string): string => {
+    try {
+      return new Date(dateTime).toLocaleDateString();
+    } catch {
+      return dateTime;
+    }
+  };
+
+  // Handle playback rate changes
+  const handlePlaybackRateChange = useCallback((rate: number) => {
+    setPlaybackRate(rate);
+    if (audioPlayerRef.current?.audio?.current) {
+      audioPlayerRef.current.audio.current.playbackRate = rate;
+    }
+  }, [setPlaybackRate]);
+
+  // Set up audio element reference for direct manipulation
   useEffect(() => {
-    const loadAudioUrl = async () => {
-      if (!recording?.filepath) return;
+    if (audioPlayerRef.current?.audio?.current) {
+      setAudioElementRef(audioPlayerRef.current.audio.current);
+    }
+  }, [currentRecording, setAudioElementRef]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!playerState.isOpen) return;
       
-      setIsLoading(true);
-      setError('');
-      
-      // Two strategies for loading audio
-      const isProduction = !window.location.href.includes('localhost');
-      const strategies = isProduction ? 
-        ['dataUrl', 'convertFileSrc'] : 
-        ['convertFileSrc', 'dataUrl'];
-      
-      for (const strategy of strategies) {
-        try {
-          let audioUrl: string;
-          
-          if (strategy === 'convertFileSrc') {
-            // Strategy 1: Use Tauri's convertFileSrc (faster, less memory)
-            // Get proper absolute path from PathResolver
-            const absolutePath = await invoke<string>('get_absolute_path', { 
-              relativePath: recording.filepath 
-            });
-            audioUrl = convertFileSrc(absolutePath);
-          } else {
-            // Strategy 2: Use data URL (more compatible, higher memory usage)
-            audioUrl = await invoke<string>('get_audio_data', { 
-              filepath: recording.filepath 
-            });
+      switch (e.key) {
+        case 'Escape':
+          closePlayer();
+          break;
+        case ' ':
+          e.preventDefault();
+          if (audioPlayerRef.current?.audio?.current) {
+            if (playerState.isPlaying) {
+              audioPlayerRef.current.audio.current.pause();
+            } else {
+              audioPlayerRef.current.audio.current.play();
+            }
           }
-          
-          setAudioUrl(audioUrl);
-          setIsLoading(false);
-          return;
-        } catch (err) {
-          console.error(`Strategy ${strategy} failed:`, err);
-        }
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (audioPlayerRef.current?.audio?.current) {
+            audioPlayerRef.current.audio.current.currentTime -= 10;
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (audioPlayerRef.current?.audio?.current) {
+            audioPlayerRef.current.audio.current.currentTime += 10;
+          }
+          break;
       }
-      
-      setError('Failed to load audio file');
-      setIsLoading(false);
     };
 
-    if (recording && isVisible && !audioUrl) {
-      loadAudioUrl();
-    }
-  }, [recording?.filepath, isVisible]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [playerState.isOpen, playerState.isPlaying, closePlayer]);
 
-  // Reset state when recording changes
-  useEffect(() => {
-    if (recording) {
-      setAudioUrl('');
-      setError('');
-      setPlaybackSpeed(1.0);
-    }
-  }, [recording?.id]);
-
-  if (!isVisible || !recording) {
+  if (!playerState.isOpen || !currentRecording) {
     return null;
   }
 
+  const playbackRates = [0.75, 1, 1.5, 2, 2.5, 3];
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50 pb-8">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-2xl w-full mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl mx-4 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-white">🎵 Audio Player</h3>
-            <p className="text-lg font-medium mt-1 text-gray-700 dark:text-gray-300">{recording.filename}</p>
-            {recording.duration && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Duration: {Math.floor(recording.duration / 60)}:{(recording.duration % 60).toString().padStart(2, '0')}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center space-x-3">
+            <div className="text-2xl">🎵</div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Last Recording Player {playerState.isPlaying ? '(Playing)' : '(Paused)'}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                {currentRecording.filename}
               </p>
-            )}
+            </div>
           </div>
-          <button 
-            onClick={onClose} 
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          <button
+            onClick={closePlayer}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            title="Close player (Esc)"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <XMarkIcon className="w-6 h-6 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
+        {/* Metadata */}
+        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700/50">
+          <div className="flex items-center justify-center space-x-8 text-sm text-gray-600 dark:text-gray-300">
+            <div className="flex items-center space-x-2">
+              <span>⏱️</span>
+              <span>{formatTime(currentRecording.duration)}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span>💾</span>
+              <span>{formatFileSize(currentRecording.file_size)}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <span>📅</span>
+              <span>{formatDate(currentRecording.created_at)}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Audio Player */}
-        <div className="p-6">
-          {isLoading && (
+        <div className="px-6 py-6">
+          {playerState.error ? (
+            <div className="text-center py-8">
+              <div className="text-red-600 dark:text-red-400">
+                <p className="font-medium">Error loading audio</p>
+                <p className="text-sm mt-1">{playerState.error}</p>
+              </div>
+            </div>
+          ) : playerState.isLoading ? (
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-2 text-gray-500 dark:text-gray-400">Loading audio...</p>
             </div>
-          )}
-
-          {error && (
-            <div className="text-center py-8">
-              <div className="text-red-600 dark:text-red-400">
-                <p className="font-medium">Error loading audio</p>
-                <p className="text-sm mt-1">{error}</p>
+          ) : (
+            <div className="space-y-6">
+              {/* Custom Audio Player */}
+              <div className="global-audio-player">
+                <AudioPlayer
+                  ref={audioPlayerRef}
+                  src={currentRecording.audioUrl}
+                  onPlay={() => updatePlayerState({ isPlaying: true })}
+                  onPause={() => updatePlayerState({ isPlaying: false })}
+                  onEnded={() => updatePlayerState({ isPlaying: false })}
+                  customAdditionalControls={[]}
+                  customVolumeControls={[]}
+                  showJumpControls={true}
+                  showSkipControls={true}
+                  showDownloadProgress={false}
+                />
               </div>
-            </div>
-          )}
 
-          {!isLoading && !error && audioUrl && (
-            <>
-              <AudioPlayerComponent
-                src={audioUrl}
-                autoPlay={false}
-                onCanPlay={(e) => {
-                  // Set playback speed when audio is ready
-                  const audioElement = e.target as HTMLAudioElement;
-                  audioElement.playbackRate = playbackSpeed;
-                }}
-                showSkipControls={false}
-                showJumpControls={true}
-                progressJumpSteps={{ backward: 5000, forward: 10000 }}
-                customProgressBarSection={[
-                  RHAP_UI.CURRENT_TIME,
-                  RHAP_UI.PROGRESS_BAR,
-                  RHAP_UI.DURATION
-                ]}
-                layout="horizontal-reverse"
-                preload="metadata"
-                className="custom-audio-player"
-              />
-
-              {/* Playback Speed Control */}
-              <div className="mt-4 flex justify-center space-x-2">
-                <span className="text-sm text-gray-600 dark:text-gray-400 self-center mr-2">Speed:</span>
-                {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(speed => (
-                  <button
-                    key={speed}
-                    onClick={() => {
-                      setPlaybackSpeed(speed);
-                      // Update playback rate of current audio if playing
-                      const audioElements = document.querySelectorAll('audio');
-                      audioElements.forEach(audio => {
-                        audio.playbackRate = speed;
-                      });
-                    }}
-                    className={`px-3 py-1 rounded transition-colors ${
-                      playbackSpeed === speed 
-                        ? 'bg-blue-500 text-white' 
-                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                    }`}
-                  >
-                    {speed}x
-                  </button>
-                ))}
+              {/* Playback Speed Controls */}
+              <div className="flex items-center justify-center space-x-4">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Speed:</span>
+                <div className="flex items-center space-x-2">
+                  {playbackRates.map((rate) => (
+                    <button
+                      key={rate}
+                      onClick={() => handlePlaybackRateChange(rate)}
+                      className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                        Math.abs(playerState.playbackRate - rate) < 0.01
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {rate}x
+                    </button>
+                  ))}
+                </div>
               </div>
-            </>
-          )}
-
-          {/* Transcript */}
-          {recording.transcript && (
-            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2">Transcript:</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-300">{recording.transcript}</p>
             </div>
           )}
         </div>
       </div>
+
     </div>
   );
-};
-
-export default GlobalAudioPlayer;
+}

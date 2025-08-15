@@ -36,6 +36,7 @@ export interface UseRecordingReturn {
   resumeRecording: () => Promise<void>;
   refreshRecordingState: () => Promise<void>;
   loadRecordings: (cardId: string) => Promise<void>;
+  clearRecordingState: () => void;
   isLoading: boolean;
   error: string | null;
 }
@@ -51,11 +52,11 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Debug logging helper - disabled to prevent memory leaks
+  // Debug logging helper with card context - disabled to prevent memory leaks
   const debugLog = (_message: string, _data?: any) => {
     // Disabled to prevent memory leak when inspector is open
     // Uncomment only when actively debugging
-    // console.log(`🎤 [Recording Debug] ${message}`, data ? data : '');
+    // console.log(`🎤 [Recording Debug Card:${cardId}] ${message}`, data ? data : '');
   };
 
   // Refresh recording state from backend
@@ -182,19 +183,39 @@ export function useRecording(cardId?: string): UseRecordingReturn {
     }
   }, []);
 
+  // Clear recording state (useful when switching cards)
+  const clearRecordingState = useCallback(() => {
+    debugLog('Clearing recording state for card switch');
+    setRecordingState({
+      isRecording: false,
+      isPaused: false,
+      elapsedRecordingTime: 0
+    });
+    setRecordings([]);
+    setError(null);
+    
+    // Clear any active recording timer
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
   // Initialize recording state on mount and when cardId changes
   useEffect(() => {
     refreshRecordingState();
   }, [refreshRecordingState]);
 
-  // Load recordings when cardId changes
+  // Load recordings when cardId changes and clear previous state
   useEffect(() => {
     if (cardId) {
+      // Clear previous card's recording state before loading new card's recordings
+      clearRecordingState();
       loadRecordings(cardId);
     } else {
       setRecordings([]);
     }
-  }, [cardId, loadRecordings]);
+  }, [cardId, loadRecordings, clearRecordingState]);
 
   // Set up real-time recording timer updates when recording
   useEffect(() => {
@@ -255,6 +276,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
     resumeRecording,
     refreshRecordingState,
     loadRecordings,
+    clearRecordingState,
     isLoading,
     error
   };

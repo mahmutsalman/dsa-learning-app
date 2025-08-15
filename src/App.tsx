@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import ResizableLayout from "./components/ResizableLayout";
 import { AppLayoutProvider } from "./contexts/AppLayoutContext";
 import { StatsProvider } from "./contexts/StatsContext";
+import { GlobalAudioPlayerProvider } from "./contexts/GlobalAudioPlayerContext";
 import Dashboard from "./pages/Dashboard";
 import ProblemCard from "./pages/ProblemCard";
 
@@ -93,13 +94,15 @@ function App() {
       }`}>
         <AppLayoutProvider>
           <StatsProvider>
-            <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/problem/:problemId" element={<ProblemCard />} />
-                <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
-              </Routes>
-            </ResizableLayout>
+            <GlobalAudioPlayerProvider>
+              <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/problem/:problemId" element={<ProblemCard />} />
+                  <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
+                </Routes>
+              </ResizableLayout>
+            </GlobalAudioPlayerProvider>
           </StatsProvider>
         </AppLayoutProvider>
       </div>
