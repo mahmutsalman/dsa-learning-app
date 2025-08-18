@@ -138,6 +138,10 @@ async fn main() {
             commands::audio::get_audio_data,
             commands::audio::get_current_dir,
             commands::audio::delete_recording,
+            // Enhanced audio device management commands
+            commands::audio::get_audio_devices,
+            commands::audio::switch_audio_device,
+            commands::audio::refresh_audio_devices,
             // Debug commands
             commands::debug::debug_paths,
             commands::debug::debug_recording_paths,
