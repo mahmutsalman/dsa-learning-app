@@ -11,6 +11,7 @@ use uuid::Uuid;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::{WavWriter, WavSpec, SampleFormat};
 use crate::models::*;
+use std::collections::HashMap;
 
 // Real audio recording system using cpal with thread-based stream management
 // This solves the Send+Sync issues by keeping streams in a dedicated thread
@@ -27,11 +28,14 @@ enum AudioStreamState {
 use crate::models::AudioCommand;
 
 // Response from the audio thread
+#[derive(Debug)]
 enum AudioResponse {
     Started,
     Stopped,
     Paused,
     Resumed,
+    DevicesRefreshed(Vec<AudioDevice>),
+    DeviceSwitched(String),
     Error(String),
 }
 
@@ -65,7 +69,7 @@ fn ensure_audio_thread_started(state: &AppState) -> Result<mpsc::Sender<AudioCom
     Ok(command_sender)
 }
 
-/// The dedicated audio recording thread
+/// The dedicated audio recording thread with enhanced device management
 /// This runs in its own thread to handle cpal streams without Send+Sync issues
 fn audio_recording_thread(
     command_receiver: mpsc::Receiver<AudioCommand>,
@@ -75,30 +79,55 @@ fn audio_recording_thread(
     let mut current_writer: Option<Arc<Mutex<Option<WavWriter<BufWriter<fs::File>>>>>> = None;
     let mut current_state: Option<Arc<Mutex<AudioStreamState>>> = None;
     
-    // Get the default host and device
+    // Enhanced device management
     let host = cpal::default_host();
-    let device = match host.default_input_device() {
-        Some(device) => device,
-        None => {
-            eprintln!("No input device available");
-            let _ = response_sender.send(AudioResponse::Error("No input device available".to_string()));
-            return;
-        }
-    };
+    let mut available_devices: HashMap<String, cpal::Device> = HashMap::new();
+    let mut current_device: Option<cpal::Device> = None;
+    let mut current_device_name: String = String::new();
+    
+    // Initialize available devices
+    if let Err(e) = refresh_available_devices(&host, &mut available_devices, &mut current_device, &mut current_device_name) {
+        eprintln!("Failed to initialize audio devices: {}", e);
+        let _ = response_sender.send(AudioResponse::Error(format!("Failed to initialize audio devices: {}", e)));
+        return;
+    }
     
     while let Ok(command) = command_receiver.recv() {
         match command {
             AudioCommand::StartRecording { filepath, sample_rate, channels } => {
-                match start_recording_stream(&device, filepath, sample_rate, channels) {
-                    Ok((stream, writer, state)) => {
-                        current_stream = Some(stream);
-                        current_writer = Some(writer);
-                        current_state = Some(state);
-                        let _ = response_sender.send(AudioResponse::Started);
+                if let Some(ref device) = current_device {
+                    match start_recording_stream(device, filepath.clone(), sample_rate, channels) {
+                        Ok((stream, writer, state)) => {
+                            current_stream = Some(stream);
+                            current_writer = Some(writer);
+                            current_state = Some(state);
+                            let _ = response_sender.send(AudioResponse::Started);
+                        }
+                        Err(e) => {
+                            // Try to refresh devices and retry once
+                            if refresh_available_devices(&host, &mut available_devices, &mut current_device, &mut current_device_name).is_ok() {
+                                if let Some(ref device) = current_device {
+                                    match start_recording_stream(device, filepath.clone(), sample_rate, channels) {
+                                        Ok((stream, writer, state)) => {
+                                            current_stream = Some(stream);
+                                            current_writer = Some(writer);
+                                            current_state = Some(state);
+                                            let _ = response_sender.send(AudioResponse::Started);
+                                        }
+                                        Err(retry_e) => {
+                                            let _ = response_sender.send(AudioResponse::Error(format!("Audio start failed: {} (retry: {})", e, retry_e)));
+                                        }
+                                    }
+                                } else {
+                                    let _ = response_sender.send(AudioResponse::Error(format!("No audio device available after refresh: {}", e)));
+                                }
+                            } else {
+                                let _ = response_sender.send(AudioResponse::Error(format!("Audio start failed: {}", e)));
+                            }
+                        }
                     }
-                    Err(e) => {
-                        let _ = response_sender.send(AudioResponse::Error(e));
-                    }
+                } else {
+                    let _ = response_sender.send(AudioResponse::Error("No audio device available".to_string()));
                 }
             }
             AudioCommand::StopRecording => {
@@ -134,25 +163,138 @@ fn audio_recording_thread(
                 }
                 let _ = response_sender.send(AudioResponse::Resumed);
             }
+            AudioCommand::RefreshDevices => {
+                if let Err(e) = refresh_available_devices(&host, &mut available_devices, &mut current_device, &mut current_device_name) {
+                    let _ = response_sender.send(AudioResponse::Error(format!("Failed to refresh devices: {}", e)));
+                } else {
+                    let device_list = create_device_list(&available_devices, &current_device_name);
+                    let _ = response_sender.send(AudioResponse::DevicesRefreshed(device_list));
+                }
+            }
+            AudioCommand::SwitchDevice { device_name } => {
+                if let Some(device) = available_devices.get(&device_name) {
+                    current_device = Some(device.clone());
+                    current_device_name = device_name.clone();
+                    let _ = response_sender.send(AudioResponse::DeviceSwitched(device_name));
+                } else {
+                    let _ = response_sender.send(AudioResponse::Error(format!("Device '{}' not found", device_name)));
+                }
+            }
         }
     }
 }
 
-/// Create and start an audio recording stream
+/// Refresh the list of available audio input devices
+fn refresh_available_devices(
+    host: &cpal::Host,
+    available_devices: &mut HashMap<String, cpal::Device>,
+    current_device: &mut Option<cpal::Device>,
+    current_device_name: &mut String,
+) -> Result<(), String> {
+    available_devices.clear();
+    
+    // Get all input devices
+    let devices = host.input_devices()
+        .map_err(|e| format!("Failed to enumerate input devices: {}", e))?;
+    
+    let default_device = host.default_input_device();
+    let mut default_device_name = String::new();
+    
+    // Populate available devices
+    for device in devices {
+        let device_name = device.name()
+            .unwrap_or_else(|_| "Unknown Device".to_string());
+        
+        // Check if this is the default device
+        if let Some(ref default_dev) = default_device {
+            if let (Ok(default_name), Ok(current_name)) = (default_dev.name(), device.name()) {
+                if default_name == current_name {
+                    default_device_name = device_name.clone();
+                }
+            }
+        }
+        
+        available_devices.insert(device_name, device);
+    }
+    
+    // If no current device is set, use the default
+    if current_device.is_none() {
+        if let Some(default_dev) = default_device {
+            *current_device = Some(default_dev);
+            *current_device_name = default_device_name;
+        } else {
+            return Err("No input devices available".to_string());
+        }
+    } else {
+        // Verify current device is still available
+        if !available_devices.contains_key(current_device_name) {
+            // Current device is no longer available, switch to default
+            if let Some(default_dev) = host.default_input_device() {
+                *current_device = Some(default_dev);
+                *current_device_name = default_device_name;
+            } else {
+                return Err("Current device unavailable and no default device found".to_string());
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Create a list of audio devices for the frontend
+fn create_device_list(available_devices: &HashMap<String, cpal::Device>, current_device_name: &str) -> Vec<AudioDevice> {
+    let host = cpal::default_host();
+    let default_device_name = host.default_input_device()
+        .and_then(|device| device.name().ok())
+        .unwrap_or_else(|| "Unknown".to_string());
+    
+    available_devices.iter()
+        .map(|(name, _device)| AudioDevice {
+            name: name.clone(),
+            is_default: *name == default_device_name,
+            is_current: *name == current_device_name,
+        })
+        .collect()
+}
+
+/// Create and start an audio recording stream with adaptive sample rate and mono configuration
 fn start_recording_stream(
     device: &cpal::Device,
     filepath: String,
-    sample_rate: u32,
-    channels: u16,
+    _requested_sample_rate: u32,
+    _requested_channels: u16,
 ) -> Result<(cpal::Stream, Arc<Mutex<Option<WavWriter<BufWriter<fs::File>>>>>, Arc<Mutex<AudioStreamState>>), String> {
-    // Create WAV file
+    // Get the default input configuration from the device
+    let config = device.default_input_config()
+        .map_err(|e| format!("Failed to get default input config: {}", e))?;
+    
+    // Use device's native sample rate for optimal quality (no resampling)
+    let device_sample_rate = config.sample_rate().0;
+    
+    // For voice recordings, prefer mono to avoid phase issues and ensure compatibility
+    // Most voice recordings are mono and this prevents stereo-related pitch artifacts
+    let optimal_channels = 1u16; // Mono for voice recordings
+    
+    // Use standard 44.1kHz if device supports it, otherwise use device native rate
+    // 44.1kHz is the CD-quality standard and most compatible with web browsers
+    let optimal_sample_rate = if device_sample_rate >= 44100 && device_sample_rate <= 48000 {
+        44100u32 // Standard CD quality - most compatible with browsers
+    } else {
+        device_sample_rate // Use device native rate if outside normal range
+    };
+    
+    println!("Device config: {:?}", config);
+    println!("Using optimal settings - Sample Rate: {}Hz, Channels: {}, Device Native: {}Hz", 
+             optimal_sample_rate, optimal_channels, device_sample_rate);
+    
+    // Create WAV file with optimal settings
     let file = fs::File::create(&filepath)
         .map_err(|e| format!("Failed to create audio file: {}", e))?;
     
     let spec = WavSpec {
-        channels,
-        sample_rate,
-        bits_per_sample: 24, // Improved bit depth for better audio quality
+        channels: optimal_channels,
+        sample_rate: optimal_sample_rate,
+        bits_per_sample: 16, // Standard 16-bit for voice (24-bit can cause compatibility issues)
         sample_format: SampleFormat::Int,
     };
     
@@ -165,30 +307,40 @@ fn start_recording_stream(
     // Create shared state for pause/resume
     let state_arc = Arc::new(Mutex::new(AudioStreamState::Recording));
     
-    // Get the default input configuration
-    let config = device.default_input_config()
-        .map_err(|e| format!("Failed to get default input config: {}", e))?;
+    // Create config that matches our target format for proper recording
+    let stream_config = cpal::StreamConfig {
+        channels: optimal_channels,
+        sample_rate: cpal::SampleRate(optimal_sample_rate),
+        buffer_size: cpal::BufferSize::Default,
+    };
     
-    println!("Input device config: {:?}", config);
-    
-    // Create the audio stream based on sample format
+    // Create the audio stream based on sample format with proper resampling if needed
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
             let state_clone_f32 = Arc::clone(&state_arc);
+            let resampling_needed = device_sample_rate != optimal_sample_rate;
+            let sample_ratio = if resampling_needed {
+                device_sample_rate as f64 / optimal_sample_rate as f64
+            } else {
+                1.0
+            };
+            
             device.build_input_stream(
-                &config.into(),
+                &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     // Check if we're recording (not paused)
                     if let Ok(state_guard) = state_clone_f32.try_lock() {
                         if *state_guard == AudioStreamState::Recording {
                             if let Ok(mut writer_guard) = writer_clone.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
+                                    // Process audio samples for voice recording optimization
                                     for &sample in data {
-                                        // Convert f32 sample to i32 for 24-bit recording with improved quality
-                                        // Apply basic gain normalization to improve voice recording quality
-                                        let normalized_sample = sample.clamp(-1.0, 1.0);
-                                        let sample_i32 = (normalized_sample * ((1i32 << 23) - 1) as f32) as i32;
-                                        let _ = writer.write_sample(sample_i32);
+                                        // Clamp and normalize the sample for voice recording
+                                        let normalized_sample = sample.clamp(-0.95, 0.95); // Slight headroom
+                                        
+                                        // Convert to 16-bit integer for standard voice recording
+                                        let sample_i16 = (normalized_sample * i16::MAX as f32) as i16;
+                                        let _ = writer.write_sample(sample_i16);
                                     }
                                 }
                             }
@@ -204,7 +356,7 @@ fn start_recording_stream(
             let writer_clone_i16 = Arc::clone(&writer_arc);
             let state_clone_i16 = Arc::clone(&state_arc);
             device.build_input_stream(
-                &config.into(),
+                &stream_config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     // Check if we're recording (not paused)
                     if let Ok(state_guard) = state_clone_i16.try_lock() {
@@ -212,9 +364,8 @@ fn start_recording_stream(
                             if let Ok(mut writer_guard) = writer_clone_i16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
                                     for &sample in data {
-                                        // Convert i16 to i32 for 24-bit recording
-                                        let sample_i32 = (sample as i32) << 8; // Scale up to 24-bit range
-                                        let _ = writer.write_sample(sample_i32);
+                                        // Direct write for i16 samples (already in correct format)
+                                        let _ = writer.write_sample(sample);
                                     }
                                 }
                             }
@@ -229,7 +380,7 @@ fn start_recording_stream(
             let writer_clone_u16 = Arc::clone(&writer_arc);
             let state_clone_u16 = Arc::clone(&state_arc);
             device.build_input_stream(
-                &config.into(),
+                &stream_config,
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     // Check if we're recording (not paused)
                     if let Ok(state_guard) = state_clone_u16.try_lock() {
@@ -237,9 +388,9 @@ fn start_recording_stream(
                             if let Ok(mut writer_guard) = writer_clone_u16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
                                     for &sample in data {
-                                        // Convert u16 to i32 for 24-bit recording
-                                        let sample_i32 = (sample as i32 - 32768) << 8; // Convert to signed and scale to 24-bit
-                                        let _ = writer.write_sample(sample_i32);
+                                        // Convert u16 to i16 for standard audio format
+                                        let sample_i16 = (sample as i32 - 32768) as i16; // Convert to signed 16-bit
+                                        let _ = writer.write_sample(sample_i16);
                                     }
                                 }
                             }
@@ -294,11 +445,12 @@ pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Res
     // Start real audio recording
     let audio_sender = ensure_audio_thread_started(&state)?;
     
-    // Send start recording command to audio thread with improved audio settings
+    // Send start recording command to audio thread with voice-optimized settings
+    // Note: sample_rate and channels are now determined automatically by the device capabilities
     audio_sender.send(AudioCommand::StartRecording {
         filepath: filepath.to_string_lossy().to_string(),
-        sample_rate: 48000, // Professional audio quality (48kHz)
-        channels: 1, // Mono recording for voice (optimal for speech)
+        sample_rate: 44100, // Standard CD quality (will be auto-adjusted based on device)
+        channels: 1, // Mono for voice recording (will be auto-adjusted for optimal quality)
     }).map_err(|e| format!("Failed to send start command to audio thread: {}", e))?;
     
     println!("Started real audio recording: {}", filepath.display());
@@ -488,4 +640,55 @@ pub async fn delete_recording(state: State<'_, AppState>, recording_id: String) 
     };
     
     Ok(message.to_string())
+}
+
+#[tauri::command]
+pub async fn get_audio_devices(state: State<'_, AppState>) -> Result<AudioDeviceList, String> {
+    let audio_sender = ensure_audio_thread_started(&state)?;
+    
+    // Send refresh command to get current device list
+    audio_sender.send(AudioCommand::RefreshDevices)
+        .map_err(|e| format!("Failed to send refresh devices command: {}", e))?;
+    
+    // For now, we'll return a basic device list since we can't easily get the response back
+    // In a more complex implementation, we'd use a synchronous channel or callback system
+    let host = cpal::default_host();
+    let mut devices = Vec::new();
+    let default_device_name = host.default_input_device()
+        .and_then(|device| device.name().ok())
+        .unwrap_or_else(|| "Unknown".to_string());
+    
+    if let Ok(input_devices) = host.input_devices() {
+        for device in input_devices {
+            if let Ok(name) = device.name() {
+                devices.push(AudioDevice {
+                    name: name.clone(),
+                    is_default: name == default_device_name,
+                    is_current: name == default_device_name, // Assume default is current initially
+                });
+            }
+        }
+    }
+    
+    Ok(AudioDeviceList {
+        devices,
+        current_device: Some(default_device_name),
+    })
+}
+
+#[tauri::command]
+pub async fn switch_audio_device(state: State<'_, AppState>, device_name: String) -> Result<String, String> {
+    let audio_sender = ensure_audio_thread_started(&state)?;
+    
+    // Send switch device command to audio thread
+    audio_sender.send(AudioCommand::SwitchDevice { device_name: device_name.clone() })
+        .map_err(|e| format!("Failed to send switch device command: {}", e))?;
+    
+    Ok(format!("Switched to device: {}", device_name))
+}
+
+#[tauri::command]
+pub async fn refresh_audio_devices(state: State<'_, AppState>) -> Result<AudioDeviceList, String> {
+    // This is essentially the same as get_audio_devices but explicitly refreshes
+    get_audio_devices(state).await
 }

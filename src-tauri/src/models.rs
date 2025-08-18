@@ -16,6 +16,25 @@ pub enum AudioCommand {
     StopRecording,
     PauseRecording,
     ResumeRecording,
+    RefreshDevices,
+    SwitchDevice {
+        device_name: String,
+    },
+}
+
+// Audio device information for UI display
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioDevice {
+    pub name: String,
+    pub is_default: bool,
+    pub is_current: bool,
+}
+
+// Audio device list response
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AudioDeviceList {
+    pub devices: Vec<AudioDevice>,
+    pub current_device: Option<String>,
 }
 
 // App state shared across Tauri commands
