@@ -9,6 +9,24 @@
 
 /* Basic Quill editor integration - minimal global styles to prevent conflicts */
 
+/* Quill Editor Dark Theme Placeholder Fix */
+.quill-dark .ql-editor.ql-blank::before {
+  color: #d1d5db !important; /* Light gray for dark theme */
+  opacity: 0.8;
+}
+
+/* Quill Editor Light Theme Placeholder (ensure consistency) */
+.quill-light .ql-editor.ql-blank::before {
+  color: #6b7280 !important; /* Medium gray for light theme */
+  opacity: 0.7;
+}
+
+/* Fallback for global dark mode if theme classes aren't applied */
+.dark .ql-editor.ql-blank::before {
+  color: #d1d5db !important;
+  opacity: 0.8;
+}
+
 /* Custom scrollbar styles */
 @layer utilities {
   /* Custom backdrop blur utility */
