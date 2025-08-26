@@ -31,6 +31,7 @@ export interface Card {
   created_at: string;
   last_modified: string;
   parent_card_id?: string;
+  is_solution?: boolean; // Optional for backward compatibility with solution cards
 }
 
 export interface TimeSession {

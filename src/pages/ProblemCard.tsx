@@ -23,6 +23,7 @@ import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
 import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
+import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -45,6 +46,18 @@ export default function ProblemCard() {
   
   // Recording functionality - integrated with backend
   const recording = useRecording(currentCard?.id);
+
+  // Solution card functionality
+  const solutionCard = useSolutionCard({
+    problemId: problemId || '',
+    onSolutionToggle: (isActive, card) => {
+      console.debug('Solution card toggled:', { isActive, card });
+    },
+    onError: (error) => {
+      console.error('Solution card error:', error);
+      setError(error);
+    }
+  });
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
@@ -432,6 +445,72 @@ export default function ProblemCard() {
     }
   };
 
+  const navigateToCard = (direction: 'prev' | 'next') => {
+    if (!currentCard) return;
+    
+    // Get all cards for this problem (now that getSiblingCards returns all cards)
+    const allProblemCards = getSiblingCards(currentCard, cards);
+    const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
+    
+    if (direction === 'prev') {
+      if (currentIndex > 0) {
+        // Navigate to previous card
+        const targetCard = allProblemCards[currentIndex - 1];
+        setCurrentCard(targetCard);
+        navigate(`/problem/${problemId}/card/${targetCard.id}`);
+      }
+      // If at first card, do nothing
+    } else {
+      // direction === 'next'
+      if (currentIndex < allProblemCards.length - 1) {
+        // Navigate to next card
+        const targetCard = allProblemCards[currentIndex + 1];
+        setCurrentCard(targetCard);
+        navigate(`/problem/${problemId}/card/${targetCard.id}`);
+      } else {
+        // At last card, create new card
+        createNewCard();
+      }
+    }
+  };
+
+  // Solution card toggle handler
+  const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
+    if (!isShiftAction(event)) {
+      // Not shift+click, handle regular navigation
+      navigateToCard('next');
+      return;
+    }
+
+    // This is a shift+click - check current mode and act accordingly
+    try {
+      if (solutionCard.state.isActive) {
+        // Already in solution mode - exit back to regular cards
+        solutionCard.actions.exitSolution();
+        
+        // Restore current card data
+        if (currentCard) {
+          setCode(currentCard.code);
+          setNotes(currentCard.notes);
+          setLanguage(currentCard.language);
+        }
+      } else {
+        // Not in solution mode - enter solution view
+        await solutionCard.actions.toggle();
+        
+        if (solutionCard.state.solutionCard) {
+          // Update editors with solution data
+          const solution = solutionCardToCard(solutionCard.state.solutionCard);
+          setCode(solution.code);
+          setNotes(solution.notes);
+          setLanguage(solution.language);
+          setCurrentCard(solution);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to toggle solution view:', error);
+    }
+  }, [solutionCard, currentCard, navigateToCard]);
 
   const deleteCard = async () => {
     if (!currentCard || !currentCard.parent_card_id) {
@@ -479,34 +558,6 @@ export default function ProblemCard() {
     }
   };
 
-  const navigateToCard = (direction: 'prev' | 'next') => {
-    if (!currentCard) return;
-    
-    // Get all cards for this problem (now that getSiblingCards returns all cards)
-    const allProblemCards = getSiblingCards(currentCard, cards);
-    const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-    
-    if (direction === 'prev') {
-      if (currentIndex > 0) {
-        // Navigate to previous card
-        const targetCard = allProblemCards[currentIndex - 1];
-        setCurrentCard(targetCard);
-        navigate(`/problem/${problemId}/card/${targetCard.id}`);
-      }
-      // If at first card, do nothing
-    } else {
-      // direction === 'next'
-      if (currentIndex < allProblemCards.length - 1) {
-        // Navigate to next card
-        const targetCard = allProblemCards[currentIndex + 1];
-        setCurrentCard(targetCard);
-        navigate(`/problem/${problemId}/card/${targetCard.id}`);
-      } else {
-        // At last card, create new card
-        createNewCard();
-      }
-    }
-  };
 
   const toggleTimer = async () => {
     try {
@@ -602,6 +653,8 @@ export default function ProblemCard() {
                 getSiblingCards={getSiblingCards}
                 previousProblemId={previousProblemId}
                 onBackToPreviousProblem={handleBackToPreviousProblem}
+                isViewingSolution={solutionCard.state.isActive}
+                onSolutionToggle={handleSolutionToggle}
               />
             }
             problemPanel={
@@ -723,6 +776,8 @@ export default function ProblemCard() {
               getSiblingCards={getSiblingCards}
               previousProblemId={previousProblemId}
               onBackToPreviousProblem={handleBackToPreviousProblem}
+              isViewingSolution={solutionCard.state.isActive}
+              onSolutionToggle={handleSolutionToggle}
             />
           }
           problemPanel={
