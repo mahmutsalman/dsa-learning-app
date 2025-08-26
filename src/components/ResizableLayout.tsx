@@ -98,7 +98,7 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
             showStats={showStats}
             onToggleStatsView={toggleStats}
           />
-          <main className="flex-1 overflow-hidden">
+          <main className="flex-1 overflow-hidden bg-white dark:bg-gray-800">
             {children}
           </main>
         </Panel>
