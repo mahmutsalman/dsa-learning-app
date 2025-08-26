@@ -210,19 +210,19 @@
   pointer-events: all;
 }
 
-/* Mobile and touch device improvements */
+/* Mobile and touch device improvements - Optimized for minimal gap */
 @media (hover: none) and (pointer: coarse) {
   .workspace-resize-handle {
-    width: 8px !important;
-    height: 8px !important;
+    width: 4px !important;
+    height: 4px !important;
   }
   
   .workspace-resize-handle-vertical {
-    width: 8px !important;
+    width: 4px !important;
   }
   
   .workspace-resize-handle-horizontal {
-    height: 8px !important;
+    height: 4px !important;
   }
 }
 
@@ -593,9 +593,9 @@
   border-radius: 0;
 }
 
-/* Enhanced Panel Resize Handles for react-resizable-panels */
+/* Enhanced Panel Resize Handles for react-resizable-panels - Optimized for minimal gap */
 .enhanced-panel-resize-handle-horizontal {
-  @apply w-2 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-400 transition-colors duration-200 cursor-col-resize relative;
+  @apply w-1 bg-gray-200 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-blue-400 transition-colors duration-200 cursor-col-resize relative;
 }
 
 .enhanced-panel-resize-handle-vertical {
@@ -771,7 +771,7 @@
   }
   
   .enhanced-panel-resize-handle-horizontal {
-    @apply w-3;
+    @apply w-1;
   }
   
   .enhanced-panel-resize-handle-vertical {
@@ -823,9 +823,9 @@ body:not(.resizing) .app-resize-handle {
   transition: all 200ms ease;
 }
 
-/* Mobile adjustments for app-level resize */
+/* Mobile adjustments for app-level resize - Optimized for minimal gap */
 @media (max-width: 768px) {
   .app-resize-handle {
-    @apply w-3;
+    @apply w-1;
   }
 }
