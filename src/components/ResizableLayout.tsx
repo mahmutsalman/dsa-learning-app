@@ -47,7 +47,7 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
   }, []);
 
   return (
-    <div ref={layoutRef} className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div ref={layoutRef} className="h-screen bg-white dark:bg-gray-800 flex flex-col">
       <PanelGroup 
         direction="horizontal" 
         onLayout={handleSidebarResize}
@@ -90,7 +90,7 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
           id="main-content"
           order={2}
           minSize={60} // Minimum space for main content
-          className="flex flex-col bg-gray-50 dark:bg-gray-900"
+          className="flex flex-col bg-white dark:bg-gray-800"
         >
           <Header 
             isDark={isDark} 
