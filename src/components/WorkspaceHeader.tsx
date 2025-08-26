@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import useHeaderResponsiveness from '../hooks/useHeaderResponsiveness';
 import { 
   ArrowLeftIcon, 
   ArrowRightIcon, 
@@ -207,9 +208,49 @@ export function WorkspaceHeader({
 }: WorkspaceHeaderProps) {
   const navigate = useNavigate();
   const timerButtonRef = useRef<HTMLButtonElement>(null);
+  const headerContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Dual measurement system: timer-specific and header-wide
   const { availableWidth, screenSize } = useTimerContainerWidth(timerButtonRef);
+  const responsive = useHeaderResponsiveness(headerContainerRef);
+  
   const [showTimerDropdown, setShowTimerDropdown] = useState(false);
   const [showRecordingDropdown, setShowRecordingDropdown] = useState(false);
+
+  // Integrate CSS variables with responsive measurements
+  useEffect(() => {
+    // Calculate scale factor based on header breakpoint
+    let scaleFactor = 1.0;
+    switch (responsive.headerBreakpoint) {
+      case 'ultra-compact':
+        scaleFactor = 0.8;
+        break;
+      case 'compact':
+        scaleFactor = 0.85;
+        break;
+      case 'normal':
+        scaleFactor = 0.9;
+        break;
+      case 'spacious':
+        scaleFactor = 1.0;
+        break;
+      case 'ultra-wide':
+        scaleFactor = 1.1;
+        break;
+    }
+    
+    // Update CSS custom properties
+    document.documentElement.style.setProperty('--header-scale-factor', scaleFactor.toString());
+    
+    if ((import.meta as any).env?.MODE === 'development') {
+      console.log('Header CSS variables updated:', {
+        breakpoint: responsive.headerBreakpoint,
+        scaleFactor,
+        containerWidth: responsive.containerWidth,
+        isStable: responsive.isStable
+      });
+    }
+  }, [responsive.headerBreakpoint, responsive.containerWidth, responsive.isStable]);
   
   // Smart dynamic timer display logic based on available container width
   const getTimerDisplayConfig = () => {
@@ -340,27 +381,30 @@ export function WorkspaceHeader({
 
 
   return (
-    <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative">
-      <div className="workspace-header-grid">
-        {/* Navigation Section */}
-        <div className="header-navigation focus-hide">
+    <div 
+      ref={headerContainerRef}
+      className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative"
+    >
+      <div className={`workspace-header-grid dynamic-scale ${(import.meta as any).env?.MODE === 'development' ? 'header-debug-responsive' : ''}`} data-scale-factor={responsive.isStable ? document.documentElement.style.getPropertyValue('--header-scale-factor') : '...'}>
+        {/* Navigation Section - Critical */}
+        <div className="header-navigation header-critical focus-hide">
           {previousProblemId && onBackToPreviousProblem ? (
             <div className="flex items-center gap-1">
               <button
                 onClick={onBackToPreviousProblem}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 title="Back to previous related problem"
               >
                 <ArrowLeftIcon className="h-5 w-5" />
               </button>
-              <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              <span className="header-scale-text small header-optional text-gray-500 dark:text-gray-400 whitespace-nowrap">
                 Back to related
               </span>
             </div>
           ) : (
             <button
               onClick={() => navigate('/')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title="Back to dashboard"
             >
               <ArrowLeftIcon className="h-5 w-5" />
@@ -368,13 +412,13 @@ export function WorkspaceHeader({
           )}
         </div>
 
-        {/* Title Section */}
-        <div className="header-title focus-minimize">
+        {/* Title Section - Optional */}
+        <div className="header-title header-optional focus-minimize">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+            <h1 className="header-scale-text large font-semibold text-gray-900 dark:text-white">
               {problem.title}
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="header-scale-text small text-gray-500 dark:text-gray-400">
               {currentCard ? (() => {
                 const allProblemCards = getSiblingCards(currentCard, cards);
                 const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
@@ -386,8 +430,8 @@ export function WorkspaceHeader({
           </div>
         </div>
 
-        {/* Language Selector Section - responsive width */}
-        <div className={`header-language-selector focus-minimize ${
+        {/* Language Selector Section - Important */}
+        <div className={`header-language-selector header-important focus-minimize ${
           screenSize === 'xs' ? 'header-language-xs' : 
           screenSize === 'sm' ? 'header-language-sm' : ''
         }`}>
@@ -401,15 +445,15 @@ export function WorkspaceHeader({
           />
         </div>
 
-        {/* Save Indicators Section - hide text on small screens */}
-        <div className={`header-save-indicators focus-minimize ${
+        {/* Save Indicators Section - Important */}
+        <div className={`header-save-indicators header-important focus-minimize ${
           screenSize === 'xs' ? 'header-save-xs' : 
           screenSize === 'sm' ? 'header-save-sm' : ''
         }`}>
           {(codeAutoSave.isLoading || notesAutoSave.isLoading || languageAutoSave.isLoading) && (
             <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
               <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
-              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Saving...</span>}
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Saving...</span>}
             </div>
           )}
           
@@ -417,26 +461,26 @@ export function WorkspaceHeader({
             !codeAutoSave.isLoading && !notesAutoSave.isLoading && !languageAutoSave.isLoading) && (
             <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
               <CheckCircleIcon className="h-3 w-3" />
-              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Saved</span>}
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Saved</span>}
             </div>
           )}
           
           {(codeAutoSave.error || notesAutoSave.error || languageAutoSave.error) && (
             <div className="flex items-center space-x-1 text-red-600 dark:text-red-400">
               <ExclamationCircleIcon className="h-3 w-3" />
-              {screenSize !== 'xs' && <span className={screenSize === 'sm' ? 'text-xs' : 'text-xs'}>Error</span>}
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Error</span>}
             </div>
           )}
         </div>
 
-        {/* Card Navigation Section - responsive layout with solution card support */}
-        <div className={`header-card-navigation focus-minimize ${
+        {/* Card Navigation Section - Important */}
+        <div className={`header-card-navigation header-important focus-minimize ${
           screenSize === 'xs' ? 'header-nav-xs' : 
           screenSize === 'sm' ? 'header-nav-sm' : ''
         }`}>
           <button
             onClick={() => onNavigateCard('prev')}
-            className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+            className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             disabled={isViewingSolution || (currentCard ? (() => {
               const allProblemCards = getSiblingCards(currentCard, cards);
               const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
@@ -477,7 +521,7 @@ export function WorkspaceHeader({
           ) : (
             <button
               onClick={() => onNavigateCard('next')}
-              className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+              className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
               title="Navigate to next card or create new card"
             >
               <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
@@ -485,13 +529,13 @@ export function WorkspaceHeader({
           )}
         </div>
 
-        {/* Actions Section */}
-        <div className="header-actions">
+        {/* Actions Section - Critical */}
+        <div className="header-actions header-critical">
           {/* Delete Button Container - Always reserves space */}
           <div className={`header-delete-container focus-minimize ${!currentCard?.parent_card_id ? 'hidden' : ''}`}>
             <button
               onClick={onDeleteCard}
-              className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
+              className="header-scale-button icon-only hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
               title="Delete child card"
               disabled={!currentCard?.parent_card_id}
             >
@@ -528,7 +572,7 @@ export function WorkspaceHeader({
                 ref={timerButtonRef}
                 onClick={onToggleTimer}
                 disabled={timer.isLoading}
-                className="flex items-center px-3 py-2 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                className="header-scale-button header-timer-button with-icon bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                 style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
                 title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
                 aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
@@ -605,7 +649,7 @@ export function WorkspaceHeader({
                     )}
                     {/* Debug info - remove in production */}
                     {(import.meta as any).env?.MODE === 'development' && (
-                      <div className="text-xs text-blue-500" title={`Debug: availableWidth=${availableWidth}px, screenSize=${screenSize}, showSingle=${timerConfig.showSingle}, compactLevel=${timerConfig.compactLevel}, format=${timerConfig.format}`}>
+                      <div className="text-xs text-blue-500" title={`Timer: availableWidth=${availableWidth}px, screenSize=${screenSize}, showSingle=${timerConfig.showSingle}, compactLevel=${timerConfig.compactLevel}, format=${timerConfig.format} | Header: containerWidth=${responsive.containerWidth}px, breakpoint=${responsive.headerBreakpoint}, scaleFactor=${document.documentElement.style.getPropertyValue('--header-scale-factor')}, stable=${responsive.isStable}`}>
                         🔍
                       </div>
                     )}
@@ -618,7 +662,7 @@ export function WorkspaceHeader({
                 <button
                   onClick={() => setShowTimerDropdown(!showTimerDropdown)}
                   onMouseEnter={() => setShowTimerDropdown(true)}
-                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
                   title="Timer options"
                 >
                   <ChevronDownIcon className="h-3 w-3" />
@@ -658,7 +702,7 @@ export function WorkspaceHeader({
             {(screenSize === 'xs' || screenSize === 'sm') && (
               <button
                 onClick={onOpenSessionHistory}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
                 title="View session history"
               >
                 <ClockIcon className="h-4 w-4" />
@@ -690,7 +734,7 @@ export function WorkspaceHeader({
               {/* Main Recording Button */}
               <button
                 onClick={onToggleRecording}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                className={`header-scale-button header-timer-button with-icon transition-colors ${
                   recordingState.isRecording
                     ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                     : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
@@ -721,7 +765,7 @@ export function WorkspaceHeader({
                 <button
                   onClick={() => setShowRecordingDropdown(!showRecordingDropdown)}
                   onMouseEnter={() => setShowRecordingDropdown(true)}
-                  className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
                   title="Recording options"
                 >
                   <ChevronDownIcon className="h-3 w-3" />
@@ -761,7 +805,7 @@ export function WorkspaceHeader({
             {(screenSize === 'xs' || screenSize === 'sm') && (
               <button
                 onClick={onOpenRecordingHistory}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
                 title="View recording history"
               >
                 <SpeakerWaveIcon className="h-4 w-4" />
