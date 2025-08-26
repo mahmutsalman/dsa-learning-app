@@ -611,13 +611,42 @@ textarea.text-wrap-responsive {
   width: 200px !important;
 }
 
-/* Fixed button container for delete button */
+/* Delete button container - only takes space when visible */
+.header-delete-container {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease-in-out;
+}
+
+.header-delete-container button {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Actually hide delete button container - no reserved space */
+.header-delete-container.hidden {
+  width: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  overflow: hidden;
+}
+
+/* Legacy support for high-specificity stable-header-grid */
 .bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container {
-  width: 2.5rem !important; /* Reserve space always */
+  width: 2.5rem !important;
   height: 2.5rem !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
+  flex-shrink: 0 !important;
+  transition: all 0.2s ease-in-out !important;
 }
 
 .bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container button {
@@ -628,10 +657,12 @@ textarea.text-wrap-responsive {
   justify-content: center !important;
 }
 
-/* Hide delete button while maintaining space */
-.bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container.hidden button {
-  visibility: hidden !important;
+/* Legacy support - actually hide container, no reserved space */
+.bg-white.dark\:bg-gray-800 .stable-header-grid .header-delete-container.hidden {
+  width: 0 !important;
+  opacity: 0 !important;
   pointer-events: none !important;
+  overflow: hidden !important;
 }
 
 /* Responsive adjustments for smaller screens */
@@ -740,7 +771,7 @@ textarea.text-wrap-responsive {
     minmax(var(--header-title-min), 1fr)                     /* Title section (flexible) */
     minmax(80px, var(--header-lang-width))                   /* Language selector */
     minmax(60px, var(--header-save-width))                   /* Save indicators */
-    minmax(100px, var(--header-cardnav-width))               /* Card navigation */
+    minmax(120px, var(--header-cardnav-width))               /* Card navigation - increased min-width */
     minmax(var(--header-actions-min), var(--header-actions-max)); /* Fixed max actions to prevent feedback */
   align-items: center;
   gap: var(--header-gap);
@@ -846,6 +877,9 @@ textarea.text-wrap-responsive {
   justify-content: center;
   gap: var(--header-gap);
   min-width: 0;
+  position: relative;
+  z-index: 10; /* Higher than actions to prevent overlap */
+  flex-shrink: 0; /* Prevent shrinking below min-width */
 }
 
 .header-actions {
@@ -948,10 +982,21 @@ textarea.text-wrap-responsive {
     grid-template-columns: 
       40px                  /* Navigation - icon only */
       1fr                   /* Title - flexible */
-      45px                  /* Language - minimal */
+      40px                  /* Language - minimal */
       30px                  /* Save - icon only */
-      80px                  /* Card nav - minimal */
-      110px;                /* Actions - essential */
+      90px                  /* Card nav - increased for arrows */
+      100px;                /* Actions - reduced to prevent overlap */
+  }
+  
+  /* Ensure card navigation arrows stay visible */
+  .header-card-navigation {
+    z-index: 15 !important; /* Higher z-index at small screens */
+    gap: 0.125rem; /* Tighter spacing */
+  }
+  
+  .header-actions {
+    gap: 0.125rem; /* Tighter spacing in actions */
+    z-index: 5; /* Lower than navigation */
   }
 }
 
@@ -1195,11 +1240,11 @@ textarea.text-wrap-responsive {
   :root {
     --header-nav-width: 80px;
     --header-title-min: 80px;
-    --header-lang-width: 70px;
+    --header-lang-width: 60px;
     --header-save-width: 50px;
-    --header-cardnav-width: 120px;
-    --header-actions-min: 140px;
-    --header-actions-max: 200px;
+    --header-cardnav-width: 130px; /* Increased for better arrow space */
+    --header-actions-min: 130px; /* Reduced to make room for card nav */
+    --header-actions-max: 180px; /* Reduced to make room for card nav */
     --header-gap: 0.25rem;
     --header-font-size: 0.75rem;
   }
@@ -1228,11 +1273,11 @@ textarea.text-wrap-responsive {
   :root {
     --header-nav-width: 60px;
     --header-title-min: 60px;
-    --header-lang-width: 50px;
-    --header-save-width: 40px;
-    --header-cardnav-width: 100px;
-    --header-actions-min: 120px;
-    --header-actions-max: 180px;
+    --header-lang-width: 45px;
+    --header-save-width: 35px;
+    --header-cardnav-width: 110px; /* Increased for better arrow space */
+    --header-actions-min: 110px; /* Reduced to make room for card nav */
+    --header-actions-max: 140px; /* Reduced to make room for card nav */
     --header-gap: 0.125rem;
   }
   
@@ -1240,9 +1285,9 @@ textarea.text-wrap-responsive {
     grid-template-columns: 
       minmax(40px, 60px)                                        /* Navigation - minimal */
       minmax(50px, 1fr)                                         /* Title - flexible */
-      minmax(40px, 50px)                                        /* Language - compact */
-      minmax(30px, 40px)                                        /* Save - icons only */
-      minmax(80px, 100px)                                       /* Card nav - compressed */
+      minmax(35px, 45px)                                        /* Language - compact */
+      minmax(25px, 35px)                                        /* Save - icons only */
+      minmax(90px, 110px)                                       /* Card nav - increased for arrows */
       minmax(var(--header-actions-min), var(--header-actions-max)); /* Fixed max actions to prevent feedback */
   }
   
@@ -1253,6 +1298,17 @@ textarea.text-wrap-responsive {
   
   .header-title p {
     font-size: 0.65rem;
+  }
+  
+  /* Ensure card navigation arrows stay visible at extra small screens */
+  .header-card-navigation {
+    z-index: 15 !important; /* Higher z-index at small screens */
+    gap: 0.125rem; /* Tighter spacing */
+  }
+  
+  .header-actions {
+    gap: 0.125rem; /* Tighter spacing in actions */
+    z-index: 5; /* Lower than navigation */
   }
 }
 
