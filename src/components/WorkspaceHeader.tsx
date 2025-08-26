@@ -17,6 +17,7 @@ import { LanguageSelector } from './LanguageSelector';
 import type { Problem, Card } from '../types';
 import type { UseTimerReturn } from '../hooks/useTimer';
 import type { AutoSaveState } from '../hooks/useAutoSave';
+import { SolutionCardButton, SolutionCardIndicator } from '../features/solution-card';
 
 interface WorkspaceHeaderProps {
   problem: Problem;
@@ -43,6 +44,9 @@ interface WorkspaceHeaderProps {
   getSiblingCards: (currentCard: Card, cards: Card[]) => Card[];
   previousProblemId?: string | null;
   onBackToPreviousProblem?: () => void;
+  // Solution card props
+  isViewingSolution?: boolean;
+  onSolutionToggle?: (event: React.KeyboardEvent | React.MouseEvent) => void;
 }
 
 // Hook to measure container available width with enhanced stability controls
@@ -197,6 +201,8 @@ export function WorkspaceHeader({
   getSiblingCards,
   previousProblemId,
   onBackToPreviousProblem,
+  isViewingSolution = false,
+  onSolutionToggle,
 }: WorkspaceHeaderProps) {
   const navigate = useNavigate();
   const timerButtonRef = useRef<HTMLButtonElement>(null);
@@ -422,7 +428,7 @@ export function WorkspaceHeader({
           )}
         </div>
 
-        {/* Card Navigation Section - responsive layout */}
+        {/* Card Navigation Section - responsive layout with solution card support */}
         <div className={`header-card-navigation ${
           screenSize === 'xs' ? 'header-nav-xs' : 
           screenSize === 'sm' ? 'header-nav-sm' : ''
@@ -430,35 +436,52 @@ export function WorkspaceHeader({
           <button
             onClick={() => onNavigateCard('prev')}
             className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-            disabled={currentCard ? (() => {
+            disabled={isViewingSolution || (currentCard ? (() => {
               const allProblemCards = getSiblingCards(currentCard, cards);
               const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-              return currentIndex === 0; // Disabled if at first card
-            })() : true}
+              return currentIndex === 0; // Disabled if at first card or in solution view
+            })() : true)}
             title="Previous card"
           >
             <ArrowLeftIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
           </button>
           
-          <span className={`${
-            screenSize === 'xs' ? 'text-xs px-1' : 
-            screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
-          } text-gray-500 dark:text-gray-400`}>
-            {currentCard ? (() => {
-              const allProblemCards = getSiblingCards(currentCard, cards);
-              const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-              
-              return `${currentIndex + 1}/${allProblemCards.length}`;
-            })() : '1/1'}
-          </span>
+          {/* Card count indicator - shows solution or regular navigation */}
+          {isViewingSolution ? (
+            <SolutionCardIndicator 
+              isActive={true}
+              screenSize={screenSize}
+            />
+          ) : (
+            <span className={`${
+              screenSize === 'xs' ? 'text-xs px-1' : 
+              screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
+            } text-gray-500 dark:text-gray-400`}>
+              {currentCard ? (() => {
+                const allProblemCards = getSiblingCards(currentCard, cards);
+                const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
+                
+                return `${currentIndex + 1}/${allProblemCards.length}`;
+              })() : '1/1'}
+            </span>
+          )}
           
-          <button
-            onClick={() => onNavigateCard('next')}
-            className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-            title="Navigate to next card or create new card"
-          >
-            <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
-          </button>
+          {/* Solution-aware next button */}
+          {onSolutionToggle ? (
+            <SolutionCardButton
+              onSolutionToggle={onSolutionToggle}
+              isActive={isViewingSolution}
+              className={screenSize === 'xs' ? 'p-1' : 'p-2'}
+            />
+          ) : (
+            <button
+              onClick={() => onNavigateCard('next')}
+              className={`${screenSize === 'xs' ? 'p-1' : 'p-2'} rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+              title="Navigate to next card or create new card"
+            >
+              <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
+            </button>
+          )}
         </div>
 
         {/* Actions Section */}

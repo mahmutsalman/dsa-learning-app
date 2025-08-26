@@ -147,6 +147,14 @@ async fn main() {
             commands::debug::debug_recording_paths,
             commands::debug::debug_audio_loading,
             commands::debug::get_absolute_path,
+            // Solution card commands
+            commands::solution_card::get_solution_card,
+            commands::solution_card::create_solution_card,
+            commands::solution_card::toggle_solution_view,
+            commands::solution_card::update_solution_card_code,
+            commands::solution_card::update_solution_card_notes,
+            commands::solution_card::solution_card_exists,
+            commands::solution_card::get_regular_cards,
             commands::debug::check_microphone_permission
         ]);
     

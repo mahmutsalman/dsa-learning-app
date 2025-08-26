@@ -184,6 +184,22 @@ pub struct ProblemImage {
     pub created_at: DateTime<Utc>,
 }
 
+// Solution card model - special type of card for storing problem solutions
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SolutionCard {
+    pub id: String,
+    pub problem_id: String,
+    pub card_number: i32,
+    pub code: String,
+    pub language: String,
+    pub notes: String,
+    pub status: String,
+    pub total_duration: i32,
+    pub created_at: String,
+    pub last_modified: String,
+    pub is_solution: bool,
+}
+
 // Request models for image operations
 #[derive(Debug, Deserialize)]
 pub struct SaveImageRequest {
