@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import AudioPlayer from 'react-h5-audio-player';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { UseGlobalAudioPlayerReturn } from '../hooks/useGlobalAudioPlayer';
+import { useEnhancedWorkspaceFocusModeOptional } from './workspace/EnhancedWorkspaceContext';
 import 'react-h5-audio-player/lib/styles.css';
 import './GlobalAudioPlayer.css';
 
@@ -17,6 +18,11 @@ export default function GlobalAudioPlayer({
 }: GlobalAudioPlayerProps) {
 
   const audioPlayerRef = useRef<AudioPlayer>(null);
+  
+  // Focus mode integration - audio player adapts to focus mode but remains fully functional
+  // Use optional hook to avoid provider requirement outside of workspace context
+  const focusMode = useEnhancedWorkspaceFocusModeOptional();
+  const isFocusMode = focusMode?.isActive ?? false;
 
   // Format duration from seconds to MM:SS
   const formatTime = (seconds: number | undefined): string => {
@@ -105,8 +111,8 @@ export default function GlobalAudioPlayer({
   const playbackRates = [0.75, 1, 1.5, 2, 2.5, 3];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl mx-4 overflow-hidden">
+    <div className={`fixed inset-0 bg-black ${isFocusMode ? 'bg-opacity-30' : 'bg-opacity-50'} flex items-center justify-center z-50 transition-all duration-300`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl mx-4 overflow-hidden transition-all duration-300 ${isFocusMode ? 'scale-95 opacity-95' : ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">

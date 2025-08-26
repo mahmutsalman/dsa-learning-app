@@ -29,6 +29,142 @@
 
 /* Custom scrollbar styles */
 @layer utilities {
+  /* Focus Mode Utilities - Optimized for performance */
+  .focus-mode .focus-hide {
+    @apply opacity-0 pointer-events-none;
+    transition: opacity 200ms ease-out;
+    will-change: opacity;
+  }
+  
+  .focus-mode .focus-minimize {
+    @apply scale-95 opacity-50;
+    transition: transform 200ms ease-out, opacity 200ms ease-out;
+    will-change: transform, opacity;
+  }
+  
+  .focus-mode .focus-preserve {
+    transition: all 200ms ease-out;
+    will-change: transform, opacity;
+  }
+  
+  /* Enhanced Monaco Editor styling for focus mode - Performance optimized */
+  .focus-mode .monaco-editor {
+    @apply shadow-2xl rounded-lg ring-2 ring-blue-500/20;
+    transition: box-shadow 200ms ease-out, border-radius 200ms ease-out;
+    will-change: box-shadow;
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+  }
+  
+  .focus-mode .monaco-editor .margin {
+    @apply rounded-l-lg;
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+  }
+  
+  /* Light theme focus mode editor */
+  .focus-mode:not(.dark) .monaco-editor {
+    @apply shadow-2xl rounded-lg ring-2 ring-blue-500/20;
+    background: linear-gradient(145deg, #f8fafc 0%, #ffffff 100%) !important;
+  }
+  
+  .focus-mode:not(.dark) .monaco-editor .margin {
+    @apply rounded-l-lg;
+    background: linear-gradient(145deg, #f8fafc 0%, #ffffff 100%) !important;
+  }
+
+  /* Enhanced font rendering and readability for focus mode */
+  .focus-mode .monaco-editor .view-lines {
+    font-variant-ligatures: common-ligatures;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-smoothing: antialiased; /* Edge/IE fallback */
+    line-height: 1.6 !important;
+    letter-spacing: 0.02em !important;
+  }
+
+  /* Enhanced cursor and selection visibility in focus mode */
+  .focus-mode .monaco-editor .cursor {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.8) !important;
+    animation: focus-cursor-blink 1s infinite;
+  }
+
+  @keyframes focus-cursor-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+  }
+
+  .focus-mode .monaco-editor .selected-text {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+    border-radius: 2px;
+  }
+
+  /* Focus mode editor spacing optimizations */
+  .focus-mode .monaco-editor .view-line {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .focus-mode .monaco-editor .margin-view-overlays {
+    padding-left: 4px !important;
+  }
+
+  /* Enhanced minimap in focus mode */
+  .focus-mode .monaco-editor .minimap {
+    @apply rounded-r-lg opacity-90;
+    box-shadow: inset 2px 0 4px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Focus mode editor sizing optimizations */
+  .focus-mode .enhanced-monaco-editor {
+    @apply transform scale-[1.02];
+    -webkit-transform: scale(1.02); /* Safari fallback */
+    -moz-transform: scale(1.02); /* Firefox fallback */
+    -ms-transform: scale(1.02); /* IE fallback */
+    max-height: none !important;
+    min-height: 60vh !important;
+  }
+
+  .focus-mode .monaco-editor-container {
+    @apply relative z-10;
+    margin: 0.75rem;
+    border-radius: 0.75rem;
+  }
+
+  /* Enhanced editor container spacing in focus mode */
+  .focus-mode .workspace-content-area .enhanced-monaco-editor {
+    @apply mx-6 my-4;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(59, 130, 246, 0.1) !important;
+  }
+
+  /* Ensure editor takes optimal space when panels are hidden */
+  .focus-mode .resizable-panels-container .enhanced-monaco-editor {
+    flex: 1 1 auto !important;
+    min-width: 50% !important;
+  }
+
+  /* Audio controls accessibility in focus mode */
+  .focus-mode .focus-minimize button[aria-pressed="true"] {
+    opacity: 0.8 !important; /* Recording buttons stay more visible when active */
+    transform: scale(1) !important; /* Don't scale down active recording controls */
+  }
+
+  .focus-mode .focus-minimize button[title*="recording" i] {
+    opacity: 0.75 !important; /* Recording controls stay more accessible */
+  }
+
+  /* Ensure audio feedback indicators remain visible in focus mode */
+  .focus-mode .focus-minimize .text-red-600,
+  .focus-mode .focus-minimize .text-red-400 {
+    opacity: 1 !important; /* Recording indicators stay fully visible */
+  }
+
+  /* Audio player modal adjustments for focus mode */
+  .focus-mode .rhap_container {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
   /* Custom backdrop blur utility */
   .backdrop-blur-sm {
     backdrop-filter: blur(4px);
@@ -283,6 +419,70 @@
   
   .hover\:scale-102:hover {
     transform: scale(1.02);
+  }
+  
+  /* Focus Mode Theme Optimizations - Performance optimized */
+  .focus-mode {
+    transition: background 200ms ease-out;
+    will-change: background;
+    transform: translateZ(0); /* Force hardware acceleration */
+  }
+  
+  /* Dark theme focus mode optimizations for reduced eye strain */
+  .dark.focus-mode {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #111827 100%);
+  }
+  
+  .dark.focus-mode .workspace-content-area {
+    @apply bg-slate-900/95 backdrop-blur-sm;
+  }
+  
+  /* Light theme focus mode optimizations */
+  .focus-mode:not(.dark) {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+  }
+  
+  .focus-mode:not(.dark) .workspace-content-area {
+    @apply bg-slate-50/95 backdrop-blur-sm;
+  }
+  
+  /* Focus mode responsive behavior */
+  .focus-mode .workspace-header {
+    @apply backdrop-blur-md bg-white/90 dark:bg-gray-900/90 border-b border-gray-200/20 dark:border-gray-700/20;
+  }
+  
+  /* Enhanced focus indicators for accessibility - Performance optimized */
+  .focus-mode button:focus,
+  .focus-mode input:focus,
+  .focus-mode textarea:focus,
+  .focus-mode select:focus {
+    @apply ring-2 ring-blue-500/60 ring-offset-2 ring-offset-transparent;
+    transition: box-shadow 150ms ease-out;
+    will-change: box-shadow;
+    outline: none;
+  }
+  
+  /* High contrast support in focus mode */
+  @media (prefers-contrast: high) {
+    .focus-mode .focus-minimize {
+      @apply opacity-70 scale-100;
+    }
+    
+    .focus-mode .monaco-editor {
+      @apply ring-4 ring-blue-600;
+    }
+  }
+  
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    .focus-mode .focus-hide,
+    .focus-mode .focus-minimize,
+    .focus-mode .focus-preserve,
+    .focus-mode .monaco-editor,
+    .focus-mode {
+      transition-duration: 0ms !important;
+      animation-duration: 0ms !important;
+    }
   }
 }
 
@@ -880,6 +1080,22 @@ textarea.text-wrap-responsive {
   .workspace-header-grid * {
     transform: translateZ(0);
   }
+  
+  /* Focus mode mobile optimizations */
+  .focus-mode {
+    transform: translateZ(0);
+    will-change: transform, opacity;
+  }
+  
+  .focus-mode .monaco-editor {
+    @apply shadow-lg rounded-md ring-1 ring-blue-500/30;
+  }
+  
+  /* Reduce complexity on mobile for better performance */
+  .focus-mode .workspace-content-area {
+    @apply bg-white dark:bg-gray-900;
+    backdrop-filter: none;
+  }
 }
 
 /* High DPI screen optimizations */
@@ -1036,6 +1252,63 @@ textarea.text-wrap-responsive {
   }
 }
 
+/* Focus Mode Responsive Breakpoints */
+/* Large screens - Enhanced focus mode experience */
+@media (min-width: 1200px) {
+  .focus-mode .monaco-editor {
+    @apply shadow-2xl ring-4 ring-blue-500/20;
+    border-radius: 0.75rem;
+  }
+  
+  .focus-mode .focus-minimize {
+    @apply scale-90 opacity-60;
+  }
+}
+
+/* Medium screens - Balanced focus mode */
+@media (min-width: 768px) and (max-width: 1199px) {
+  .focus-mode .monaco-editor {
+    @apply shadow-xl ring-2 ring-blue-500/25;
+    border-radius: 0.5rem;
+  }
+  
+  .focus-mode .focus-minimize {
+    @apply scale-95 opacity-50;
+  }
+}
+
+/* Tablet screens - Simplified focus mode */
+@media (min-width: 640px) and (max-width: 767px) {
+  .focus-mode .monaco-editor {
+    @apply shadow-lg ring-1 ring-blue-500/30;
+    border-radius: 0.375rem;
+  }
+  
+  .focus-mode .workspace-header {
+    @apply bg-white/95 dark:bg-gray-900/95;
+    backdrop-filter: blur(8px);
+  }
+}
+
+/* Small screens - Ultra-optimized mobile focus mode */
+@media (max-width: 639px) {
+  .focus-mode .focus-hide {
+    @apply opacity-0 pointer-events-none;
+    transition: opacity 150ms ease-out;
+    will-change: opacity;
+  }
+  
+  .focus-mode .focus-minimize {
+    @apply opacity-30 scale-95;
+    transition: transform 150ms ease-out, opacity 150ms ease-out;
+    will-change: transform, opacity;
+  }
+  
+  .focus-mode .monaco-editor {
+    @apply shadow-md rounded-sm ring-1 ring-blue-500/40;
+  }
+}
+
 /* Enhanced Modal animations */
 @keyframes modalEnter {
   from {
@@ -1070,4 +1343,36 @@ textarea.text-wrap-responsive {
 
 .animate-pulse-custom {
   animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+/* Focus mode entry animation */
+@keyframes focusModeEnter {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Focus mode exit animation */
+@keyframes focusModeExit {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.focus-mode-enter {
+  animation: focusModeEnter 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.focus-mode-exit {
+  animation: focusModeExit 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

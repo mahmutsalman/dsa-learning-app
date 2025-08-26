@@ -15,25 +15,15 @@ export const SolutionCardButton: React.FC<SolutionCardButtonProps> = ({
   className = ''
 }) => {
   const handleClick = useCallback((event: React.MouseEvent) => {
-    // Check for shift key
-    if (event.shiftKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      onSolutionToggle(event);
-    } else {
-      // Normal click - let parent handle regular navigation
-      // Don't call onSolutionToggle for normal clicks
-    }
+    // Always forward click events to parent - let parent handle shift vs normal click logic
+    onSolutionToggle(event);
   }, [onSolutionToggle]);
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     // Handle keyboard shortcuts
     if (event.key === 'Enter' || event.key === ' ') {
-      if (event.shiftKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        onSolutionToggle(event);
-      }
+      // Always forward keyboard events to parent - let parent handle shift logic
+      onSolutionToggle(event);
     }
   }, [onSolutionToggle]);
 
