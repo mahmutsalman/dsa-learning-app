@@ -14,6 +14,7 @@ import {
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { LanguageSelector } from './LanguageSelector';
+import { FocusModeToggle } from './FocusModeToggle';
 import type { Problem, Card } from '../types';
 import type { UseTimerReturn } from '../hooks/useTimer';
 import type { AutoSaveState } from '../hooks/useAutoSave';
@@ -342,7 +343,7 @@ export function WorkspaceHeader({
     <div className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative">
       <div className="workspace-header-grid">
         {/* Navigation Section */}
-        <div className="header-navigation">
+        <div className="header-navigation focus-hide">
           {previousProblemId && onBackToPreviousProblem ? (
             <div className="flex items-center gap-1">
               <button
@@ -368,7 +369,7 @@ export function WorkspaceHeader({
         </div>
 
         {/* Title Section */}
-        <div className="header-title">
+        <div className="header-title focus-minimize">
           <div>
             <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
               {problem.title}
@@ -386,7 +387,7 @@ export function WorkspaceHeader({
         </div>
 
         {/* Language Selector Section - responsive width */}
-        <div className={`header-language-selector ${
+        <div className={`header-language-selector focus-minimize ${
           screenSize === 'xs' ? 'header-language-xs' : 
           screenSize === 'sm' ? 'header-language-sm' : ''
         }`}>
@@ -401,7 +402,7 @@ export function WorkspaceHeader({
         </div>
 
         {/* Save Indicators Section - hide text on small screens */}
-        <div className={`header-save-indicators ${
+        <div className={`header-save-indicators focus-minimize ${
           screenSize === 'xs' ? 'header-save-xs' : 
           screenSize === 'sm' ? 'header-save-sm' : ''
         }`}>
@@ -429,7 +430,7 @@ export function WorkspaceHeader({
         </div>
 
         {/* Card Navigation Section - responsive layout with solution card support */}
-        <div className={`header-card-navigation ${
+        <div className={`header-card-navigation focus-minimize ${
           screenSize === 'xs' ? 'header-nav-xs' : 
           screenSize === 'sm' ? 'header-nav-sm' : ''
         }`}>
@@ -487,7 +488,7 @@ export function WorkspaceHeader({
         {/* Actions Section */}
         <div className="header-actions">
           {/* Delete Button Container - Always reserves space */}
-          <div className={`header-delete-container ${!currentCard?.parent_card_id ? 'hidden' : ''}`}>
+          <div className={`header-delete-container focus-minimize ${!currentCard?.parent_card_id ? 'hidden' : ''}`}>
             <button
               onClick={onDeleteCard}
               className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
@@ -498,9 +499,12 @@ export function WorkspaceHeader({
             </button>
           </div>
 
+          {/* Focus Mode Toggle */}
+          <FocusModeToggle size="md" />
+
           {/* Timer with integrated Session History */}
           <div 
-            className="relative" 
+            className="relative focus-minimize" 
             onMouseLeave={(e) => {
               // Add small delay and check if mouse is moving to dropdown
               const rect = e.currentTarget.getBoundingClientRect();
@@ -664,7 +668,7 @@ export function WorkspaceHeader({
 
           {/* Recording with integrated Recording History */}
           <div 
-            className="relative" 
+            className="relative focus-minimize" 
             onMouseLeave={(e) => {
               // Add small delay and check if mouse is moving to dropdown
               const rect = e.currentTarget.getBoundingClientRect();

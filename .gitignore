@@ -1,142 +1,42 @@
-# Dependencies
+# =============================================================================
+# Dependencies and Package Managers
+# =============================================================================
 node_modules/
-.npm
+.npm/
 .pnpm/
 .yarn/
-.pnp
+.pnp/
 .pnp.js
 .yarn/build-state.yml
 .yarn/install-state.gz
+jspm_packages/
 
-# Build outputs
+# =============================================================================
+# Build Outputs and Distribution
+# =============================================================================
 /dist/
 /build/
 /out/
+bundle/
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# IDE and Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.vimrc
-.vim/
-.emacs.d/
-*.sublime-project
-*.sublime-workspace
-
-# OS files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-.pnpm-debug.log*
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-.nyc_output
-
-# Dependency directories
-jspm_packages/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional stylelint cache
-.stylelintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-
-# Optional REPL history
-.node_repl_history
-
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# parcel-bundler cache (https://parceljs.org/)
-.cache
-.parcel-cache
-
-# Vite cache and build artifacts
+# Vite build artifacts
 .vite/
 .rollup.cache/
 
-# Turborepo cache
-.turbo/
+# TypeScript build cache
+*.tsbuildinfo
 
-# SWC cache
-.swc/
-
-# Next.js build output
-.next
-
-# Nuxt.js build / generate output
-.nuxt
-dist
-
-# Gatsby files
-.cache/
-public
-
-# Storybook build outputs
-.out
-.storybook-out
-
-# Temporary folders
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Runtime data
-*.pid
-*.seed
-*.pid.lock
-
-# Tauri-specific patterns
+# =============================================================================
+# Tauri-Specific Patterns
+# =============================================================================
+# Rust build artifacts
 src-tauri/target/
 src-tauri/gen/
-WixTools/
+**/target/
+**/*.rs.bk
+.rustc_info.json
 
-# Tauri build artifacts and bundles
+# Tauri bundle outputs
 *.app
 *.deb
 *.AppImage
@@ -146,24 +46,154 @@ WixTools/
 *.msp
 *.rpm
 *.pkg
-bundle/
+WixTools/
 
-# Rust-specific patterns
-**/target/
-**/*.rs.bk
+# =============================================================================
+# Development Environment & Configuration
+# =============================================================================
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# Database files
+# Editor and IDE files
+.vscode/
+.vscode-insiders/
+.idea/
+.fleet/
+.history/
+*.swp
+*.swo
+*~
+.vim/
+.emacs.d/
+*.sublime-project
+*.sublime-workspace
+*.iml
+*.ipr
+*.iws
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.sln.docstates
+
+# =============================================================================
+# Runtime and Cache Files
+# =============================================================================
+# Application caches
+.cache/
+.parcel-cache/
+.turbo/
+.swc/
+
+# Tool-specific caches
+.eslintcache
+.stylelintcache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Temporary directories
+tmp/
+temp/
+.tmp/
+.temp/
+*.tmp
+*.temp
+
+# =============================================================================
+# Logs and Runtime Data
+# =============================================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+pids/
+*.pid
+*.seed
+*.pid.lock
+.node_repl_history
+
+# =============================================================================
+# Database Files
+# =============================================================================
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
 
-# Development data and resources (project-specific)
-dev-data/
+# =============================================================================
+# Audio and Media Files
+# =============================================================================
+*.wav
+*.mp3
+*.mp4
+*.avi
+recordings/
+uploads/
+user-content/
+generated/
+
+# =============================================================================
+# Testing and Coverage
+# =============================================================================
+coverage/
+*.lcov
+.nyc_output
+test-results/
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.lnk
+
+# =============================================================================
+# Development Utilities and Scripts
+# =============================================================================
+# Shell scripts (often project-specific utilities)
+*.sh
+
+# Icon generation and development tools
+*.ico
+*.icns
+ICON_SYSTEM.md
+
+# Development documentation and guides
+BUILD_GUIDE.md
+debug-paths.html
+
+# =============================================================================
+# Project-Specific Development Resources
+# =============================================================================
+# Local development resources (keep only essential docs in repo)
 localResources/
 
-# Migration and test scripts (development utilities)
+# Development data and migration scripts
+dev-data/
 migrate-database*.js
 migrate-database*.cjs
 test-database.js
@@ -172,71 +202,38 @@ add-sample-data.js
 check-database-status.js
 verify-migration.cjs
 
-# Audio/media files in development
-*.wav
-*.mp3
-*.mp4
-*.avi
-recordings/
+# =============================================================================
+# AI and Development Tools
+# =============================================================================
+# Claude AI context and backup files
+.claude/
+.claude-backup/
 
-# Image uploads/generated content
-uploads/
-generated/
-user-content/
-
-# Backup files
+# =============================================================================
+# Backup and Archive Files
+# =============================================================================
 *.backup
 *.bak
 *_backup
 *.orig
+*.tgz
+.yarn-integrity
 
-# Claude AI context files (development assistance)
-.claude/
-
-# Additional IDE and editor patterns
-.fleet/
-.vscode-insiders/
-.history/
-**/.vscode/settings.json
-**/.vscode/launch.json
-**/.vscode/extensions.json
-
-# JetBrains IDEs (additional patterns)
-.idea/
-*.iml
-*.ipr
-*.iws
+# =============================================================================
+# Framework-Specific Patterns
+# =============================================================================
+# Next.js (if used in future)
+.next/
 out/
 
-# Visual Studio
-.vs/
-*.suo
-*.user
-*.sln.docstates
+# Nuxt.js
+.nuxt/
 
-# Additional cache directories
-.cache/
-.temp/
-.tmp/
+# Storybook
+.storybook-out/
 
-# MacOS specific
-.AppleDouble
-.LSOverride
-Icon?
+# Monaco Editor cache (if applicable)
+.monaco/
 
-# Windows specific
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msm
-*.msp
-*.lnk
-
-# Development and debugging files
-ICON_SYSTEM.md
-debug-paths.html
-build-dmg.sh
-BUILD_GUIDE.md
+# Quill editor temporary files
+.quill-temp/

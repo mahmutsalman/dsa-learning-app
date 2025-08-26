@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import type { Monaco } from '@monaco-editor/react';
+import { useEnhancedWorkspaceFocusMode } from './workspace/EnhancedWorkspaceContext';
 
 export interface EnhancedMonacoEditorProps {
   value: string;
@@ -64,6 +65,39 @@ const EDITOR_OPTIONS = {
   }
 };
 
+// Focus mode enhanced editor options
+const FOCUS_MODE_OPTIONS = {
+  fontSize: 15, // Slightly larger for better readability
+  lineHeight: 24, // Increased line height for better spacing
+  letterSpacing: 0.3, // Optimized letter spacing
+  cursorBlinking: 'smooth' as const,
+  cursorSmoothCaretAnimation: 'on' as const,
+  cursorWidth: 2,
+  renderLineHighlight: 'all' as const,
+  renderWhitespace: 'boundary' as const,
+  smoothScrolling: true,
+  scrollbar: {
+    useShadows: true,
+    verticalHasArrows: false,
+    horizontalHasArrows: false,
+    verticalScrollbarSize: 8,
+    horizontalScrollbarSize: 8
+  },
+  minimap: {
+    enabled: true,
+    scale: 2, // Larger minimap for better visibility
+    renderCharacters: true,
+    maxColumn: 120
+  },
+  padding: { top: 16, bottom: 16 }, // Extra padding for focus mode
+  folding: true,
+  foldingHighlight: true,
+  showFoldingControls: 'always' as const,
+  wordWrap: 'bounded' as const,
+  wordWrapColumn: 100, // Slightly wider for focus mode
+  wrappingIndent: 'deepIndent' as const
+};
+
 const SUPPORTED_LANGUAGES = {
   javascript: 'javascript',
   typescript: 'typescript',
@@ -97,6 +131,27 @@ export function EnhancedMonacoEditor({
   const editorRef = useRef<any>(null);
   const [editorHeight, setEditorHeight] = useState<number>(400);
   const [isReady, setIsReady] = useState(false);
+  
+  // Focus mode integration
+  const { isActive: isFocusMode } = useEnhancedWorkspaceFocusMode();
+  
+  // Dynamic editor options based on focus mode
+  const editorOptions = React.useMemo(() => {
+    return isFocusMode 
+      ? { ...EDITOR_OPTIONS, ...FOCUS_MODE_OPTIONS }
+      : EDITOR_OPTIONS;
+  }, [isFocusMode]);
+
+  // Update editor options when focus mode changes
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.updateOptions(editorOptions);
+      // Trigger layout update for new sizing
+      setTimeout(() => {
+        editorRef.current?.layout();
+      }, 50);
+    }
+  }, [editorOptions]);
 
   // Track container dimensions and update editor height
   useEffect(() => {
@@ -247,7 +302,7 @@ export function EnhancedMonacoEditor({
   return (
     <div 
       ref={containerRef} 
-      className={`enhanced-monaco-editor h-full w-full ${className}`}
+      className={`enhanced-monaco-editor focus-preserve h-full w-full ${className}`}
     >
       {isReady ? (
         <Editor
@@ -257,7 +312,7 @@ export function EnhancedMonacoEditor({
           theme={theme}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
-          options={EDITOR_OPTIONS}
+          options={editorOptions}
           loading={
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>

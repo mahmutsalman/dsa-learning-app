@@ -196,7 +196,7 @@ export default function EnhancedProblemDescriptionPanel({
   }
 
   return (
-    <div className={`enhanced-problem-panel ${className} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out group relative h-full`}>
+    <div className={`enhanced-problem-panel focus-hide ${className} bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ease-in-out group relative h-full`}>
       {/* Header */}
       <div className={`flex items-center ${isCollapsed ? 'justify-center px-2' : 'justify-between px-3'} py-4 border-b border-gray-200 dark:border-gray-700 min-h-[73px]`}>
         {!isCollapsed && (

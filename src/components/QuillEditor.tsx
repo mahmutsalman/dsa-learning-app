@@ -374,7 +374,7 @@ export function QuillEditor({
   }, [value]);
 
   return (
-    <div className={`quill-editor-wrapper ${className} ${theme === 'dark' ? 'quill-dark' : 'quill-light'}`}>
+    <div className={`quill-editor-wrapper focus-preserve ${className} ${theme === 'dark' ? 'quill-dark' : 'quill-light'}`}>
       <div 
         ref={containerRef}
         style={{ height: '300px' }}

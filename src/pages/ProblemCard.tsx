@@ -24,6 +24,7 @@ import { useTimer } from '../hooks/useTimer';
 import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
+import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -58,6 +59,7 @@ export default function ProblemCard() {
       setError(error);
     }
   });
+
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
@@ -628,6 +630,7 @@ export default function ProblemCard() {
   if (useEnhancedWorkspace) {
     return (
       <EnhancedWorkspaceProvider>
+        <FocusModeShortcutHandler />
         <div className="flex-1 flex flex-col h-full relative">
           {/* Enhanced Workspace */}
           <EnhancedResizableWorkspace

@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useLocalStorage } from '../../hooks/useLocalStorage';
-import { useEnhancedWorkspaceLayout, useEnhancedWorkspaceResize } from './EnhancedWorkspaceContext';
+import { useEnhancedWorkspaceLayout, useEnhancedWorkspaceResize, useEnhancedWorkspaceFocusMode } from './EnhancedWorkspaceContext';
 import '../../styles/workspace.css';
 
 export interface EnhancedResizableWorkspaceProps {
@@ -35,6 +35,7 @@ export default function EnhancedResizableWorkspace({
   // Enhanced workspace context
   const { layout, updateLayout } = useEnhancedWorkspaceLayout();
   const { setResizing } = useEnhancedWorkspaceResize();
+  const { isActive: isFocusModeActive } = useEnhancedWorkspaceFocusMode();
   
   // Fallback to localStorage for backward compatibility
   const [sidebarSize, setSidebarSize] = useLocalStorage('enhanced-workspace-sidebar-size', DEFAULT_SIDEBAR_SIZE);
@@ -151,7 +152,7 @@ export default function EnhancedResizableWorkspace({
   return (
     <div
       ref={workspaceRef}
-      className={`enhanced-workspace-container ${className}`}
+      className={`enhanced-workspace-container ${isFocusModeActive ? 'focus-mode' : ''} ${className}`}
     >
       {/* Fixed Header Section */}
       <div className="enhanced-content-header">
