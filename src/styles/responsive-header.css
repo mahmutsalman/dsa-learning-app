@@ -1,0 +1,488 @@
+/* ============================================
+   CSS DYNAMIC SCALING FRAMEWORK
+   Issue #3: Responsive Header System
+   ============================================ */
+
+/* ===========================================
+   CSS CUSTOM PROPERTIES FOUNDATION
+   =========================================== */
+
+:root {
+  /* Core scaling factor - set dynamically by JavaScript from useHeaderResponsiveness */
+  --header-scale-factor: 1.0;
+  
+  /* Dynamic button scaling - maintains 44px minimum touch targets */
+  --header-button-size: clamp(32px, calc(44px * var(--header-scale-factor)), 48px);
+  --header-button-padding: clamp(0.25rem, calc(0.5rem * var(--header-scale-factor)), 0.75rem);
+  
+  /* Dynamic spacing system */
+  --header-spacing-xs: clamp(2px, calc(4px * var(--header-scale-factor)), 6px);
+  --header-spacing-sm: clamp(4px, calc(8px * var(--header-scale-factor)), 12px);
+  --header-spacing-md: clamp(6px, calc(12px * var(--header-scale-factor)), 16px);
+  --header-spacing-lg: clamp(8px, calc(16px * var(--header-scale-factor)), 20px);
+  
+  /* Dynamic text scaling */
+  --header-text-scale: clamp(0.75, var(--header-scale-factor), 1.0);
+  --header-text-sm: clamp(0.7rem, calc(0.875rem * var(--header-text-scale)), 1rem);
+  --header-text-md: clamp(0.75rem, calc(1rem * var(--header-text-scale)), 1.125rem);
+  --header-text-lg: clamp(0.875rem, calc(1.125rem * var(--header-text-scale)), 1.25rem);
+  
+  /* Dynamic icon scaling */
+  --header-icon-size: clamp(16px, calc(20px * var(--header-scale-factor)), 24px);
+  --header-icon-lg: clamp(20px, calc(24px * var(--header-scale-factor)), 28px);
+  
+  /* Dynamic border radius */
+  --header-border-radius: clamp(4px, calc(6px * var(--header-scale-factor)), 8px);
+  
+  /* Animation timing - consistent across all responsive states */
+  --header-transition-duration: 200ms;
+  --header-transition-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===========================================
+   RESPONSIVE BUTTON SCALING SYSTEM
+   =========================================== */
+
+/* Base button class with dynamic scaling */
+.header-scale-button {
+  min-width: var(--header-button-size);
+  min-height: var(--header-button-size);
+  padding: var(--header-button-padding);
+  font-size: var(--header-text-sm);
+  border-radius: var(--header-border-radius);
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+  
+  /* Ensure touch targets meet accessibility standards */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Icon-only buttons */
+.header-scale-button.icon-only {
+  width: var(--header-button-size);
+  height: var(--header-button-size);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-scale-button.icon-only svg,
+.header-scale-button.icon-only .icon {
+  width: var(--header-icon-size);
+  height: var(--header-icon-size);
+}
+
+/* Text buttons with icons */
+.header-scale-button.with-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--header-spacing-xs);
+}
+
+.header-scale-button.with-icon svg,
+.header-scale-button.with-icon .icon {
+  width: var(--header-icon-size);
+  height: var(--header-icon-size);
+  flex-shrink: 0;
+}
+
+/* Large variant buttons */
+.header-scale-button.large {
+  min-width: calc(var(--header-button-size) * 1.2);
+  min-height: calc(var(--header-button-size) * 1.2);
+  font-size: var(--header-text-md);
+  padding: calc(var(--header-button-padding) * 1.2);
+}
+
+.header-scale-button.large svg,
+.header-scale-button.large .icon {
+  width: var(--header-icon-lg);
+  height: var(--header-icon-lg);
+}
+
+/* Compact variant buttons */
+.header-scale-button.compact {
+  min-width: calc(var(--header-button-size) * 0.8);
+  min-height: calc(var(--header-button-size) * 0.8);
+  font-size: calc(var(--header-text-sm) * 0.9);
+  padding: calc(var(--header-button-padding) * 0.8);
+}
+
+/* ===========================================
+   DYNAMIC TEXT AND LABEL SCALING
+   =========================================== */
+
+/* Base text scaling class */
+.header-scale-text {
+  font-size: var(--header-text-md);
+  line-height: 1.4;
+  transition: font-size var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* Text size variants */
+.header-scale-text.small {
+  font-size: var(--header-text-sm);
+}
+
+.header-scale-text.large {
+  font-size: var(--header-text-lg);
+}
+
+/* Text truncation with dynamic width */
+.header-scale-text.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Responsive text that hides at small breakpoints */
+.header-scale-text.responsive-hide {
+  display: block;
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* ===========================================
+   PRIORITY-BASED ELEMENT HIDING SYSTEM
+   =========================================== */
+
+/* Priority 1: Critical elements - never hidden */
+.header-critical {
+  display: flex !important;
+  visibility: visible !important;
+}
+
+/* Priority 2: Important elements - hidden only at xs breakpoint */
+.header-important {
+  display: flex;
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* Priority 3: Optional elements - hidden at xs and sm breakpoints */
+.header-optional {
+  display: flex;
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* Priority 4: Non-essential elements - hidden at xs, sm, and md breakpoints */
+.header-non-essential {
+  display: flex;
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* ===========================================
+   RESPONSIVE BREAKPOINT IMPLEMENTATIONS
+   =========================================== */
+
+/* Ultra-wide screens (1200px+) - Maximum spacing and elements */
+@media (min-width: 1200px) {
+  :root {
+    --header-scale-factor: 1.1;
+  }
+  
+  .header-optional,
+  .header-non-essential {
+    display: flex;
+  }
+}
+
+/* Spacious screens (1000px - 1199px) - Full layout */
+@media (max-width: 1199px) {
+  :root {
+    --header-scale-factor: 1.0;
+  }
+}
+
+/* Normal screens (800px - 999px) - Balanced layout */
+@media (max-width: 999px) {
+  :root {
+    --header-scale-factor: 0.95;
+  }
+}
+
+/* Compact screens (600px - 799px) - Compact layout */
+@media (max-width: 799px) {
+  :root {
+    --header-scale-factor: 0.9;
+  }
+  
+  .header-non-essential {
+    display: none !important;
+  }
+  
+  .header-scale-text.responsive-hide {
+    display: none;
+  }
+}
+
+/* Small screens (480px - 599px) - Mobile-friendly */
+@media (max-width: 599px) {
+  :root {
+    --header-scale-factor: 0.85;
+  }
+  
+  .header-optional,
+  .header-non-essential {
+    display: none !important;
+  }
+  
+  /* Show only text labels on important buttons, hide icons */
+  .header-important .header-scale-button.with-icon svg,
+  .header-important .header-scale-button.with-icon .icon {
+    display: none;
+  }
+}
+
+/* Extra small screens (<480px) - Minimal layout */
+@media (max-width: 479px) {
+  :root {
+    --header-scale-factor: 0.8;
+  }
+  
+  .header-important {
+    display: none !important;
+  }
+  
+  .header-optional,
+  .header-non-essential {
+    display: none !important;
+  }
+  
+  /* Only critical elements visible, icons only */
+  .header-critical .header-scale-text {
+    display: none;
+  }
+  
+  .header-critical .header-scale-button {
+    min-width: var(--header-button-size);
+    padding: 0;
+  }
+}
+
+/* ===========================================
+   ENHANCED WORKSPACE HEADER GRID INTEGRATION
+   =========================================== */
+
+/* Enhanced workspace header grid with dynamic scaling */
+.workspace-header-grid.dynamic-scale {
+  gap: var(--header-spacing-sm);
+  transition: gap var(--header-transition-duration) var(--header-transition-easing);
+}
+
+.workspace-header-grid.dynamic-scale > * {
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* Dynamic grid column adjustments based on content */
+.workspace-header-grid.dynamic-scale .header-navigation {
+  gap: var(--header-spacing-xs);
+}
+
+.workspace-header-grid.dynamic-scale .header-title h1 {
+  font-size: var(--header-text-lg);
+  transition: font-size var(--header-transition-duration) var(--header-transition-easing);
+}
+
+.workspace-header-grid.dynamic-scale .header-title p {
+  font-size: var(--header-text-sm);
+  transition: font-size var(--header-transition-duration) var(--header-transition-easing);
+}
+
+.workspace-header-grid.dynamic-scale .header-actions {
+  gap: var(--header-spacing-xs);
+}
+
+/* ===========================================
+   SMOOTH TRANSITION SYSTEM
+   =========================================== */
+
+/* Ensure all header elements participate in smooth transitions */
+.header-navigation,
+.header-title,
+.header-language-selector,
+.header-save-indicators,
+.header-card-navigation,
+.header-actions {
+  transition: all var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* Prevent transitions during active resize operations */
+.resizing .header-scale-button,
+.resizing .header-scale-text,
+.resizing .header-critical,
+.resizing .header-important,
+.resizing .header-optional,
+.resizing .header-non-essential {
+  transition: none !important;
+}
+
+/* ===========================================
+   ACCESSIBILITY AND PERFORMANCE OPTIMIZATIONS
+   =========================================== */
+
+/* Ensure focus states scale appropriately */
+.header-scale-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  transition: outline var(--header-transition-duration) var(--header-transition-easing);
+}
+
+/* High contrast mode adjustments */
+@media (prefers-contrast: high) {
+  .header-scale-button {
+    border: 1px solid currentColor;
+  }
+  
+  .header-critical,
+  .header-important {
+    font-weight: 600;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --header-transition-duration: 0ms;
+  }
+  
+  .header-scale-button,
+  .header-scale-text,
+  .header-critical,
+  .header-important,
+  .header-optional,
+  .header-non-essential {
+    transition: none !important;
+  }
+}
+
+/* Performance optimization for mobile devices */
+@media (max-width: 768px) {
+  .header-scale-button,
+  .header-scale-text {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+}
+
+/* ===========================================
+   INTEGRATION WITH EXISTING TAILWIND CLASSES
+   =========================================== */
+
+/* Ensure compatibility with existing Tailwind utility classes */
+.header-scale-button.bg-blue-600 {
+  background-color: rgb(37 99 235);
+}
+
+.header-scale-button.text-white {
+  color: rgb(255 255 255);
+}
+
+.header-scale-button.hover\:bg-blue-700:hover {
+  background-color: rgb(29 78 216);
+}
+
+/* Dark mode integration */
+.dark .header-scale-button {
+  color: rgb(243 244 246);
+}
+
+.dark .header-scale-text {
+  color: rgb(243 244 246);
+}
+
+/* ===========================================
+   SPECIFIC BUTTON AND ELEMENT ENHANCEMENTS
+   =========================================== */
+
+/* Timer button with dynamic text scaling */
+.header-timer-button {
+  min-width: auto;
+  padding: var(--header-button-padding) calc(var(--header-button-padding) * 1.5);
+  white-space: nowrap;
+  font-size: var(--header-text-sm);
+}
+
+/* Language selector scaling */
+.header-language-selector select,
+.header-language-selector button {
+  height: var(--header-button-size);
+  font-size: var(--header-text-sm);
+  padding: 0 var(--header-button-padding);
+}
+
+/* Save indicator scaling */
+.header-save-indicator {
+  font-size: var(--header-text-sm);
+  padding: calc(var(--header-button-padding) * 0.5) var(--header-button-padding);
+  border-radius: var(--header-border-radius);
+}
+
+/* Card navigation scaling */
+.header-card-nav-button {
+  width: var(--header-button-size);
+  height: var(--header-button-size);
+  border-radius: var(--header-border-radius);
+  font-size: var(--header-text-sm);
+}
+
+/* ===========================================
+   DEVELOPMENT AND DEBUG HELPERS
+   =========================================== */
+
+/* Debug class to visualize responsive breakpoints */
+.header-debug-responsive::before {
+  content: 'scale: ' attr(data-scale-factor);
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  padding: 2px 6px;
+  font-size: 10px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* Development mode visual indicators */
+@media (max-width: 479px) {
+  .header-debug-responsive::after {
+    content: 'XS';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background: red;
+    color: white;
+    padding: 2px;
+    font-size: 8px;
+  }
+}
+
+@media (min-width: 480px) and (max-width: 599px) {
+  .header-debug-responsive::after {
+    content: 'SM';
+    background: orange;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 799px) {
+  .header-debug-responsive::after {
+    content: 'MD';
+    background: yellow;
+    color: black;
+  }
+}
+
+@media (min-width: 800px) and (max-width: 999px) {
+  .header-debug-responsive::after {
+    content: 'LG';
+    background: green;
+  }
+}
+
+@media (min-width: 1000px) {
+  .header-debug-responsive::after {
+    content: 'XL';
+    background: blue;
+  }
+}

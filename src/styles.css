@@ -1,6 +1,7 @@
 /* Import external libraries first */
 @import 'quill/dist/quill.snow.css';
 @import './styles/workspace.css';
+@import './styles/responsive-header.css';
 
 /* Then Tailwind */
 @tailwind base;
@@ -749,6 +750,36 @@ textarea.text-wrap-responsive {
   position: relative;
   container-type: inline-size; /* Enable container queries */
   z-index: 1;
+}
+
+/* Enhanced workspace header grid with dynamic scaling integration */
+.workspace-header-grid.enhanced-responsive {
+  gap: var(--header-spacing-sm, var(--header-gap));
+  transition: gap var(--header-transition-duration, 200ms) var(--header-transition-easing, ease);
+}
+
+.workspace-header-grid.enhanced-responsive > * {
+  transition: all var(--header-transition-duration, 200ms) var(--header-transition-easing, ease);
+}
+
+/* Dynamic button sizing for header elements */
+.workspace-header-grid.enhanced-responsive button {
+  min-width: var(--header-button-size, 44px);
+  min-height: var(--header-button-size, 44px);
+  font-size: var(--header-text-sm, 0.875rem);
+  border-radius: var(--header-border-radius, 6px);
+  transition: all var(--header-transition-duration, 200ms) var(--header-transition-easing, ease);
+}
+
+/* Dynamic text scaling for header elements */
+.workspace-header-grid.enhanced-responsive .header-title h1 {
+  font-size: var(--header-text-lg, 1.125rem);
+  transition: font-size var(--header-transition-duration, 200ms) var(--header-transition-easing, ease);
+}
+
+.workspace-header-grid.enhanced-responsive .header-title p {
+  font-size: var(--header-text-sm, 0.875rem);
+  transition: font-size var(--header-transition-duration, 200ms) var(--header-transition-easing, ease);
 }
 
 /* Header grid sections */
