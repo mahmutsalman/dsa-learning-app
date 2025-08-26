@@ -22,9 +22,11 @@ bundle/
 # Vite build artifacts
 .vite/
 .rollup.cache/
+vite.config.ts.timestamp-*
 
 # TypeScript build cache
 *.tsbuildinfo
+.tsc-incremental/
 
 # =============================================================================
 # Tauri-Specific Patterns
@@ -89,6 +91,7 @@ WixTools/
 .parcel-cache/
 .turbo/
 .swc/
+.next/cache/
 
 # Tool-specific caches
 .eslintcache
@@ -97,6 +100,11 @@ WixTools/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
+.tscache/
+
+# React and development caches
+.react/
+storybook-static/
 
 # Temporary directories
 tmp/
@@ -137,10 +145,15 @@ pids/
 *.mp3
 *.mp4
 *.avi
+*.flac
+*.aac
+*.ogg
 recordings/
 uploads/
 user-content/
+user-data/
 generated/
+images/problem_*/
 
 # =============================================================================
 # Testing and Coverage
@@ -238,3 +251,52 @@ out/
 
 # Quill editor temporary files
 .quill-temp/
+
+# ESLint and Prettier
+.eslintrc.local
+.prettierrc.local
+
+# Security and secrets
+*.pem
+*.key
+*.p12
+*.cert
+*.crt
+.env*.local
+secrets.json
+
+# Package manager lock files (keep package-lock.json but ignore others if needed)
+# yarn.lock
+# pnpm-lock.yaml
+
+# =============================================================================
+# macOS and IDE Extended Patterns  
+# =============================================================================
+# Additional macOS files
+.CFUserTextEncoding
+.com.apple.timemachine.donotpresent
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.apdisk
+
+# JetBrains IDEs extended
+.idea/*.xml
+.idea/.name
+.idea/dictionaries/
+.idea/shelf/
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/jarRepositories.xml
+
+# Visual Studio Code extended  
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+*.code-workspace

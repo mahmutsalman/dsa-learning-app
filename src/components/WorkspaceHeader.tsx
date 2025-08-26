@@ -385,7 +385,7 @@ export function WorkspaceHeader({
       ref={headerContainerRef}
       className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative"
     >
-      <div className={`workspace-header-grid dynamic-scale ${(import.meta as any).env?.MODE === 'development' ? 'header-debug-responsive' : ''}`} data-scale-factor={responsive.isStable ? document.documentElement.style.getPropertyValue('--header-scale-factor') : '...'}>
+      <div className="workspace-header-grid dynamic-scale">
         {/* Navigation Section - Critical */}
         <div className="header-navigation header-critical focus-hide">
           {previousProblemId && onBackToPreviousProblem ? (
@@ -473,344 +473,342 @@ export function WorkspaceHeader({
           )}
         </div>
 
-        {/* Card Navigation Section - Important */}
-        <div className={`header-card-navigation header-important focus-minimize ${
-          screenSize === 'xs' ? 'header-nav-xs' : 
-          screenSize === 'sm' ? 'header-nav-sm' : ''
+        {/* Unified Controls Section - Navigation + Actions */}
+        <div className={`header-controls-unified header-important focus-minimize ${
+          screenSize === 'xs' ? 'header-controls-xs' : 
+          screenSize === 'sm' ? 'header-controls-sm' : ''
         }`}>
-          <button
-            onClick={() => onNavigateCard('prev')}
-            className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
-            disabled={isViewingSolution || (currentCard ? (() => {
-              const allProblemCards = getSiblingCards(currentCard, cards);
-              const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-              return currentIndex === 0; // Disabled if at first card or in solution view
-            })() : true)}
-            title="Previous card"
-          >
-            <ArrowLeftIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
-          </button>
           
-          {/* Card count indicator - shows solution or regular navigation */}
-          {isViewingSolution ? (
-            <SolutionCardIndicator 
-              isActive={true}
-              screenSize={screenSize}
-            />
-          ) : (
-            <span className={`${
-              screenSize === 'xs' ? 'text-xs px-1' : 
-              screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
-            } text-gray-500 dark:text-gray-400`}>
-              {currentCard ? (() => {
+          {/* Navigation Sub-Group */}
+          <div className="controls-navigation">
+            <button
+              onClick={() => onNavigateCard('prev')}
+              className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+              disabled={isViewingSolution || (currentCard ? (() => {
                 const allProblemCards = getSiblingCards(currentCard, cards);
                 const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-                
-                return `${currentIndex + 1}/${allProblemCards.length}`;
-              })() : '1/1'}
-            </span>
-          )}
-          
-          {/* Solution-aware next button */}
-          {onSolutionToggle ? (
-            <SolutionCardButton
-              onSolutionToggle={onSolutionToggle}
-              isActive={isViewingSolution}
-              className={screenSize === 'xs' ? 'p-1' : 'p-2'}
-            />
-          ) : (
-            <button
-              onClick={() => onNavigateCard('next')}
-              className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
-              title="Navigate to next card or create new card"
+                return currentIndex === 0; // Disabled if at first card or in solution view
+              })() : true)}
+              title="Previous card"
             >
-              <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
+              <ArrowLeftIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
             </button>
-          )}
-        </div>
-
-        {/* Actions Section - Critical */}
-        <div className="header-actions header-critical">
-          {/* Delete Button Container - Always reserves space */}
-          <div className={`header-delete-container focus-minimize ${!currentCard?.parent_card_id ? 'hidden' : ''}`}>
-            <button
-              onClick={onDeleteCard}
-              className="header-scale-button icon-only hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
-              title="Delete child card"
-              disabled={!currentCard?.parent_card_id}
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+            
+            {/* Card count indicator - shows solution or regular navigation */}
+            {isViewingSolution ? (
+              <SolutionCardIndicator 
+                isActive={true}
+                screenSize={screenSize}
+              />
+            ) : (
+              <span className={`${
+                screenSize === 'xs' ? 'text-xs px-1' : 
+                screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
+              } text-gray-500 dark:text-gray-400`}>
+                {currentCard ? (() => {
+                  const allProblemCards = getSiblingCards(currentCard, cards);
+                  const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
+                  
+                  return `${currentIndex + 1}/${allProblemCards.length}`;
+                })() : '1/1'}
+              </span>
+            )}
+            
+            {/* Solution-aware next button */}
+            {onSolutionToggle ? (
+              <SolutionCardButton
+                onSolutionToggle={onSolutionToggle}
+                isActive={isViewingSolution}
+                className={screenSize === 'xs' ? 'p-1' : 'p-2'}
+              />
+            ) : (
+              <button
+                onClick={() => onNavigateCard('next')}
+                className={`header-scale-button icon-only ${screenSize === 'xs' ? 'compact' : ''} hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                title="Navigate to next card or create new card"
+              >
+                <ArrowRightIcon className={screenSize === 'xs' ? 'h-3 w-3' : 'h-4 w-4'} />
+              </button>
+            )}
           </div>
 
-          {/* Focus Mode Toggle */}
-          <FocusModeToggle size="md" />
-
-          {/* Timer with integrated Session History */}
-          <div 
-            className="relative focus-minimize" 
-            onMouseLeave={(e) => {
-              // Add small delay and check if mouse is moving to dropdown
-              const rect = e.currentTarget.getBoundingClientRect();
-              const mouseY = e.clientY;
-              const mouseX = e.clientX;
-              
-              // If mouse is below the container (moving toward dropdown), delay closing
-              if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
-                setTimeout(() => {
-                  setShowTimerDropdown(false);
-                }, 200);
-              } else {
-                setShowTimerDropdown(false);
-              }
-            }}
-            style={{ position: 'relative', zIndex: 1 }}
-          >
-            <div className="flex items-center">
-              {/* Main Timer Button */}
+          {/* Actions Sub-Group */}
+          <div className="controls-actions">
+            {/* Delete Button Container - Always reserves space */}
+            <div className={`header-delete-container focus-minimize ${!currentCard?.parent_card_id ? 'hidden' : ''}`}>
               <button
-                ref={timerButtonRef}
-                onClick={onToggleTimer}
-                disabled={timer.isLoading}
-                className="header-scale-button header-timer-button with-icon bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-                style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
-                title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-                aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-                aria-pressed={timer.timerState.isRunning}
+                onClick={onDeleteCard}
+                className="header-scale-button icon-only hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
+                title="Delete child card"
+                disabled={!currentCard?.parent_card_id}
               >
-                {/* Play/Stop Icon */}
-                <div className="flex-shrink-0">
-                  {timer.timerState.isRunning ? (
-                    <StopIcon className="h-4 w-4 text-red-500" />
-                  ) : (
-                    <PlayIcon className="h-4 w-4 text-green-500" />
-                  )}
-                </div>
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Focus Mode Toggle */}
+            <FocusModeToggle size="md" />
+
+            {/* Timer with integrated Session History */}
+            <div 
+              className="relative focus-minimize" 
+              onMouseLeave={(e) => {
+                // Add small delay and check if mouse is moving to dropdown
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseY = e.clientY;
+                const mouseX = e.clientX;
                 
-                {/* Smart Dynamic Timer Display - 6 Levels */}
-                <div className={`flex ${timerConfig.showSingle ? 'items-center' : 'flex-col items-center'} min-w-0 ${timerConfig.compactLevel && timerConfig.compactLevel <= 4 ? 'gap-0' : timerConfig.spacious ? 'gap-1' : ''}`}>
-                  {timerConfig.showSingle ? (
-                    // Level 0: Single time display for ultra compact spaces (<80px)
-                    <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                      {formatTime(timerConfig.primaryTime || 0)}
-                    </span>
-                  ) : (
-                    // Multi-level displays based on available width
-                    <>
-                      {/* Primary time display */}
-                      <span className={`text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap ${
-                        timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''
-                      }`}>
-                        {(() => {
-                          const primaryFormatted = formatTime(timerConfig.primaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
-                          const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
-                          
-                          // Level 1: Minutes format "22m/0m"
-                          if (timerConfig.compactLevel === 1) {
-                            return `${primaryFormatted}/${secondaryFormatted}`;
-                          }
-                          // Level 2: Slash format "22:45/0:00"
-                          else if (timerConfig.compactLevel === 2) {
-                            return `${primaryFormatted}/${secondaryFormatted}`;
-                          }
-                          // Level 3+: Label formats
-                          else {
-                            const spacing = timerConfig.noSpacing ? '' : ' ';
-                            return `${timerConfig.primaryLabel}${spacing}${primaryFormatted}`;
-                          }
-                        })()} 
+                // If mouse is below the container (moving toward dropdown), delay closing
+                if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
+                  setTimeout(() => {
+                    setShowTimerDropdown(false);
+                  }, 200);
+                } else {
+                  setShowTimerDropdown(false);
+                }
+              }}
+              style={{ position: 'relative', zIndex: 1 }}
+            >
+              <div className="flex items-center">
+                {/* Main Timer Button */}
+                <button
+                  ref={timerButtonRef}
+                  onClick={onToggleTimer}
+                  disabled={timer.isLoading}
+                  className="header-scale-button header-timer-button with-icon bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                  style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
+                  title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+                  aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
+                  aria-pressed={timer.timerState.isRunning}
+                >
+                  {/* Play/Stop Icon */}
+                  <div className="flex-shrink-0">
+                    {timer.timerState.isRunning ? (
+                      <StopIcon className="h-4 w-4 text-red-500" />
+                    ) : (
+                      <PlayIcon className="h-4 w-4 text-green-500" />
+                    )}
+                  </div>
+                  
+                  {/* Smart Dynamic Timer Display - 6 Levels */}
+                  <div className={`flex ${timerConfig.showSingle ? 'items-center' : 'flex-col items-center'} min-w-0 ${timerConfig.compactLevel && timerConfig.compactLevel <= 4 ? 'gap-0' : timerConfig.spacious ? 'gap-1' : ''}`}>
+                    {timerConfig.showSingle ? (
+                      // Level 0: Single time display for ultra compact spaces (<80px)
+                      <span className="text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                        {formatTime(timerConfig.primaryTime || 0)}
                       </span>
-                      
-                      {/* Secondary time display - only for levels 3+ */}
-                      {timerConfig.compactLevel >= 3 && (
-                        <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
-                          timer.timerState.isRunning 
-                            ? 'text-red-500 dark:text-red-400' 
-                            : 'text-gray-500 dark:text-gray-400'
-                        } ${timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''}`}>
+                    ) : (
+                      // Multi-level displays based on available width
+                      <>
+                        {/* Primary time display */}
+                        <span className={`text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap ${
+                          timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''
+                        }`}>
                           {(() => {
+                            const primaryFormatted = formatTime(timerConfig.primaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
                             const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
-                            const spacing = timerConfig.noSpacing ? '' : ' ';
-                            return `${timerConfig.secondaryLabel}${spacing}${secondaryFormatted}`;
+                            
+                            // Level 1: Minutes format "22m/0m"
+                            if (timerConfig.compactLevel === 1) {
+                              return `${primaryFormatted}/${secondaryFormatted}`;
+                            }
+                            // Level 2: Slash format "22:45/0:00"
+                            else if (timerConfig.compactLevel === 2) {
+                              return `${primaryFormatted}/${secondaryFormatted}`;
+                            }
+                            // Level 3+: Label formats
+                            else {
+                              const spacing = timerConfig.noSpacing ? '' : ' ';
+                              return `${timerConfig.primaryLabel}${spacing}${primaryFormatted}`;
+                            }
                           })()} 
                         </span>
-                      )}
-                    </>
-                  )}
-                </div>
-                
-                {/* Error and Debug Info - hidden on xs */}
-                {screenSize !== 'xs' && (
-                  <div className="flex items-center space-x-1">
-                    {timer.error && (
-                      <div className="text-xs text-red-500" title={timer.error}>
-                        ⚠️
-                      </div>
-                    )}
-                    {/* Debug info - remove in production */}
-                    {(import.meta as any).env?.MODE === 'development' && (
-                      <div className="text-xs text-blue-500" title={`Timer: availableWidth=${availableWidth}px, screenSize=${screenSize}, showSingle=${timerConfig.showSingle}, compactLevel=${timerConfig.compactLevel}, format=${timerConfig.format} | Header: containerWidth=${responsive.containerWidth}px, breakpoint=${responsive.headerBreakpoint}, scaleFactor=${document.documentElement.style.getPropertyValue('--header-scale-factor')}, stable=${responsive.isStable}`}>
-                        🔍
-                      </div>
+                        
+                        {/* Secondary time display - only for levels 3+ */}
+                        {timerConfig.compactLevel >= 3 && (
+                          <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
+                            timer.timerState.isRunning 
+                              ? 'text-red-500 dark:text-red-400' 
+                              : 'text-gray-500 dark:text-gray-400'
+                          } ${timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''}`}>
+                            {(() => {
+                              const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
+                              const spacing = timerConfig.noSpacing ? '' : ' ';
+                              return `${timerConfig.secondaryLabel}${spacing}${secondaryFormatted}`;
+                            })()} 
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
-                )}
-              </button>
-              
-              {/* Session History Dropdown Trigger */}
-              {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
-                <button
-                  onClick={() => setShowTimerDropdown(!showTimerDropdown)}
-                  onMouseEnter={() => setShowTimerDropdown(true)}
-                  className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                  title="Timer options"
-                >
-                  <ChevronDownIcon className="h-3 w-3" />
+                  
+                  {/* Error and Debug Info - hidden on xs */}
+                  {screenSize !== 'xs' && (
+                    <div className="flex items-center space-x-1">
+                      {timer.error && (
+                        <div className="text-xs text-red-500" title={timer.error}>
+                          ⚠️
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </button>
-              )}
-            </div>
-            
-            {/* Session History Dropdown */}
-            {showTimerDropdown && (
-              <div 
-                className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[120px]" 
-                style={{ 
-                  zIndex: 'var(--z-dropdown)', 
-                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '0.125rem' // Reduced gap to make it easier to reach
-                }}
-                onMouseEnter={() => setShowTimerDropdown(true)}
-                onMouseLeave={() => setShowTimerDropdown(false)}
-              >
-                <button
-                  onClick={() => {
-                    onOpenSessionHistory();
-                    setShowTimerDropdown(false);
+                
+                {/* Session History Dropdown Trigger */}
+                {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
+                  <button
+                    onClick={() => setShowTimerDropdown(!showTimerDropdown)}
+                    onMouseEnter={() => setShowTimerDropdown(true)}
+                    className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                    title="Timer options"
+                  >
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Session History Dropdown */}
+              {showTimerDropdown && (
+                <div 
+                  className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[120px]" 
+                  style={{ 
+                    zIndex: 'var(--z-dropdown)', 
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '0.125rem' // Reduced gap to make it easier to reach
                   }}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                  onMouseEnter={() => setShowTimerDropdown(true)}
+                  onMouseLeave={() => setShowTimerDropdown(false)}
+                >
+                  <button
+                    onClick={() => {
+                      onOpenSessionHistory();
+                      setShowTimerDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                  >
+                    <ClockIcon className="h-4 w-4" />
+                    <span>Session History</span>
+                  </button>
+                </div>
+              )}
+              
+              {/* Standalone Session History for small screens */}
+              {(screenSize === 'xs' || screenSize === 'sm') && (
+                <button
+                  onClick={onOpenSessionHistory}
+                  className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  title="View session history"
                 >
                   <ClockIcon className="h-4 w-4" />
-                  <span>Session History</span>
-                </button>
-              </div>
-            )}
-            
-            {/* Standalone Session History for small screens */}
-            {(screenSize === 'xs' || screenSize === 'sm') && (
-              <button
-                onClick={onOpenSessionHistory}
-                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                title="View session history"
-              >
-                <ClockIcon className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Recording with integrated Recording History */}
-          <div 
-            className="relative focus-minimize" 
-            onMouseLeave={(e) => {
-              // Add small delay and check if mouse is moving to dropdown
-              const rect = e.currentTarget.getBoundingClientRect();
-              const mouseY = e.clientY;
-              const mouseX = e.clientX;
-              
-              // If mouse is below the container (moving toward dropdown), delay closing
-              if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
-                setTimeout(() => {
-                  setShowRecordingDropdown(false);
-                }, 200);
-              } else {
-                setShowRecordingDropdown(false);
-              }
-            }}
-            style={{ position: 'relative', zIndex: 1 }}
-          >
-            <div className="flex items-center">
-              {/* Main Recording Button */}
-              <button
-                onClick={onToggleRecording}
-                className={`header-scale-button header-timer-button with-icon transition-colors ${
-                  recordingState.isRecording
-                    ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
-                    : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
-                }`}
-                title={recordingState.isRecording ? "Stop recording" : "Start recording"}
-                aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
-                aria-pressed={recordingState.isRecording}
-              >
-                {/* Mic Icon */}
-                <div className="flex-shrink-0">
-                  <MicrophoneIcon className="h-4 w-4" />
-                </div>
-                
-                {/* Recording Timer Display - responsive */}
-                {recordingState.isRecording && (
-                  <div className="flex flex-col items-center min-w-0">
-                    <span className={`text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap ${
-                      screenSize === 'xs' ? 'hidden' : ''
-                    }`}>
-                      {screenSize === 'sm' ? formatTimeDisplay(recordingState.elapsedRecordingTime, false) : `Recording: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`}
-                    </span>
-                  </div>
-                )}
-              </button>
-              
-              {/* Recording History Dropdown Trigger */}
-              {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
-                <button
-                  onClick={() => setShowRecordingDropdown(!showRecordingDropdown)}
-                  onMouseEnter={() => setShowRecordingDropdown(true)}
-                  className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                  title="Recording options"
-                >
-                  <ChevronDownIcon className="h-3 w-3" />
                 </button>
               )}
             </div>
-            
-            {/* Recording History Dropdown */}
-            {showRecordingDropdown && (
-              <div 
-                className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[140px]" 
-                style={{ 
-                  zIndex: 'var(--z-dropdown)', 
-                  boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '0.125rem' // Reduced gap to make it easier to reach
-                }}
-                onMouseEnter={() => setShowRecordingDropdown(true)}
-                onMouseLeave={() => setShowRecordingDropdown(false)}
-              >
-                <button
-                  onClick={() => {
-                    onOpenRecordingHistory();
+
+            {/* Recording with integrated Recording History */}
+            <div 
+              className="relative focus-minimize" 
+              onMouseLeave={(e) => {
+                // Add small delay and check if mouse is moving to dropdown
+                const rect = e.currentTarget.getBoundingClientRect();
+                const mouseY = e.clientY;
+                const mouseX = e.clientX;
+                
+                // If mouse is below the container (moving toward dropdown), delay closing
+                if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
+                  setTimeout(() => {
                     setShowRecordingDropdown(false);
+                  }, 200);
+                } else {
+                  setShowRecordingDropdown(false);
+                }
+              }}
+              style={{ position: 'relative', zIndex: 1 }}
+            >
+              <div className="flex items-center">
+                {/* Main Recording Button */}
+                <button
+                  onClick={onToggleRecording}
+                  className={`header-scale-button header-timer-button with-icon transition-colors ${
+                    recordingState.isRecording
+                      ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                      : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
+                  }`}
+                  title={recordingState.isRecording ? "Stop recording" : "Start recording"}
+                  aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
+                  aria-pressed={recordingState.isRecording}
+                >
+                  {/* Mic Icon */}
+                  <div className="flex-shrink-0">
+                    <MicrophoneIcon className="h-4 w-4" />
+                  </div>
+                  
+                  {/* Recording Timer Display - responsive */}
+                  {recordingState.isRecording && (
+                    <div className="flex flex-col items-center min-w-0">
+                      <span className={`text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap ${
+                        screenSize === 'xs' ? 'hidden' : ''
+                      }`}>
+                        {screenSize === 'sm' ? formatTimeDisplay(recordingState.elapsedRecordingTime, false) : `Recording: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`}
+                      </span>
+                    </div>
+                  )}
+                </button>
+                
+                {/* Recording History Dropdown Trigger */}
+                {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
+                  <button
+                    onClick={() => setShowRecordingDropdown(!showRecordingDropdown)}
+                    onMouseEnter={() => setShowRecordingDropdown(true)}
+                    className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                    title="Recording options"
+                  >
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Recording History Dropdown */}
+              {showRecordingDropdown && (
+                <div 
+                  className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[140px]" 
+                  style={{ 
+                    zIndex: 'var(--z-dropdown)', 
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '0.125rem' // Reduced gap to make it easier to reach
                   }}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                  onMouseEnter={() => setShowRecordingDropdown(true)}
+                  onMouseLeave={() => setShowRecordingDropdown(false)}
+                >
+                  <button
+                    onClick={() => {
+                      onOpenRecordingHistory();
+                      setShowRecordingDropdown(false);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                  >
+                    <SpeakerWaveIcon className="h-4 w-4" />
+                    <span>Recording History</span>
+                  </button>
+                </div>
+              )}
+              
+              {/* Standalone Recording History for small screens */}
+              {(screenSize === 'xs' || screenSize === 'sm') && (
+                <button
+                  onClick={onOpenRecordingHistory}
+                  className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
+                  title="View recording history"
                 >
                   <SpeakerWaveIcon className="h-4 w-4" />
-                  <span>Recording History</span>
                 </button>
-              </div>
-            )}
-            
-            {/* Standalone Recording History for small screens */}
-            {(screenSize === 'xs' || screenSize === 'sm') && (
-              <button
-                onClick={onOpenRecordingHistory}
-                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                title="View recording history"
-              >
-                <SpeakerWaveIcon className="h-4 w-4" />
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

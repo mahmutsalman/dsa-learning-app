@@ -750,9 +750,8 @@ textarea.text-wrap-responsive {
   --header-title-min: 150px;
   --header-lang-width: 150px;
   --header-save-width: 130px;
-  --header-cardnav-width: 200px;
-  --header-actions-min: 180px;
-  --header-actions-max: 300px;
+  --header-controls-min: 380px;  /* Unified controls (navigation + actions combined) */
+  --header-controls-max: 500px;
   --header-gap: 0.5rem;
   --header-font-size: 0.875rem;
   
@@ -771,8 +770,7 @@ textarea.text-wrap-responsive {
     minmax(var(--header-title-min), 1fr)                     /* Title section (flexible) */
     minmax(80px, var(--header-lang-width))                   /* Language selector */
     minmax(60px, var(--header-save-width))                   /* Save indicators */
-    minmax(120px, var(--header-cardnav-width))               /* Card navigation - increased min-width */
-    minmax(var(--header-actions-min), var(--header-actions-max)); /* Fixed max actions to prevent feedback */
+    minmax(var(--header-controls-min), var(--header-controls-max)); /* Unified controls (navigation + actions) */
   align-items: center;
   gap: var(--header-gap);
   width: 100%;
@@ -882,6 +880,53 @@ textarea.text-wrap-responsive {
   flex-shrink: 0; /* Prevent shrinking below min-width */
 }
 
+/* Unified Controls Container - Navigation + Actions */
+.header-controls-unified {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--header-gap);
+  min-width: 0;
+  position: relative;
+  z-index: 10; /* Higher than individual sections */
+  overflow: visible !important; /* Allow dropdowns to show */
+}
+
+/* Navigation Sub-Group within Unified Controls */
+.controls-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  flex-shrink: 0; /* Prevent shrinking */
+  position: relative;
+  z-index: 15; /* Higher than actions to prevent overlap */
+}
+
+/* Actions Sub-Group within Unified Controls */
+.controls-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--header-gap);
+  flex-shrink: 1; /* Allow shrinking if needed */
+  position: relative;
+  z-index: 1;
+  overflow: visible !important; /* Allow dropdowns to show */
+}
+
+/* Legacy styles for backward compatibility */
+.header-card-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--header-gap);
+  min-width: 0;
+  position: relative;
+  z-index: 10; /* Higher than actions to prevent overlap */
+  flex-shrink: 0; /* Prevent shrinking below min-width */
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -922,6 +967,23 @@ textarea.text-wrap-responsive {
     font-size: 0.65rem;
     padding: 0.25rem 0.25rem;
   }
+}
+
+/* Unified Controls Responsive Styles */
+.header-controls-xs {
+  gap: 0.125rem;
+}
+
+.header-controls-sm {
+  gap: 0.25rem;
+}
+
+.controls-navigation {
+  gap: 0.125rem;
+}
+
+.controls-actions {
+  gap: 0.25rem;
 }
 
 /* Responsive element-specific classes */
@@ -984,11 +1046,25 @@ textarea.text-wrap-responsive {
       1fr                   /* Title - flexible */
       40px                  /* Language - minimal */
       30px                  /* Save - icon only */
-      90px                  /* Card nav - increased for arrows */
-      100px;                /* Actions - reduced to prevent overlap */
+      190px;                /* Unified controls - combined navigation + actions */
   }
   
-  /* Ensure card navigation arrows stay visible */
+  /* Ensure unified controls work properly at 400px */
+  .header-controls-unified {
+    gap: 0.125rem !important;
+  }
+  
+  .controls-navigation {
+    gap: 0.125rem !important;
+    z-index: 15 !important;
+  }
+  
+  .controls-actions {
+    gap: 0.125rem !important;
+    z-index: 5;
+  }
+  
+  /* Legacy support */
   .header-card-navigation {
     z-index: 15 !important; /* Higher z-index at small screens */
     gap: 0.125rem; /* Tighter spacing */
@@ -1005,6 +1081,9 @@ textarea.text-wrap-responsive {
 .header-title,
 .header-language-selector,
 .header-save-indicators,
+.header-controls-unified,
+.controls-navigation,
+.controls-actions,
 .header-card-navigation,
 .header-actions {
   transition: all 0.2s ease-in-out;
@@ -1189,9 +1268,8 @@ textarea.text-wrap-responsive {
     --header-nav-width: 180px;
     --header-lang-width: 160px;
     --header-save-width: 140px;
-    --header-cardnav-width: 220px;
-    --header-actions-min: 200px;
-    --header-actions-max: 350px;
+    --header-controls-min: 420px;  /* Unified controls - spacious */
+    --header-controls-max: 550px;
     --header-gap: 0.75rem;
   }
 }
@@ -1202,9 +1280,8 @@ textarea.text-wrap-responsive {
     --header-nav-width: 140px;
     --header-lang-width: 130px;
     --header-save-width: 110px;
-    --header-cardnav-width: 180px;
-    --header-actions-min: 180px;
-    --header-actions-max: 280px;
+    --header-controls-min: 360px;  /* Unified controls - balanced */
+    --header-controls-max: 460px;
     --header-gap: 0.5rem;
   }
   
@@ -1220,9 +1297,8 @@ textarea.text-wrap-responsive {
     --header-title-min: 100px;
     --header-lang-width: 110px;
     --header-save-width: 90px;
-    --header-cardnav-width: 160px;
-    --header-actions-min: 160px;
-    --header-actions-max: 240px;
+    --header-controls-min: 320px;  /* Unified controls - compact */
+    --header-controls-max: 400px;
     --header-gap: 0.375rem;
   }
   
@@ -1242,9 +1318,8 @@ textarea.text-wrap-responsive {
     --header-title-min: 80px;
     --header-lang-width: 60px;
     --header-save-width: 50px;
-    --header-cardnav-width: 130px; /* Increased for better arrow space */
-    --header-actions-min: 130px; /* Reduced to make room for card nav */
-    --header-actions-max: 180px; /* Reduced to make room for card nav */
+    --header-controls-min: 260px;  /* Unified controls - mobile friendly */
+    --header-controls-max: 310px;
     --header-gap: 0.25rem;
     --header-font-size: 0.75rem;
   }
@@ -1255,8 +1330,7 @@ textarea.text-wrap-responsive {
       minmax(70px, 1fr)
       minmax(50px, var(--header-lang-width))
       minmax(40px, var(--header-save-width))
-      minmax(100px, var(--header-cardnav-width))
-      minmax(var(--header-actions-min), fit-content(var(--header-actions-max)));
+      minmax(var(--header-controls-min), fit-content(var(--header-controls-max)));
   }
   
   .header-title h1 {
@@ -1275,9 +1349,8 @@ textarea.text-wrap-responsive {
     --header-title-min: 60px;
     --header-lang-width: 45px;
     --header-save-width: 35px;
-    --header-cardnav-width: 110px; /* Increased for better arrow space */
-    --header-actions-min: 110px; /* Reduced to make room for card nav */
-    --header-actions-max: 140px; /* Reduced to make room for card nav */
+    --header-controls-min: 220px;  /* Unified controls - minimal */
+    --header-controls-max: 250px;
     --header-gap: 0.125rem;
   }
   
@@ -1287,8 +1360,7 @@ textarea.text-wrap-responsive {
       minmax(50px, 1fr)                                         /* Title - flexible */
       minmax(35px, 45px)                                        /* Language - compact */
       minmax(25px, 35px)                                        /* Save - icons only */
-      minmax(90px, 110px)                                       /* Card nav - increased for arrows */
-      minmax(var(--header-actions-min), var(--header-actions-max)); /* Fixed max actions to prevent feedback */
+      minmax(var(--header-controls-min), var(--header-controls-max)); /* Unified controls */
   }
   
   .header-title h1 {
@@ -1300,7 +1372,22 @@ textarea.text-wrap-responsive {
     font-size: 0.65rem;
   }
   
-  /* Ensure card navigation arrows stay visible at extra small screens */
+  /* Ensure unified controls work properly at extra small screens */
+  .header-controls-unified {
+    gap: 0.125rem !important;
+  }
+  
+  .controls-navigation {
+    gap: 0.125rem !important;
+    z-index: 15 !important;
+  }
+  
+  .controls-actions {
+    gap: 0.125rem !important;
+    z-index: 5;
+  }
+  
+  /* Legacy support */
   .header-card-navigation {
     z-index: 15 !important; /* Higher z-index at small screens */
     gap: 0.125rem; /* Tighter spacing */
