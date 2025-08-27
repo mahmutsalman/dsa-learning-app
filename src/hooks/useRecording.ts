@@ -229,7 +229,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
 
     if (recordingState.isRecording && !recordingState.isPaused && recordingState.recordingStartTime) {
       debugLog('Starting recording timer interval');
-      intervalRef.current = setInterval(() => {
+      intervalRef.current = window.setInterval(() => {
         const now = new Date();
         const startTime = recordingState.recordingStartTime!;
         

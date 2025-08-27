@@ -296,6 +296,7 @@ export function EnhancedMonacoEditor({
     onChange(newValue || '');
   }, [onChange]);
 
+
   // Get Monaco-compatible language
   const monacoLanguage = SUPPORTED_LANGUAGES[language as keyof typeof SUPPORTED_LANGUAGES] || 'plaintext';
 

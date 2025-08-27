@@ -117,7 +117,7 @@ function useHeaderResponsiveness(ref: React.RefObject<HTMLElement>): ResponsiveC
         clearTimeout(stabilityTimeoutRef.current);
 
         // Set a stability timeout - only apply change after width is stable
-        stabilityTimeoutRef.current = setTimeout(() => {
+        stabilityTimeoutRef.current = window.setTimeout(() => {
           const finalWidth = Math.round(avgWidth);
           lastStableWidthRef.current = finalWidth;
           lastWidthRef.current = finalWidth;
@@ -166,13 +166,13 @@ function useHeaderResponsiveness(ref: React.RefObject<HTMLElement>): ResponsiveC
    */
   const debouncedUpdateMeasurements = useCallback(() => {
     clearTimeout(measurementTimeoutRef.current);
-    measurementTimeoutRef.current = setTimeout(updateMeasurements, 100);
+    measurementTimeoutRef.current = window.setTimeout(updateMeasurements, 100);
   }, [updateMeasurements]);
 
   // Setup measurement system with ResizeObserver and window resize fallback
   useEffect(() => {
     // Initial measurement after component mount
-    const initialTimeout = setTimeout(updateMeasurements, 50);
+    const initialTimeout = window.setTimeout(updateMeasurements, 50);
 
     // Set up ResizeObserver with debouncing to prevent feedback loops
     let resizeObserver: ResizeObserver | null = null;
@@ -184,7 +184,7 @@ function useHeaderResponsiveness(ref: React.RefObject<HTMLElement>): ResponsiveC
       });
 
       // Use setTimeout to avoid immediate observation that can cause loops
-      setTimeout(() => {
+      window.setTimeout(() => {
         if (ref.current && resizeObserver) {
           resizeObserver.observe(ref.current);
         }
@@ -195,7 +195,7 @@ function useHeaderResponsiveness(ref: React.RefObject<HTMLElement>): ResponsiveC
     let windowTimeoutId: number;
     const throttledWindowUpdate = () => {
       clearTimeout(windowTimeoutId);
-      windowTimeoutId = setTimeout(updateMeasurements, 300);
+      windowTimeoutId = window.setTimeout(updateMeasurements, 300);
     };
 
     window.addEventListener('resize', throttledWindowUpdate);

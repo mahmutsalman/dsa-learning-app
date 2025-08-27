@@ -90,7 +90,7 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
         clearTimeout(stabilityTimeoutRef.current);
         
         // Set a stability timeout - only apply change after width is stable
-        stabilityTimeoutRef.current = setTimeout(() => {
+        stabilityTimeoutRef.current = window.setTimeout(() => {
           const finalWidth = Math.round(avgWidth);
           lastStableWidthRef.current = finalWidth;
           lastWidthRef.current = finalWidth;
@@ -134,12 +134,12 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
   
   const debouncedUpdateMeasurements = useCallback(() => {
     clearTimeout(measurementTimeoutRef.current);
-    measurementTimeoutRef.current = setTimeout(updateMeasurements, 100); // Reduced debounce for responsiveness
+    measurementTimeoutRef.current = window.setTimeout(updateMeasurements, 100); // Reduced debounce for responsiveness
   }, [updateMeasurements]);
   
   useEffect(() => {
     // Initial measurement after component mount
-    const initialTimeout = setTimeout(updateMeasurements, 50);
+    const initialTimeout = window.setTimeout(updateMeasurements, 50);
     
     // Set up ResizeObserver with debouncing to prevent feedback loops
     let resizeObserver: ResizeObserver | null = null;
@@ -151,7 +151,7 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
       });
       
       // Use setTimeout to avoid immediate observation that can cause loops
-      setTimeout(() => {
+      window.setTimeout(() => {
         if (ref.current && resizeObserver) {
           resizeObserver.observe(ref.current);
         }
@@ -162,7 +162,7 @@ function useTimerContainerWidth(ref: React.RefObject<HTMLElement>) {
     let windowTimeoutId: number;
     const throttledWindowUpdate = () => {
       clearTimeout(windowTimeoutId);
-      windowTimeoutId = setTimeout(updateMeasurements, 300);
+      windowTimeoutId = window.setTimeout(updateMeasurements, 300);
     };
     
     window.addEventListener('resize', throttledWindowUpdate);
@@ -560,7 +560,7 @@ export function WorkspaceHeader({
                 
                 // If mouse is below the container (moving toward dropdown), delay closing
                 if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
-                  setTimeout(() => {
+                  window.setTimeout(() => {
                     setShowTimerDropdown(false);
                   }, 200);
                 } else {
@@ -718,7 +718,7 @@ export function WorkspaceHeader({
                 
                 // If mouse is below the container (moving toward dropdown), delay closing
                 if (mouseY > rect.bottom && mouseX >= rect.left && mouseX <= rect.right) {
-                  setTimeout(() => {
+                  window.setTimeout(() => {
                     setShowRecordingDropdown(false);
                   }, 200);
                 } else {

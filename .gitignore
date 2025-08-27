@@ -195,6 +195,11 @@ $RECYCLE.BIN/
 *.icns
 ICON_SYSTEM.md
 
+# Generated icon files (keep only essential Tauri icons)
+src-tauri/icons/*.png
+!src-tauri/icons/icon.png
+!src-tauri/icons/32x32.png
+
 # Development documentation and guides
 BUILD_GUIDE.md
 debug-paths.html

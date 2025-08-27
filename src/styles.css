@@ -154,12 +154,17 @@
   }
 
   /* Focus Mode Line Number Background Inheritance Fixes */
-  .focus-mode.dark .monaco-editor .margin-view-overlays {
-    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+  /* Light theme gradient - more specific selectors */
+  html:not(.dark) .focus-mode .monaco-editor .margin-view-overlays,
+  body:not(.dark) .focus-mode .monaco-editor .margin-view-overlays {
+    background: linear-gradient(145deg, #f8fafc 0%, #ffffff 100%) !important;
   }
 
-  .focus-mode:not(.dark) .monaco-editor .margin-view-overlays {
-    background: linear-gradient(145deg, #f8fafc 0%, #ffffff 100%) !important;
+  /* Dark theme gradient - multiple high specificity selectors to ensure it wins */
+  html.dark .focus-mode .monaco-editor .margin-view-overlays,
+  body.dark .focus-mode .monaco-editor .margin-view-overlays,
+  .dark .focus-mode .monaco-editor .margin-view-overlays {
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
   }
 
   /* Ensure line number elements inherit the background */

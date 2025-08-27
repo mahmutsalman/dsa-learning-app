@@ -60,7 +60,7 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
       clearTimeout(debounceRef.current);
     }
 
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = window.setTimeout(() => {
       fetchSuggestions(query);
     }, 150);
   }, []);

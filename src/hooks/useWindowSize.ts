@@ -18,7 +18,7 @@ export const useWindowSize = (): WindowSize => {
       clearTimeout(timeoutRef.current);
     }
     
-    timeoutRef.current = setTimeout(() => {
+    timeoutRef.current = window.setTimeout(() => {
       setWindowSize({
         width: window.innerWidth,
         height: window.innerHeight,
