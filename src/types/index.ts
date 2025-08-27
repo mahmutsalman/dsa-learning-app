@@ -32,6 +32,7 @@ export interface Card {
   last_modified: string;
   parent_card_id?: string;
   is_solution?: boolean; // Optional for backward compatibility with solution cards
+  _converted_at?: number; // Timestamp for React re-rendering when converting solution cards
 }
 
 export interface TimeSession {
