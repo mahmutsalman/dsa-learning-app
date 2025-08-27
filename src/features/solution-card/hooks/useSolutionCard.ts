@@ -8,7 +8,8 @@ import { solutionCardApi, SolutionCardApiError } from '../services/solutionCardA
 import {
   SolutionCard,
   SolutionCardState,
-  SolutionCardHookReturn
+  SolutionCardHookReturn,
+  SolutionCardAutoSaveState
 } from '../types';
 import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, trackRender, getMemoryUsage } from '../../../services/answerCardDebugLogger';
 
@@ -23,13 +24,16 @@ export const useSolutionCard = ({
   problemId,
   onSolutionToggle,
   onError,
-  autoSaveDelay = 1000
+  autoSaveDelay = 3000
 }: UseSolutionCardOptions): SolutionCardHookReturn => {
   const [state, setState] = useState<SolutionCardState>({
     isActive: false,
     solutionCard: null,
     isLoading: false,
-    error: null
+    error: null,
+    codeAutoSave: { isLoading: false, isSaved: true, error: null },
+    notesAutoSave: { isLoading: false, isSaved: true, error: null },
+    languageAutoSave: { isLoading: false, isSaved: true, error: null }
   });
 
   // Auto-save debouncing
@@ -77,6 +81,28 @@ export const useSolutionCard = ({
     console.error(defaultMessage, error);
     setError(errorMessage);
   }, [setError]);
+
+  // Helper functions to update auto-save states
+  const setCodeAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
+    setState(prev => ({
+      ...prev,
+      codeAutoSave: { ...prev.codeAutoSave, ...update }
+    }));
+  }, []);
+
+  const setNotesAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
+    setState(prev => ({
+      ...prev,
+      notesAutoSave: { ...prev.notesAutoSave, ...update }
+    }));
+  }, []);
+
+  const setLanguageAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
+    setState(prev => ({
+      ...prev,
+      languageAutoSave: { ...prev.languageAutoSave, ...update }
+    }));
+  }, []);
 
   /**
    * Load solution card for the current problem
@@ -356,7 +382,10 @@ export const useSolutionCard = ({
           ...prev.solutionCard,
           code,
           language
-        }
+        },
+        // Mark code as unsaved when changed
+        codeAutoSave: { ...prev.codeAutoSave, isSaved: false, error: null },
+        languageAutoSave: { ...prev.languageAutoSave, isSaved: false, error: null }
       };
       
       // Log editor change with performance tracking
@@ -387,6 +416,10 @@ export const useSolutionCard = ({
       const saveOperationId = `saveCode-${capturedCardId}-${Date.now()}`;
       startTiming(saveOperationId);
       
+      // Set loading state
+      setCodeAutoSave({ isLoading: true, error: null });
+      setLanguageAutoSave({ isLoading: true, error: null });
+      
       try {
         await solutionCardApi.updateCode(capturedCardId, code, language);
         const timing = endTiming(saveOperationId);
@@ -401,9 +434,14 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
+        // Set saved state
+        setCodeAutoSave({ isLoading: false, isSaved: true, error: null });
+        setLanguageAutoSave({ isLoading: false, isSaved: true, error: null });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to save solution code';
+        
         await logAnswerCardApi('update_solution_code', { 
           cardId: capturedCardId, 
           codeLength: code.length, 
@@ -414,10 +452,13 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
+        // Set error state
+        setCodeAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
+        setLanguageAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
         handleApiError(error, 'Failed to save solution code');
       }
     }, autoSaveDelay);
-  }, [autoSaveDelay, handleApiError, setError]);
+  }, [autoSaveDelay, handleApiError, setError, setCodeAutoSave, setLanguageAutoSave]);
 
   /**
    * Update solution card notes with debounced auto-save
@@ -445,7 +486,9 @@ export const useSolutionCard = ({
         solutionCard: {
           ...prev.solutionCard,
           notes
-        }
+        },
+        // Mark notes as unsaved when changed
+        notesAutoSave: { ...prev.notesAutoSave, isSaved: false, error: null }
       };
       
       // Log editor change with performance tracking
@@ -480,6 +523,9 @@ export const useSolutionCard = ({
       const saveOperationId = `saveNotes-${capturedCardId}-${Date.now()}`;
       startTiming(saveOperationId);
       
+      // Set loading state
+      setNotesAutoSave({ isLoading: true, error: null });
+      
       try {
         await solutionCardApi.updateNotes(capturedCardId, notes);
         const timing = endTiming(saveOperationId);
@@ -493,9 +539,13 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
+        // Set saved state
+        setNotesAutoSave({ isLoading: false, isSaved: true, error: null });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to save solution notes';
+        
         await logAnswerCardApi('update_solution_notes', { 
           cardId: capturedCardId, 
           notesLength: notes.length 
@@ -505,10 +555,12 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
+        // Set error state
+        setNotesAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
         handleApiError(error, 'Failed to save solution notes');
       }
     }, autoSaveDelay);
-  }, [autoSaveDelay, handleApiError, setError]);
+  }, [autoSaveDelay, handleApiError, setError, setNotesAutoSave]);
 
   /**
    * Exit solution view and return to regular cards

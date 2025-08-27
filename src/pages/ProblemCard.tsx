@@ -1390,9 +1390,9 @@ export default function ProblemCard() {
                 language={language}
                 onLanguageChange={setLanguage}
                 timer={timer}
-                codeAutoSave={codeAutoSave}
-                notesAutoSave={notesAutoSave}
-                languageAutoSave={languageAutoSave}
+                codeAutoSave={solutionCard.state.isActive ? solutionCard.state.codeAutoSave : codeAutoSave}
+                notesAutoSave={solutionCard.state.isActive ? solutionCard.state.notesAutoSave : notesAutoSave}
+                languageAutoSave={solutionCard.state.isActive ? solutionCard.state.languageAutoSave : languageAutoSave}
                 recordingState={recording.recordingState}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
@@ -1525,9 +1525,9 @@ export default function ProblemCard() {
               language={language}
               onLanguageChange={setLanguage}
               timer={timer}
-              codeAutoSave={codeAutoSave}
-              notesAutoSave={notesAutoSave}
-              languageAutoSave={languageAutoSave}
+              codeAutoSave={solutionCard.state.isActive ? solutionCard.state.codeAutoSave : codeAutoSave}
+              notesAutoSave={solutionCard.state.isActive ? solutionCard.state.notesAutoSave : notesAutoSave}
+              languageAutoSave={solutionCard.state.isActive ? solutionCard.state.languageAutoSave : languageAutoSave}
               recordingState={recording.recordingState}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}
