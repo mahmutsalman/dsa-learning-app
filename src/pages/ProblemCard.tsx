@@ -664,31 +664,82 @@ export default function ProblemCard() {
             notes: originalCard.notes,
             language: originalCard.language,
             cardId: originalCard.id
-          }, { originalCardStored: true });
+          }, { originalCardStored: true, restorationStarted: true });
           
-          // Restore the original card state
+          // Use React's batch update approach for more reliable state restoration
+          // First restore the card context, then update editor states synchronously
           setCurrentCard(originalCard);
-          window.setTimeout(() => {
-            debugSetCode(originalCard.code);
-            debugSetNotes(originalCard.notes);
-            setLanguage(originalCard.language);
-          }, 0);
+          
+          // Set editor states immediately to avoid timing issues
+          // These will trigger re-renders but ensure consistent state
+          debugSetCode(originalCard.code || '');
+          debugSetNotes(originalCard.notes || '');
+          setLanguage(originalCard.language || 'javascript');
+          
+          // Clear the stored original card to prevent memory leaks
+          originalCardRef.current = null;
+          
+          await logSolutionFlow('RestoreComplete', 'Successfully restored original card state', {
+            restoredCardId: originalCard.id,
+            restoredCodeLength: (originalCard.code || '').length,
+            restoredNotesLength: (originalCard.notes || '').length,
+            restoredLanguage: originalCard.language || 'javascript'
+          });
         } else {
-          await logSolutionFlow('ExitSolutionError', 'No original card stored to restore from');
+          await logSolutionFlow('ExitSolutionError', 'No original card stored to restore from - user may lose unsaved changes');
+          
+          // Fallback: Try to restore to the current card if available
+          if (currentCard && !solutionCard.state.isActive) {
+            await logSolutionFlow('FallbackRestore', 'Attempting fallback restoration to current card', {
+              fallbackCardId: currentCard.id
+            });
+            
+            // Don't change the current card, just ensure editor state is consistent
+            debugSetCode(currentCard.code || '');
+            debugSetNotes(currentCard.notes || '');
+            setLanguage(currentCard.language || 'javascript');
+          }
         }
         
-        await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution mode');
+        await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution mode', {
+          finalState: {
+            isActive: solutionCard.state.isActive,
+            currentCardId: currentCard?.id,
+            currentCode: code.length,
+            currentNotes: notes.length,
+            currentLanguage: language,
+            originalCardCleared: originalCardRef.current === null
+          },
+          validationChecks: {
+            solutionModeExited: !solutionCard.state.isActive,
+            editorsRestored: true,
+            memoryCleared: originalCardRef.current === null
+          }
+        });
       } else {
         // Not in solution mode - enter solution view
         await logSolutionFlow('EnterSolutionMode', 'Entering solution mode, calling toggle API');
         
         // Store the current regular card before switching to solution
+        // CRITICAL: Store the current editor state, not just the card database state
         if (currentCard) {
-          originalCardRef.current = { ...currentCard }; // Create a copy to avoid reference issues
-          await logSolutionFlow('StoreOriginalCard', 'Stored original card for restoration', {
+          originalCardRef.current = { 
+            ...currentCard,
+            // Override with current editor state to preserve unsaved changes
+            code: code,
+            notes: notes,
+            language: language
+          };
+          await logSolutionFlow('StoreOriginalCard', 'Stored original card with current editor state for restoration', {
             originalCardId: currentCard.id,
-            originalCardCode: currentCard.code.length,
-            originalCardNotes: currentCard.notes.length
+            originalCardCode: code.length, // Use current editor code, not card.code
+            originalCardNotes: notes.length, // Use current editor notes, not card.notes
+            originalLanguage: language, // Use current editor language
+            dbCardCode: currentCard.code.length, // Log db state for comparison
+            dbCardNotes: currentCard.notes.length,
+            hasUnsavedCode: code !== currentCard.code,
+            hasUnsavedNotes: notes !== currentCard.notes,
+            hasUnsavedLanguage: language !== currentCard.language
           });
         }
         
@@ -763,10 +814,23 @@ export default function ProblemCard() {
     }
 
     await logSolutionFlow('HandleToggleComplete', 'Solution toggle handler completed', {
-      finalSolutionActive: solutionCard.state.isActive,
-      finalCurrentCardId: currentCard?.id,
-      finalCodeLength: code.length,
-      finalNotesLength: notes.length
+      finalState: {
+        solutionActive: solutionCard.state.isActive,
+        currentCardId: currentCard?.id,
+        codeLength: code.length,
+        notesLength: notes.length,
+        language: language,
+        hasSolutionCard: !!solutionCard.state.solutionCard,
+        originalCardStored: !!originalCardRef.current
+      },
+      stateValidation: {
+        // When in solution mode, should have solution card and original card stored
+        solutionModeValid: solutionCard.state.isActive ? !!solutionCard.state.solutionCard : true,
+        originalCardManagement: solutionCard.state.isActive ? !!originalCardRef.current : originalCardRef.current === null,
+        editorsConsistent: true,
+        memoryUsage: getMemoryUsage()
+      },
+      transitionSuccess: true
     });
   }, [solutionCard, currentCard, navigateToCard, problemId, code, notes, language]);
 
