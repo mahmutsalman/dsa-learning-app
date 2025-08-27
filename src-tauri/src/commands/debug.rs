@@ -100,3 +100,4 @@ pub async fn check_microphone_permission() -> Result<String, String> {
         None => Ok("❌ No microphone device available".to_string())
     }
 }
+

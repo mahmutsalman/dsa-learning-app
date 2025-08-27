@@ -184,7 +184,7 @@ export function useTimer(cardId?: string): UseTimerReturn {
 
     if (timerState.isRunning && !timerState.isPaused && timerState.sessionStartTime) {
       debugLog('Starting timer interval');
-      intervalRef.current = setInterval(() => {
+      intervalRef.current = window.setInterval(() => {
         const now = new Date();
         const startTime = timerState.sessionStartTime!;
         

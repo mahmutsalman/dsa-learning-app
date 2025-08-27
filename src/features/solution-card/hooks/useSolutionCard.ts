@@ -32,8 +32,8 @@ export const useSolutionCard = ({
   });
 
   // Auto-save debouncing
-  const codeTimerRef = useRef<NodeJS.Timeout>();
-  const notesTimerRef = useRef<NodeJS.Timeout>();
+  const codeTimerRef = useRef<number>();
+  const notesTimerRef = useRef<number>();
 
   const setLoading = useCallback((loading: boolean) => {
     setState(prev => ({ ...prev, isLoading: loading }));
@@ -163,7 +163,7 @@ export const useSolutionCard = ({
     }
 
     // Set new timer for auto-save
-    codeTimerRef.current = setTimeout(async () => {
+    codeTimerRef.current = window.setTimeout(async () => {
       try {
         await solutionCardApi.updateCode(state.solutionCard!.id, code, language);
         setError(null);
@@ -194,7 +194,7 @@ export const useSolutionCard = ({
     }
 
     // Set new timer for auto-save
-    notesTimerRef.current = setTimeout(async () => {
+    notesTimerRef.current = window.setTimeout(async () => {
       try {
         await solutionCardApi.updateNotes(state.solutionCard!.id, notes);
         setError(null);

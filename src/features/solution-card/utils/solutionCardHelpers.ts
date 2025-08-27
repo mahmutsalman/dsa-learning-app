@@ -3,7 +3,7 @@
 // Helper functions for solution card operations and logic.
 
 import { SolutionCard } from '../types';
-import { Card } from '../../../types';
+import { Card, CardStatus } from '../../../types';
 
 /**
  * Check if an event is a shift+click or shift+enter
@@ -43,7 +43,7 @@ export const solutionCardToCard = (solutionCard: SolutionCard): Card => {
     code: solutionCard.code,
     language: solutionCard.language,
     notes: solutionCard.notes,
-    status: solutionCard.status,
+    status: solutionCard.status as CardStatus,
     total_duration: solutionCard.total_duration,
     created_at: solutionCard.created_at,
     last_modified: solutionCard.last_modified,
@@ -96,7 +96,7 @@ export const debugSolutionCard = (
   card: SolutionCard | null,
   error?: string | null
 ) => {
-  if (process.env.NODE_ENV === 'development') {
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
     console.debug(`[SolutionCard] ${prefix}:`, {
       isActive,
       cardId: card?.id,

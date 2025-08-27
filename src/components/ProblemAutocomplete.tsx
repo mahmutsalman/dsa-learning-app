@@ -32,7 +32,7 @@ export default function ProblemAutocomplete({
       clearTimeout(debounceRef.current);
     }
 
-    debounceRef.current = setTimeout(() => {
+    debounceRef.current = window.setTimeout(() => {
       searchProblems(query);
     }, 200);
   }, [excludeId]);

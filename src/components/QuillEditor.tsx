@@ -131,7 +131,7 @@ export function QuillEditor({
       console.warn('QuillEditor: Found existing Quill elements, cleaning up first');
       cleanupQuill();
       // Wait a bit for cleanup to complete
-      setTimeout(() => initializeQuill(), 50);
+      window.setTimeout(() => initializeQuill(), 50);
       return;
     }
 
@@ -268,7 +268,7 @@ export function QuillEditor({
     cleanupQuill();
 
     // Debounce initialization to handle React StrictMode double mounting
-    initializationTimeoutRef.current = setTimeout(() => {
+    initializationTimeoutRef.current = window.setTimeout(() => {
       initializeQuill();
     }, 100);
 
@@ -348,7 +348,7 @@ export function QuillEditor({
     if (value && value.trim() && !quillRef.current) {
       console.debug('QuillEditor: Setting up retry mechanism for content update');
       
-      const retryInterval = setInterval(() => {
+      const retryInterval = window.setInterval(() => {
         console.debug('QuillEditor: Retrying content update', {
           hasQuill: !!quillRef.current,
           hasValue: !!value
@@ -361,7 +361,7 @@ export function QuillEditor({
       }, 50); // Check every 50ms
       
       // Clear retry after 2 seconds to prevent infinite retries
-      const timeout = setTimeout(() => {
+      const timeout = window.setTimeout(() => {
         console.warn('QuillEditor: Content update retry timeout reached');
         clearInterval(retryInterval);
       }, 2000);
