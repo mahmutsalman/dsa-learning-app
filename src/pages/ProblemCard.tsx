@@ -285,30 +285,46 @@ export default function ProblemCard() {
     }
   }, [currentCard, code, notes, language]);
 
-  // Auto-save hooks
+  // Auto-save hooks with solution mode coordination
   const codeAutoSave = useAutoSave(code, async () => {
-    if (currentCard && code !== currentCard.code) {
+    // Don't auto-save during solution mode transitions or when loading
+    if (solutionCard.state.isLoading) {
+      console.debug('ProblemCard: Skipping code auto-save - solution mode transition in progress');
+      return;
+    }
+    if (currentCard && code !== currentCard.code && !solutionCard.state.isActive) {
       await saveCard();
     }
-  }, { delay: 3000, enabled: !!currentCard });
+  }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
   const notesAutoSave = useAutoSave(notes, async () => {
+    // Don't auto-save during solution mode transitions or when loading
+    if (solutionCard.state.isLoading) {
+      console.debug('ProblemCard: Skipping notes auto-save - solution mode transition in progress');
+      return;
+    }
     console.debug('ProblemCard: Notes auto-save triggered', {
       notes,
       currentCardNotes: currentCard?.notes,
       isDifferent: notes !== currentCard?.notes,
-      enabled: !!currentCard
+      enabled: !!currentCard,
+      solutionModeActive: solutionCard.state.isActive
     });
-    if (currentCard && notes !== currentCard.notes) {
+    if (currentCard && notes !== currentCard.notes && !solutionCard.state.isActive) {
       await saveCard();
     }
-  }, { delay: 3000, enabled: !!currentCard });
+  }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
   const languageAutoSave = useAutoSave(language, async () => {
-    if (currentCard && language !== currentCard.language) {
+    // Don't auto-save during solution mode transitions or when loading
+    if (solutionCard.state.isLoading) {
+      console.debug('ProblemCard: Skipping language auto-save - solution mode transition in progress');
+      return;
+    }
+    if (currentCard && language !== currentCard.language && !solutionCard.state.isActive) {
       await saveCard();
     }
-  }, { delay: 1000, enabled: !!currentCard }); // Faster save for language changes
+  }, { delay: 1000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Faster save for language changes
 
   // Manual save function
   const handleManualSave = useCallback(async () => {
@@ -342,6 +358,17 @@ export default function ProblemCard() {
     if (problemId) {
       loadProblem();
     }
+  }, [problemId]);
+
+  // Cleanup originalCardRef when problem changes or component unmounts
+  useEffect(() => {
+    // Clear stored original card when switching problems to prevent memory leaks
+    return () => {
+      if (originalCardRef.current) {
+        console.debug('ProblemCard: Cleaning up originalCardRef on problem change/unmount');
+        originalCardRef.current = null;
+      }
+    };
   }, [problemId]);
 
   // Check for previous problem in session storage (for back navigation from related problems)
@@ -423,7 +450,9 @@ export default function ProblemCard() {
       cardNotes: currentCard?.notes,
       cardCode: currentCard?.code,
       cardLanguage: currentCard?.language,
-      notesLength: currentCard?.notes?.length || 0
+      notesLength: currentCard?.notes?.length || 0,
+      isSolutionCard: currentCard?.is_solution || false,
+      codePreview: currentCard?.code?.substring(0, 50) || '(empty)'
     });
     
     if (currentCard) {
@@ -434,12 +463,17 @@ export default function ProblemCard() {
         notesLength: currentCard.notes?.length || 0,
         language: currentCard.language,
         cardNumber: currentCard.card_number,
-        isSolution: currentCard.is_solution || false
+        isSolution: currentCard.is_solution || false,
+        codePreview: currentCard.code?.substring(0, 50) || '(empty)',
+        notesPreview: currentCard.notes?.substring(0, 50) || '(empty)'
       }, {
         timestamp: new Date().toISOString(),
-        triggerContext: 'useEffect[currentCard]'
+        triggerContext: 'useEffect[currentCard]',
+        editorSyncPending: true
       });
       
+      // Always sync editor state with current card
+      // This ensures editors display the correct content for both regular and solution cards
       debugSetCode(currentCard.code || '');
       debugSetNotes(currentCard.notes || '');
       setLanguage(currentCard.language || 'javascript');
@@ -624,6 +658,12 @@ export default function ProblemCard() {
 
   // Solution card toggle handler
   const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
+    // Prevent rapid toggles - check if solution card is already processing
+    if (solutionCard.state.isLoading) {
+      await logSolutionFlow('HandleToggleSkipped', 'Skipping toggle - solution card operation already in progress');
+      return;
+    }
+    
     // Log the initial state before any actions
     await logSolutionFlow('HandleToggleStart', {
       problemId,
@@ -633,7 +673,8 @@ export default function ProblemCard() {
       solutionCardExists: !!solutionCard.state.solutionCard,
       currentCode: code.substring(0, 100) + '...',
       currentNotes: notes.substring(0, 100) + '...',
-      currentLanguage: language
+      currentLanguage: language,
+      solutionCardLoading: solutionCard.state.isLoading
     });
 
     if (!isShiftAction(event)) {
@@ -766,14 +807,20 @@ export default function ProblemCard() {
               id: solutionCard.state.solutionCard.id,
               problemId: solutionCard.state.solutionCard.problem_id,
               codeLength: solutionCard.state.solutionCard.code.length,
-              notesLength: solutionCard.state.solutionCard.notes.length
+              notesLength: solutionCard.state.solutionCard.notes.length,
+              language: solutionCard.state.solutionCard.language,
+              codePreview: solutionCard.state.solutionCard.code.substring(0, 50),
+              notesPreview: solutionCard.state.solutionCard.notes.substring(0, 50)
             },
             convertedCard: {
               id: solution.id,
               problemId: solution.problem_id,
               codeLength: solution.code.length,
               notesLength: solution.notes.length,
-              cardNumber: solution.card_number
+              cardNumber: solution.card_number,
+              language: solution.language,
+              codePreview: solution.code.substring(0, 50),
+              notesPreview: solution.notes.substring(0, 50)
             }
           });
           
@@ -784,20 +831,29 @@ export default function ProblemCard() {
             cardId: solution.id
           });
           
-          // Force state updates in the correct order to ensure React detects changes
-          // First update the current card to trigger React key changes
+          // Use React's batch update approach for reliable solution state loading
+          // First set the card context, then update editor states synchronously
           setCurrentCard(solution);
           
-          // Then update editor states - use setTimeout to ensure state is updated in next render cycle
-          window.setTimeout(() => {
-            debugSetCode(solution.code);
-            debugSetNotes(solution.notes);
-            setLanguage(solution.language);
-          }, 0);
+          // Set editor states immediately to ensure solution data is loaded correctly
+          // This matches the exit solution pattern and ensures consistent behavior
+          debugSetCode(solution.code || '');
+          debugSetNotes(solution.notes || '');
+          setLanguage(solution.language || 'javascript');
           
           await logSolutionFlow('EnterSolutionComplete', 'Successfully entered solution mode and updated editors', {
             newCurrentCardId: solution.id,
-            editorUpdated: true
+            editorsUpdatedDirectly: true,
+            solutionDataPreservation: {
+              codePreserved: solution.code === solutionCard.state.solutionCard.code,
+              notesPreserved: solution.notes === solutionCard.state.solutionCard.notes,
+              languagePreserved: solution.language === solutionCard.state.solutionCard.language
+            },
+            editorState: {
+              codeLength: (solution.code || '').length,
+              notesLength: (solution.notes || '').length,
+              language: solution.language || 'javascript'
+            }
           });
         } else {
           await logSolutionFlow('EnterSolutionError', 'Toggle succeeded but no solution card returned', {

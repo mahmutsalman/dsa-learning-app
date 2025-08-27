@@ -37,22 +37,46 @@ export const findSolutionCard = (cards: Card[]): Card | null => {
  * Creates a new object to ensure React detects state changes
  */
 export const solutionCardToCard = (solutionCard: SolutionCard): Card => {
-  // Create a unique object with solution-specific properties
-  return {
+  // Validate input data to ensure proper conversion
+  if (!solutionCard) {
+    console.warn('solutionCardToCard: null or undefined solution card provided');
+    throw new Error('Invalid solution card provided for conversion');
+  }
+
+  // Ensure required fields have default values
+  const convertedCard: Card = {
     id: solutionCard.id,
     problem_id: solutionCard.problem_id,
-    card_number: solutionCard.card_number,
-    code: solutionCard.code,
-    language: solutionCard.language,
-    notes: solutionCard.notes,
+    card_number: solutionCard.card_number || 1,
+    code: solutionCard.code || '', // Ensure code is never undefined
+    language: solutionCard.language || 'javascript', // Ensure language has default
+    notes: solutionCard.notes || '', // Ensure notes is never undefined
     status: solutionCard.status as CardStatus,
-    total_duration: solutionCard.total_duration,
+    total_duration: solutionCard.total_duration || 0,
     created_at: solutionCard.created_at,
     last_modified: solutionCard.last_modified,
     is_solution: true, // Always mark as solution card for React key differentiation
     // Add a timestamp to ensure object uniqueness for React re-rendering
     _converted_at: Date.now()
   };
+
+  // Debug validation in development
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
+    console.debug('[solutionCardHelpers] Converted solution card:', {
+      originalId: solutionCard.id,
+      convertedId: convertedCard.id,
+      codeLength: convertedCard.code.length,
+      notesLength: convertedCard.notes.length,
+      language: convertedCard.language,
+      dataPreservation: {
+        codeMatches: solutionCard.code === convertedCard.code,
+        notesMatches: solutionCard.notes === convertedCard.notes,
+        languageMatches: solutionCard.language === convertedCard.language
+      }
+    });
+  }
+
+  return convertedCard;
 };
 
 /**
