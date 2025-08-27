@@ -32,7 +32,7 @@ interface PerformanceInfo {
 
 export class AnswerCardDebugLogger {
   private static readonly DEBUG_FILE = 'src-tauri/dev-data/debug/answer-card-debug.txt';
-  private static isEnabled = true; // Enabled for race condition debugging
+  private static isEnabled = false; // Disabled to prevent infinite render loops
   private static operationTimers = new Map<string, number>();
   private static renderCounters = new Map<string, number>();
   private static performanceBaseline = {

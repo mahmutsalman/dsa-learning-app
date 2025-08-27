@@ -59,7 +59,7 @@ export default function ProblemCard() {
   // Solution card functionality
   const solutionCard = useSolutionCard({
     problemId: problemId || '',
-    onSolutionToggle: (isActive, card) => {
+    onSolutionToggle: async (isActive, card) => {
       console.debug('Solution card toggled:', { isActive, card });
       
       // Update editor state when solution card is toggled
@@ -182,32 +182,32 @@ export default function ProblemCard() {
     }
   });
 
-  // Track component renders and performance
-  useEffect(() => {
-    const renderDuration = Math.round(performance.now() - componentStartTime);
-    
-    logAnswerCardState('ProblemCard', 'componentRender', null, {
-      renderCount,
-      renderDuration,
-      memoryUsage: getMemoryUsage(),
-      problemId,
-      cardId,
-      hasCurrentCard: !!currentCard,
-      cardsCount: cards.length,
-      isLoading: loading,
-      hasError: !!error,
-      solutionCardActive: solutionCard.state.isActive
-    }, {
-      trigger: 'component_render',
-      renderPerformance: {
-        isSlowRender: renderDuration > 16, // 16ms = 60fps threshold
-        baselineExceeded: renderDuration > 50 // Performance baseline
-      }
-    }, {
-      duration: renderDuration,
-      operationId: `render-${renderCount}`
-    });
-  });
+  // Track component renders and performance - DISABLED to prevent infinite loops
+  // useEffect(() => {
+  //   const renderDuration = Math.round(performance.now() - componentStartTime);
+  //   
+  //   logAnswerCardState('ProblemCard', 'componentRender', null, {
+  //     renderCount,
+  //     renderDuration,
+  //     memoryUsage: getMemoryUsage(),
+  //     problemId,
+  //     cardId,
+  //     hasCurrentCard: !!currentCard,
+  //     cardsCount: cards.length,
+  //     isLoading: loading,
+  //     hasError: !!error,
+  //     solutionCardActive: solutionCard.state.isActive
+  //   }, {
+  //     trigger: 'component_render',
+  //     renderPerformance: {
+  //       isSlowRender: renderDuration > 16, // 16ms = 60fps threshold
+  //       baselineExceeded: renderDuration > 50 // Performance baseline
+  //     }
+  //   }, {
+  //     duration: renderDuration,
+  //     operationId: `render-${renderCount}`
+  //   });
+  // });
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
@@ -911,9 +911,8 @@ export default function ProblemCard() {
       }
     });
     
-    try {
-      // Prevent rapid toggles - check if solution card is already processing
-      if (solutionCard.state.isLoading) {
+    // Prevent rapid toggles - check if solution card is already processing
+    if (solutionCard.state.isLoading) {
         await logContentLoadingSequence(sequenceId, 'RapidTogglePrevented', {
           reason: 'Solution card operation already in progress',
           currentState: solutionCard.state,
