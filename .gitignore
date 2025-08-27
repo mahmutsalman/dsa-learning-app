@@ -23,6 +23,7 @@ bundle/
 .vite/
 .rollup.cache/
 vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
 
 # TypeScript build cache
 *.tsbuildinfo
@@ -227,6 +228,10 @@ verify-migration.cjs
 .claude/
 CLAUDE.md
 .claude-backup/
+
+# IDE and editor auto-generated files
+*.workspace
+*.code-workspace
 
 # =============================================================================
 # Backup and Archive Files

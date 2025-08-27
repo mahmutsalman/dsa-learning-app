@@ -319,6 +319,8 @@ export const useSolutionCard = ({
         duration: timing?.duration,
         finalMemoryUsage: getMemoryUsage()
       });
+      
+      return result;
     } catch (error) {
       const timing = endTiming(operationId);
       await logSolutionFlow('ToggleError', 'Error during solution card toggle', {
@@ -329,6 +331,7 @@ export const useSolutionCard = ({
       });
       handleApiError(error, 'Failed to toggle solution view');
       setLoading(false);
+      throw error;
     }
   }, [problemId, onSolutionToggle, handleApiError, setLoading, setError]);
 

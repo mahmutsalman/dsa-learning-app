@@ -27,7 +27,7 @@ export interface SolutionCardState {
 export interface SolutionCardHookReturn {
   state: SolutionCardState;
   actions: {
-    toggle: () => Promise<void>;
+    toggle: () => Promise<{ isViewingSolution: boolean; card: SolutionCard | null }>;
     create: () => Promise<void>;
     load: () => Promise<void>;
     updateCode: (code: string, language: string) => Promise<void>;
