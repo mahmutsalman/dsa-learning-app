@@ -25,9 +25,13 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
-import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange } from '../services/answerCardDebugLogger';
+import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, startTiming, endTiming, trackRender, getMemoryUsage } from '../services/answerCardDebugLogger';
 
 export default function ProblemCard() {
+  // Track component renders for performance monitoring
+  const renderCount = trackRender('ProblemCard');
+  const componentStartTime = performance.now();
+  
   const { problemId, cardId } = useParams();
   const navigate = useNavigate();
   const [problem, setProblem] = useState<Problem | null>(null);
@@ -64,6 +68,32 @@ export default function ProblemCard() {
     }
   });
 
+  // Track component renders and performance
+  useEffect(() => {
+    const renderDuration = Math.round(performance.now() - componentStartTime);
+    
+    logAnswerCardState('ProblemCard', 'componentRender', null, {
+      renderCount,
+      renderDuration,
+      memoryUsage: getMemoryUsage(),
+      problemId,
+      cardId,
+      hasCurrentCard: !!currentCard,
+      cardsCount: cards.length,
+      isLoading: loading,
+      hasError: !!error,
+      solutionCardActive: solutionCard.state.isActive
+    }, {
+      trigger: 'component_render',
+      renderPerformance: {
+        isSlowRender: renderDuration > 16, // 16ms = 60fps threshold
+        baselineExceeded: renderDuration > 50 // Performance baseline
+      }
+    }, {
+      duration: renderDuration,
+      operationId: `render-${renderCount}`
+    });
+  });
 
   // Helper function to format time display with validation
   const formatTimeDisplay = (seconds: number, showSeconds: boolean = true): string => {
@@ -103,16 +133,85 @@ export default function ProblemCard() {
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
 
-  // Debug wrapper for setNotes to track state changes
+  // Enhanced debug wrapper for setNotes to track state changes with performance monitoring
   const debugSetNotes = useCallback((newNotes: string) => {
+    const operationId = `setNotes-${Date.now()}`;
+    const changeStartTime = performance.now();
+    
+    const beforeData = {
+      notes,
+      code,
+      language,
+      length: notes.length
+    };
+    
     console.debug('ProblemCard: setNotes called', {
       oldValue: notes,
       newValue: newNotes,
       currentCard: currentCard?.id,
-      autoSaveEnabled: !!currentCard
+      autoSaveEnabled: !!currentCard,
+      operationId
     });
+    
     setNotes(newNotes);
-  }, [notes, currentCard]);
+    
+    // Log editor change with timing
+    const changeLatency = Math.round(performance.now() - changeStartTime);
+    logEditorChange('NotesEditor', {
+      notes: newNotes,
+      code,
+      language
+    }, {
+      operationId,
+      trigger: 'ProblemCard.debugSetNotes',
+      cardId: currentCard?.id,
+      componentRender: trackRender('ProblemCard'),
+      lengthDifference: newNotes.length - notes.length
+    }, {
+      duration: changeLatency,
+      operationId
+    }, beforeData);
+  }, [notes, code, language, currentCard]);
+
+  // Enhanced debug wrapper for setCode to track state changes with performance monitoring
+  const debugSetCode = useCallback((newCode: string) => {
+    const operationId = `setCode-${Date.now()}`;
+    const changeStartTime = performance.now();
+    
+    const beforeData = {
+      code,
+      notes,
+      language,
+      length: code.length
+    };
+    
+    console.debug('ProblemCard: setCode called', {
+      oldValue: code,
+      newValue: newCode,
+      currentCard: currentCard?.id,
+      autoSaveEnabled: !!currentCard,
+      operationId
+    });
+    
+    setCode(newCode);
+    
+    // Log editor change with timing
+    const changeLatency = Math.round(performance.now() - changeStartTime);
+    logEditorChange('CodeEditor', {
+      code: newCode,
+      notes,
+      language
+    }, {
+      operationId,
+      trigger: 'ProblemCard.debugSetCode',
+      cardId: currentCard?.id,
+      componentRender: trackRender('ProblemCard'),
+      lengthDifference: newCode.length - code.length
+    }, {
+      duration: changeLatency,
+      operationId
+    }, beforeData);
+  }, [code, notes, language, currentCard]);
   
   
   const [isDark, setIsDark] = useState<boolean>(false);
@@ -341,14 +440,17 @@ export default function ProblemCard() {
         triggerContext: 'useEffect[currentCard]'
       });
       
-      setCode(currentCard.code || '');
-      setNotes(currentCard.notes || '');
+      debugSetCode(currentCard.code || '');
+      debugSetNotes(currentCard.notes || '');
       setLanguage(currentCard.language || 'javascript');
     }
     
   }, [currentCard]);
 
   const loadProblem = async () => {
+    const operationId = `loadProblem-${problemId}-${Date.now()}`;
+    startTiming(operationId);
+    
     try {
       setLoading(true);
       setError(null);
@@ -358,10 +460,12 @@ export default function ProblemCard() {
       await logSolutionFlow('ComponentInit', 'ProblemCard component initialized, starting new debug session', {
         problemId,
         cardId,
-        timestamp: new Date().toISOString()
+        operationId,
+        timestamp: new Date().toISOString(),
+        memoryUsage: getMemoryUsage()
       });
       
-      console.log('ProblemCard: Loading problem and cards', { problemId });
+      console.log('ProblemCard: Loading problem and cards', { problemId, operationId });
       
       const [problemResult, cardsResult] = await Promise.all([
         invoke<Problem>('get_problem_by_id', { id: problemId }),
@@ -414,13 +518,30 @@ export default function ProblemCard() {
       }
       
     } catch (err) {
+      const timing = endTiming(operationId);
       const errorMessage = err as string;
       setError(errorMessage);
-      console.error('ProblemCard: Failed to load problem', { problemId, error: errorMessage });
+      console.error('ProblemCard: Failed to load problem', { problemId, error: errorMessage, operationId });
+      
+      await logSolutionFlow('LoadProblemError', 'Failed to load problem data', {
+        error: errorMessage,
+        problemId,
+        operationId,
+        duration: timing?.duration
+      });
+      
       setCards([]);
       setCurrentCard(null);
     } finally {
+      const timing = endTiming(operationId);
       setLoading(false);
+      
+      await logSolutionFlow('LoadProblemComplete', 'Load problem operation completed', {
+        problemId,
+        operationId,
+        duration: timing?.duration,
+        finalMemoryUsage: getMemoryUsage()
+      });
     }
   };
 
@@ -548,8 +669,8 @@ export default function ProblemCard() {
           // Restore the original card state
           setCurrentCard(originalCard);
           window.setTimeout(() => {
-            setCode(originalCard.code);
-            setNotes(originalCard.notes);
+            debugSetCode(originalCard.code);
+            debugSetNotes(originalCard.notes);
             setLanguage(originalCard.language);
           }, 0);
         } else {
@@ -618,8 +739,8 @@ export default function ProblemCard() {
           
           // Then update editor states - use setTimeout to ensure state is updated in next render cycle
           window.setTimeout(() => {
-            setCode(solution.code);
-            setNotes(solution.notes);
+            debugSetCode(solution.code);
+            debugSetNotes(solution.notes);
             setLanguage(solution.language);
           }, 0);
           
