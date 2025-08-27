@@ -10,7 +10,7 @@ import {
   SolutionCardState,
   SolutionCardHookReturn
 } from '../types';
-import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, startTiming, endTiming, trackRender, getMemoryUsage } from '../../../services/answerCardDebugLogger';
+import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, trackRender, getMemoryUsage } from '../../../services/answerCardDebugLogger';
 
 interface UseSolutionCardOptions {
   problemId: string;
