@@ -784,33 +784,34 @@ export default function ProblemCard() {
           });
         }
         
-        await solutionCard.actions.toggle();
+        const toggleResult = await solutionCard.actions.toggle();
         
         await logSolutionFlow('ToggleApiComplete', 'Toggle API completed, checking result', {
+          apiResult: toggleResult,
           isActive: solutionCard.state.isActive,
           hasSolutionCard: !!solutionCard.state.solutionCard,
-          solutionCardData: solutionCard.state.solutionCard ? {
-            id: solutionCard.state.solutionCard.id,
-            problemId: solutionCard.state.solutionCard.problem_id,
-            codeLength: solutionCard.state.solutionCard.code.length,
-            notesLength: solutionCard.state.solutionCard.notes.length,
-            language: solutionCard.state.solutionCard.language
+          solutionCardData: toggleResult?.card ? {
+            id: toggleResult.card.id,
+            problemId: toggleResult.card.problem_id,
+            codeLength: toggleResult.card.code.length,
+            notesLength: toggleResult.card.notes.length,
+            language: toggleResult.card.language
           } : null
         });
         
-        if (solutionCard.state.solutionCard) {
+        if (toggleResult?.isViewingSolution && toggleResult?.card) {
           // Update editors with solution data
-          const solution = solutionCardToCard(solutionCard.state.solutionCard);
+          const solution = solutionCardToCard(toggleResult.card);
           
           await logSolutionFlow('ConvertSolutionCard', 'Converting solution card to regular card format', {
             originalSolution: {
-              id: solutionCard.state.solutionCard.id,
-              problemId: solutionCard.state.solutionCard.problem_id,
-              codeLength: solutionCard.state.solutionCard.code.length,
-              notesLength: solutionCard.state.solutionCard.notes.length,
-              language: solutionCard.state.solutionCard.language,
-              codePreview: solutionCard.state.solutionCard.code.substring(0, 50),
-              notesPreview: solutionCard.state.solutionCard.notes.substring(0, 50)
+              id: toggleResult.card.id,
+              problemId: toggleResult.card.problem_id,
+              codeLength: toggleResult.card.code.length,
+              notesLength: toggleResult.card.notes.length,
+              language: toggleResult.card.language,
+              codePreview: toggleResult.card.code.substring(0, 50),
+              notesPreview: toggleResult.card.notes.substring(0, 50)
             },
             convertedCard: {
               id: solution.id,
@@ -857,6 +858,7 @@ export default function ProblemCard() {
           });
         } else {
           await logSolutionFlow('EnterSolutionError', 'Toggle succeeded but no solution card returned', {
+            apiResult: toggleResult,
             solutionState: solutionCard.state
           });
         }
@@ -1051,7 +1053,7 @@ export default function ProblemCard() {
                 solutionCard.state.isActive
                   ? 'bg-red-50/50 dark:bg-red-950/20 border-l-4 border-red-300 dark:border-red-700'
                   : 'bg-gray-50 dark:bg-gray-900'
-              }`}
+              }`}>
                 {/* Editor container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -1079,7 +1081,7 @@ export default function ProblemCard() {
                 solutionCard.state.isActive
                   ? 'bg-red-50/30 dark:bg-red-950/10 border-l-4 border-red-300 dark:border-red-700'
                   : 'bg-white dark:bg-gray-800'
-              }`}
+              }`}>
                 {/* Notes container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -1186,7 +1188,7 @@ export default function ProblemCard() {
               solutionCard.state.isActive
                 ? 'bg-red-50/50 dark:bg-red-950/20 border-l-4 border-red-300 dark:border-red-700'
                 : 'bg-gray-50 dark:bg-gray-900'
-            }`}
+            }`}>
               {currentCard ? (
                 <ResizableMonacoEditor
                   value={code}
@@ -1217,7 +1219,7 @@ export default function ProblemCard() {
               solutionCard.state.isActive
                 ? 'bg-red-50/30 dark:bg-red-950/10 border-l-4 border-red-300 dark:border-red-700'
                 : 'bg-white dark:bg-gray-800'
-            }`}
+            }`}>
               {currentCard ? (
                 <QuillEditor
                   value={notes}
