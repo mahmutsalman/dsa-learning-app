@@ -29,7 +29,7 @@ import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolu
 
 export default function ProblemCard() {
   // Track component renders for performance monitoring
-  const renderCount = trackRender('ProblemCard');
+  const renderCount = 1; // Static value to prevent infinite render loop
   const componentStartTime = performance.now();
   
   const { problemId, cardId } = useParams();
@@ -61,6 +61,45 @@ export default function ProblemCard() {
     problemId: problemId || '',
     onSolutionToggle: (isActive, card) => {
       console.debug('Solution card toggled:', { isActive, card });
+      
+      // Update editor state when solution card is toggled
+      if (isActive && card) {
+        // Entering solution mode - load solution card content
+        console.debug('Loading solution card content into editor', {
+          cardId: card.id,
+          codeLength: card.code?.length || 0,
+          notesLength: card.notes?.length || 0,
+          language: card.language,
+          codePreview: card.code?.substring(0, 50) || '(empty)',
+          notesPreview: card.notes?.substring(0, 50) || '(empty)'
+        });
+        
+        // Update editor state with solution card content
+        // Use setTimeout to ensure this runs after any synchronous state updates
+        setTimeout(() => {
+          console.debug('Applying solution card content to editor (after timeout)', {
+            codeToApply: card.code?.substring(0, 50) || '(empty)',
+            notesToApply: card.notes?.substring(0, 50) || '(empty)',
+            languageToApply: card.language
+          });
+          debugSetCode(card.code || '');
+          debugSetNotes(card.notes || '');
+          setLanguage(card.language || 'javascript');
+        }, 0);
+      } else if (!isActive && currentCard) {
+        // Exiting solution mode - restore regular card content
+        console.debug('Restoring regular card content to editor', {
+          cardId: currentCard.id,
+          codeLength: currentCard.code?.length || 0,
+          notesLength: currentCard.notes?.length || 0,
+          language: currentCard.language
+        });
+        
+        // Update editor state with regular card content
+        debugSetCode(currentCard.code || '');
+        debugSetNotes(currentCard.notes || '');
+        setLanguage(currentCard.language || 'javascript');
+      }
     },
     onError: (error) => {
       console.error('Solution card error:', error);
@@ -165,7 +204,6 @@ export default function ProblemCard() {
       operationId,
       trigger: 'ProblemCard.debugSetNotes',
       cardId: currentCard?.id,
-      componentRender: trackRender('ProblemCard'),
       lengthDifference: newNotes.length - notes.length
     }, {
       duration: changeLatency,
@@ -205,7 +243,6 @@ export default function ProblemCard() {
       operationId,
       trigger: 'ProblemCard.debugSetCode',
       cardId: currentCard?.id,
-      componentRender: trackRender('ProblemCard'),
       lengthDifference: newCode.length - code.length
     }, {
       duration: changeLatency,
@@ -292,7 +329,17 @@ export default function ProblemCard() {
       console.debug('ProblemCard: Skipping code auto-save - solution mode transition in progress');
       return;
     }
-    if (currentCard && code !== currentCard.code && !solutionCard.state.isActive) {
+    
+    // Save to solution card if in solution mode, otherwise save to regular card
+    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+      // Save to solution card
+      if (code !== solutionCard.state.solutionCard.code) {
+        console.debug('ProblemCard: Auto-saving code to solution card');
+        await solutionCard.actions.updateCode(code, language);
+      }
+    } else if (currentCard && code !== currentCard.code) {
+      // Save to regular card
+      console.debug('ProblemCard: Auto-saving code to regular card');
       await saveCard();
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
@@ -303,14 +350,17 @@ export default function ProblemCard() {
       console.debug('ProblemCard: Skipping notes auto-save - solution mode transition in progress');
       return;
     }
-    console.debug('ProblemCard: Notes auto-save triggered', {
-      notes,
-      currentCardNotes: currentCard?.notes,
-      isDifferent: notes !== currentCard?.notes,
-      enabled: !!currentCard,
-      solutionModeActive: solutionCard.state.isActive
-    });
-    if (currentCard && notes !== currentCard.notes && !solutionCard.state.isActive) {
+    
+    // Save to solution card if in solution mode, otherwise save to regular card
+    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+      // Save to solution card
+      if (notes !== solutionCard.state.solutionCard.notes) {
+        console.debug('ProblemCard: Auto-saving notes to solution card');
+        await solutionCard.actions.updateNotes(notes);
+      }
+    } else if (currentCard && notes !== currentCard.notes) {
+      // Save to regular card
+      console.debug('ProblemCard: Auto-saving notes to regular card');
       await saveCard();
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
@@ -321,7 +371,17 @@ export default function ProblemCard() {
       console.debug('ProblemCard: Skipping language auto-save - solution mode transition in progress');
       return;
     }
-    if (currentCard && language !== currentCard.language && !solutionCard.state.isActive) {
+    
+    // Save to solution card if in solution mode, otherwise save to regular card
+    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+      // Save to solution card (language changes are handled via updateCode)
+      if (language !== solutionCard.state.solutionCard.language) {
+        console.debug('ProblemCard: Auto-saving language to solution card');
+        await solutionCard.actions.updateCode(code, language);
+      }
+    } else if (currentCard && language !== currentCard.language) {
+      // Save to regular card
+      console.debug('ProblemCard: Auto-saving language to regular card');
       await saveCard();
     }
   }, { delay: 1000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Faster save for language changes
@@ -452,7 +512,8 @@ export default function ProblemCard() {
       cardLanguage: currentCard?.language,
       notesLength: currentCard?.notes?.length || 0,
       isSolutionCard: currentCard?.is_solution || false,
-      codePreview: currentCard?.code?.substring(0, 50) || '(empty)'
+      codePreview: currentCard?.code?.substring(0, 50) || '(empty)',
+      solutionModeActive: solutionCard.state.isActive
     });
     
     if (currentCard) {
@@ -469,17 +530,33 @@ export default function ProblemCard() {
       }, {
         timestamp: new Date().toISOString(),
         triggerContext: 'useEffect[currentCard]',
-        editorSyncPending: true
+        editorSyncPending: true,
+        solutionModeActive: solutionCard.state.isActive
       });
       
-      // Always sync editor state with current card
-      // This ensures editors display the correct content for both regular and solution cards
-      debugSetCode(currentCard.code || '');
-      debugSetNotes(currentCard.notes || '');
-      setLanguage(currentCard.language || 'javascript');
+      // Only sync editor state with current card when NOT in solution mode
+      // When in solution mode, the onSolutionToggle callback handles editor state
+      if (!solutionCard.state.isActive) {
+        console.debug('ProblemCard: Syncing editor with regular card', {
+          cardId: currentCard.id,
+          syncingContent: true,
+          codeToSync: currentCard.code?.substring(0, 50) || '(empty)',
+          notesToSync: currentCard.notes?.substring(0, 50) || '(empty)'
+        });
+        debugSetCode(currentCard.code || '');
+        debugSetNotes(currentCard.notes || '');
+        setLanguage(currentCard.language || 'javascript');
+      } else {
+        console.debug('ProblemCard: Skipping editor sync - solution mode active', {
+          solutionCardId: solutionCard.state.solutionCard?.id,
+          preservingContent: true,
+          currentEditorCode: code?.substring(0, 50) || '(empty)',
+          currentEditorNotes: notes?.substring(0, 50) || '(empty)'
+        });
+      }
     }
     
-  }, [currentCard]);
+  }, [currentCard, solutionCard.state.isActive]);
 
   const loadProblem = async () => {
     const operationId = `loadProblem-${problemId}-${Date.now()}`;
@@ -846,9 +923,9 @@ export default function ProblemCard() {
             newCurrentCardId: solution.id,
             editorsUpdatedDirectly: true,
             solutionDataPreservation: {
-              codePreserved: solution.code === solutionCard.state.solutionCard.code,
-              notesPreserved: solution.notes === solutionCard.state.solutionCard.notes,
-              languagePreserved: solution.language === solutionCard.state.solutionCard.language
+              codePreserved: solution.code === (solutionCard.state.solutionCard?.code || ''),
+              notesPreserved: solution.notes === (solutionCard.state.solutionCard?.notes || ''),
+              languagePreserved: solution.language === (solutionCard.state.solutionCard?.language || 'javascript')
             },
             editorState: {
               codeLength: (solution.code || '').length,

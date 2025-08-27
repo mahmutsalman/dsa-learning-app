@@ -43,7 +43,6 @@ export const useSolutionCard = ({
       // Enhanced logging with performance tracking
       logAnswerCardState('useSolutionCard', 'isLoading', prev.isLoading, loading, {
         trigger: 'setLoading',
-        componentRender: trackRender('useSolutionCard'),
         memoryUsage: getMemoryUsage()
       });
       
@@ -60,7 +59,6 @@ export const useSolutionCard = ({
         trigger: 'setError',
         hasError: !!error,
         errorType: error ? 'user_error' : 'cleared',
-        componentRender: trackRender('useSolutionCard'),
         memoryUsage: getMemoryUsage()
       });
       
@@ -120,8 +118,7 @@ export const useSolutionCard = ({
           trigger: 'load_complete',
           operationId,
           hasCard: !!card,
-          cardId: card?.id,
-          componentRender: trackRender('useSolutionCard')
+          cardId: card?.id
         }, timing);
         
         return newState;
@@ -195,8 +192,7 @@ export const useSolutionCard = ({
           trigger: 'create_complete',
           operationId,
           cardCreated: true,
-          cardId: card.id,
-          componentRender: trackRender('useSolutionCard')
+          cardId: card.id
         }, timing);
         
         return newState;
@@ -235,7 +231,7 @@ export const useSolutionCard = ({
   const toggle = useCallback(async () => {
     if (!problemId) {
       await logSolutionFlow('ToggleError', 'No problemId provided to toggle function');
-      return;
+      throw new Error('No problemId provided to toggle function');
     }
 
     const operationId = `toggle-${problemId}-${Date.now()}`;
@@ -253,8 +249,7 @@ export const useSolutionCard = ({
       problemId,
       currentState,
       operationId,
-      memoryUsage: getMemoryUsage(),
-      renderCount: trackRender('useSolutionCard')
+      memoryUsage: getMemoryUsage()
     });
 
     setLoading(true);
@@ -295,8 +290,7 @@ export const useSolutionCard = ({
             hadCard: !!prev.solutionCard,
             hasCard: !!result.card,
             cardChanged: prev.solutionCard?.id !== result.card?.id
-          },
-          componentRender: trackRender('useSolutionCard')
+          }
         }, timing);
         
         return newState;
@@ -370,8 +364,7 @@ export const useSolutionCard = ({
       logEditorChange('CodeEditor', { code, language, notes: prev.solutionCard.notes }, {
         operationId,
         trigger: 'updateCode',
-        cardId,
-        componentRender: trackRender('useSolutionCard')
+        cardId
       }, {
         duration: changeLatency,
         operationId
@@ -464,8 +457,7 @@ export const useSolutionCard = ({
       }, {
         operationId,
         trigger: 'updateNotes',
-        cardId,
-        componentRender: trackRender('useSolutionCard')
+        cardId
       }, {
         duration: changeLatency,
         operationId
@@ -536,8 +528,7 @@ export const useSolutionCard = ({
     await logSolutionFlow('ExitSolutionStart', 'Starting to exit solution view', {
       currentState,
       operationId,
-      memoryUsage: getMemoryUsage(),
-      renderCount: trackRender('useSolutionCard')
+      memoryUsage: getMemoryUsage()
     });
     
     // Use functional state update to avoid stale closure
@@ -561,7 +552,6 @@ export const useSolutionCard = ({
           hasCard: false,
           cardCleared: true
         },
-        componentRender: trackRender('useSolutionCard')
       }, timing);
       
       return newState;
