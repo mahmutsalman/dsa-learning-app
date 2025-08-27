@@ -122,9 +122,17 @@ export const useSolutionCard = ({
       return;
     }
 
+    // Capture current state for logging only
+    const currentState = await new Promise<SolutionCardState>(resolve => {
+      setState(prev => {
+        resolve(prev);
+        return prev;
+      });
+    });
+
     await logSolutionFlow('ToggleStart', 'Starting solution card toggle', {
       problemId,
-      currentState: state
+      currentState
     });
 
     setLoading(true);
@@ -142,19 +150,23 @@ export const useSolutionCard = ({
         hookContext: 'useSolutionCard.toggle'
       });
       
-      const newState = {
-        ...state,
-        solutionCard: result.card,
-        isActive: result.isViewingSolution,
-        isLoading: false,
-        error: null
-      };
-      
-      setState(newState);
-      
-      await logAnswerCardState('useSolutionCard', 'solutionCardState', state, newState, {
-        trigger: 'toggle_complete',
-        apiResult: result
+      // Use functional state update to avoid stale closure
+      setState(prev => {
+        const newState = {
+          ...prev,
+          solutionCard: result.card,
+          isActive: result.isViewingSolution,
+          isLoading: false,
+          error: null
+        };
+        
+        // Log state change asynchronously
+        logAnswerCardState('useSolutionCard', 'solutionCardState', prev, newState, {
+          trigger: 'toggle_complete',
+          apiResult: result
+        });
+        
+        return newState;
       });
 
       if (onSolutionToggle) {
@@ -178,90 +190,124 @@ export const useSolutionCard = ({
       handleApiError(error, 'Failed to toggle solution view');
       setLoading(false);
     }
-  }, [problemId, onSolutionToggle, handleApiError, setLoading, setError, state]);
+  }, [problemId, onSolutionToggle, handleApiError, setLoading, setError]);
 
   /**
    * Update solution card code with debounced auto-save
    */
   const updateCode = useCallback(async (code: string, language: string) => {
-    if (!state.solutionCard) return;
+    // Capture the card ID before the async operation
+    let cardId: string | null = null;
+    
+    setState(prev => {
+      if (!prev.solutionCard) return prev;
+      
+      cardId = prev.solutionCard.id;
+      
+      // Update local state immediately for responsive UI
+      return {
+        ...prev,
+        solutionCard: {
+          ...prev.solutionCard,
+          code,
+          language
+        }
+      };
+    });
 
-    // Update local state immediately for responsive UI
-    setState(prev => ({
-      ...prev,
-      solutionCard: prev.solutionCard ? {
-        ...prev.solutionCard,
-        code,
-        language
-      } : null
-    }));
+    // If no card ID, exit early
+    if (!cardId) return;
 
     // Clear existing timer
     if (codeTimerRef.current) {
       clearTimeout(codeTimerRef.current);
     }
 
-    // Set new timer for auto-save
+    // Set new timer for auto-save with captured card ID
+    const capturedCardId = cardId; // TypeScript closure capture
     codeTimerRef.current = window.setTimeout(async () => {
       try {
-        await solutionCardApi.updateCode(state.solutionCard!.id, code, language);
+        await solutionCardApi.updateCode(capturedCardId, code, language);
         setError(null);
       } catch (error) {
         handleApiError(error, 'Failed to save solution code');
       }
     }, autoSaveDelay);
-  }, [state.solutionCard, autoSaveDelay, handleApiError, setError]);
+  }, [autoSaveDelay, handleApiError, setError]);
 
   /**
    * Update solution card notes with debounced auto-save
    */
   const updateNotes = useCallback(async (notes: string) => {
-    if (!state.solutionCard) return;
+    // Capture the card ID before the async operation
+    let cardId: string | null = null;
+    
+    setState(prev => {
+      if (!prev.solutionCard) return prev;
+      
+      cardId = prev.solutionCard.id;
+      
+      // Update local state immediately for responsive UI
+      return {
+        ...prev,
+        solutionCard: {
+          ...prev.solutionCard,
+          notes
+        }
+      };
+    });
 
-    // Update local state immediately for responsive UI
-    setState(prev => ({
-      ...prev,
-      solutionCard: prev.solutionCard ? {
-        ...prev.solutionCard,
-        notes
-      } : null
-    }));
+    // If no card ID, exit early
+    if (!cardId) return;
 
     // Clear existing timer
     if (notesTimerRef.current) {
       clearTimeout(notesTimerRef.current);
     }
 
-    // Set new timer for auto-save
+    // Set new timer for auto-save with captured card ID
+    const capturedCardId = cardId; // TypeScript closure capture
     notesTimerRef.current = window.setTimeout(async () => {
       try {
-        await solutionCardApi.updateNotes(state.solutionCard!.id, notes);
+        await solutionCardApi.updateNotes(capturedCardId, notes);
         setError(null);
       } catch (error) {
         handleApiError(error, 'Failed to save solution notes');
       }
     }, autoSaveDelay);
-  }, [state.solutionCard, autoSaveDelay, handleApiError, setError]);
+  }, [autoSaveDelay, handleApiError, setError]);
 
   /**
    * Exit solution view and return to regular cards
    */
   const exitSolution = useCallback(async () => {
-    await logSolutionFlow('ExitSolutionStart', 'Starting to exit solution view', {
-      currentState: state
+    // Capture current state for logging only
+    const currentState = await new Promise<SolutionCardState>(resolve => {
+      setState(prev => {
+        resolve(prev);
+        return prev;
+      });
     });
     
-    const newState = {
-      ...state,
-      isActive: false,
-      solutionCard: null,
-      error: null
-    };
+    await logSolutionFlow('ExitSolutionStart', 'Starting to exit solution view', {
+      currentState
+    });
     
-    setState(newState);
-    
-    await logAnswerCardState('useSolutionCard', 'solutionCardState', state, newState, {
-      trigger: 'exit_solution'
+    // Use functional state update to avoid stale closure
+    setState(prev => {
+      const newState = {
+        ...prev,
+        isActive: false,
+        solutionCard: null,
+        error: null
+      };
+      
+      // Log state change asynchronously
+      logAnswerCardState('useSolutionCard', 'solutionCardState', prev, newState, {
+        trigger: 'exit_solution'
+      });
+      
+      return newState;
     });
 
     if (onSolutionToggle) {
@@ -273,7 +319,7 @@ export const useSolutionCard = ({
     }
     
     await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution view');
-  }, [onSolutionToggle, state]);
+  }, [onSolutionToggle]);
 
   return {
     state,
