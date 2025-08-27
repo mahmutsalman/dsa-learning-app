@@ -73,11 +73,16 @@ pub async fn toggle_solution_view(
     create_if_missing: bool,
     app_state: State<'_, AppState>
 ) -> Result<SolutionCardToggleResponse, String> {
+    println!("🟦 [ANSWER_CARD_DEBUG] toggle_solution_view called with problem_id: {}, create_if_missing: {}", problem_id, create_if_missing);
+    
     let db = app_state.db.lock().map_err(|e| e.to_string())?;
     
     // First, check if solution card exists
+    println!("🟦 [ANSWER_CARD_DEBUG] Checking if solution card exists for problem: {}", problem_id);
     match db.get_solution_card(&problem_id) {
         Ok(Some(card)) => {
+            println!("🟦 [ANSWER_CARD_DEBUG] Solution card found: id={}, code_length={}, notes_length={}", 
+                card.id, card.code.len(), card.notes.len());
             // Solution card exists, return it
             Ok(SolutionCardToggleResponse {
                 success: true,
@@ -87,24 +92,34 @@ pub async fn toggle_solution_view(
             })
         },
         Ok(None) => {
+            println!("🟦 [ANSWER_CARD_DEBUG] No solution card found for problem: {}", problem_id);
             // No solution card exists
             if create_if_missing {
+                println!("🟦 [ANSWER_CARD_DEBUG] Creating new solution card for problem: {}", problem_id);
                 // Create new solution card
                 match db.create_solution_card(&problem_id) {
-                    Ok(card) => Ok(SolutionCardToggleResponse {
-                        success: true,
-                        is_viewing_solution: true,
-                        card: Some(card),
-                        error: None,
-                    }),
-                    Err(e) => Ok(SolutionCardToggleResponse {
-                        success: false,
-                        is_viewing_solution: false,
-                        card: None,
-                        error: Some(format!("Failed to create solution card: {}", e)),
-                    })
+                    Ok(card) => {
+                        println!("🟦 [ANSWER_CARD_DEBUG] Successfully created solution card: id={}, problem_id={}", 
+                            card.id, card.problem_id);
+                        Ok(SolutionCardToggleResponse {
+                            success: true,
+                            is_viewing_solution: true,
+                            card: Some(card),
+                            error: None,
+                        })
+                    },
+                    Err(e) => {
+                        println!("🟦 [ANSWER_CARD_DEBUG] Failed to create solution card: {}", e);
+                        Ok(SolutionCardToggleResponse {
+                            success: false,
+                            is_viewing_solution: false,
+                            card: None,
+                            error: Some(format!("Failed to create solution card: {}", e)),
+                        })
+                    }
                 }
             } else {
+                println!("🟦 [ANSWER_CARD_DEBUG] create_if_missing=false, not creating solution card");
                 // Don't create, just return that no solution exists
                 Ok(SolutionCardToggleResponse {
                     success: true,
@@ -114,12 +129,15 @@ pub async fn toggle_solution_view(
                 })
             }
         },
-        Err(e) => Ok(SolutionCardToggleResponse {
-            success: false,
-            is_viewing_solution: false,
-            card: None,
-            error: Some(format!("Failed to check for solution card: {}", e)),
-        })
+        Err(e) => {
+            println!("🟦 [ANSWER_CARD_DEBUG] Error checking for solution card: {}", e);
+            Ok(SolutionCardToggleResponse {
+                success: false,
+                is_viewing_solution: false,
+                card: None,
+                error: Some(format!("Failed to check for solution card: {}", e)),
+            })
+        }
     }
 }
 

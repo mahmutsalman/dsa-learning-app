@@ -10,6 +10,7 @@ import {
   SolutionCardState,
   SolutionCardHookReturn
 } from '../types';
+import { logSolutionFlow, logAnswerCardApi, logAnswerCardState } from '../../../services/answerCardDebugLogger';
 
 interface UseSolutionCardOptions {
   problemId: string;
@@ -116,30 +117,68 @@ export const useSolutionCard = ({
    * Toggle solution view - main action for shift+click
    */
   const toggle = useCallback(async () => {
-    if (!problemId) return;
+    if (!problemId) {
+      await logSolutionFlow('ToggleError', 'No problemId provided to toggle function');
+      return;
+    }
+
+    await logSolutionFlow('ToggleStart', 'Starting solution card toggle', {
+      problemId,
+      currentState: state
+    });
 
     setLoading(true);
     setError(null);
 
     try {
+      await logSolutionFlow('ToggleApiCall', 'Calling solutionCardApi.toggle', {
+        problemId,
+        createIfMissing: true
+      });
+      
       const result = await solutionCardApi.toggle(problemId, true);
       
-      setState(prev => ({
-        ...prev,
+      await logAnswerCardApi('toggle_solution_view', { problemId, createIfMissing: true }, result, {
+        hookContext: 'useSolutionCard.toggle'
+      });
+      
+      const newState = {
+        ...state,
         solutionCard: result.card,
         isActive: result.isViewingSolution,
         isLoading: false,
         error: null
-      }));
+      };
+      
+      setState(newState);
+      
+      await logAnswerCardState('useSolutionCard', 'solutionCardState', state, newState, {
+        trigger: 'toggle_complete',
+        apiResult: result
+      });
 
       if (onSolutionToggle) {
+        await logSolutionFlow('ToggleCallback', 'Calling onSolutionToggle callback', {
+          isViewingSolution: result.isViewingSolution,
+          cardId: result.card?.id
+        });
         onSolutionToggle(result.isViewingSolution, result.card);
       }
+      
+      await logSolutionFlow('ToggleComplete', 'Solution card toggle completed successfully', {
+        isActive: result.isViewingSolution,
+        hasCard: !!result.card,
+        cardId: result.card?.id
+      });
     } catch (error) {
+      await logSolutionFlow('ToggleError', 'Error during solution card toggle', {
+        error: error instanceof Error ? error.message : String(error),
+        problemId
+      });
       handleApiError(error, 'Failed to toggle solution view');
       setLoading(false);
     }
-  }, [problemId, onSolutionToggle, handleApiError, setLoading, setError]);
+  }, [problemId, onSolutionToggle, handleApiError, setLoading, setError, state]);
 
   /**
    * Update solution card code with debounced auto-save
@@ -207,18 +246,34 @@ export const useSolutionCard = ({
   /**
    * Exit solution view and return to regular cards
    */
-  const exitSolution = useCallback(() => {
-    setState(prev => ({
-      ...prev,
+  const exitSolution = useCallback(async () => {
+    await logSolutionFlow('ExitSolutionStart', 'Starting to exit solution view', {
+      currentState: state
+    });
+    
+    const newState = {
+      ...state,
       isActive: false,
       solutionCard: null,
       error: null
-    }));
+    };
+    
+    setState(newState);
+    
+    await logAnswerCardState('useSolutionCard', 'solutionCardState', state, newState, {
+      trigger: 'exit_solution'
+    });
 
     if (onSolutionToggle) {
+      await logSolutionFlow('ExitSolutionCallback', 'Calling onSolutionToggle callback for exit', {
+        isActive: false,
+        card: null
+      });
       onSolutionToggle(false, null);
     }
-  }, [onSolutionToggle]);
+    
+    await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution view');
+  }, [onSolutionToggle, state]);
 
   return {
     state,

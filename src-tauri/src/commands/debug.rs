@@ -101,3 +101,40 @@ pub async fn check_microphone_permission() -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+pub async fn write_file(state: State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+    use std::fs;
+    
+    // Convert to PathBuf and ensure parent directory exists
+    let file_path = std::path::PathBuf::from(&path);
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent directories: {}", e))?;
+    }
+    
+    fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write file {}: {}", path, e))
+}
+
+#[tauri::command]
+pub async fn append_to_file(state: State<'_, AppState>, path: String, content: String) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    
+    // Convert to PathBuf and ensure parent directory exists
+    let file_path = std::path::PathBuf::from(&path);
+    if let Some(parent) = file_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent directories: {}", e))?;
+    }
+    
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file_path)
+        .map_err(|e| format!("Failed to open file {} for append: {}", path, e))?;
+    
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to append to file {}: {}", path, e))
+}
+

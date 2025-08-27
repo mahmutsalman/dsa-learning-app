@@ -34,8 +34,10 @@ export const findSolutionCard = (cards: Card[]): Card | null => {
 
 /**
  * Convert solution card to regular card format for UI compatibility
+ * Creates a new object to ensure React detects state changes
  */
 export const solutionCardToCard = (solutionCard: SolutionCard): Card => {
+  // Create a unique object with solution-specific properties
   return {
     id: solutionCard.id,
     problem_id: solutionCard.problem_id,
@@ -47,7 +49,9 @@ export const solutionCardToCard = (solutionCard: SolutionCard): Card => {
     total_duration: solutionCard.total_duration,
     created_at: solutionCard.created_at,
     last_modified: solutionCard.last_modified,
-    is_solution: solutionCard.is_solution
+    is_solution: true, // Always mark as solution card for React key differentiation
+    // Add a timestamp to ensure object uniqueness for React re-rendering
+    _converted_at: Date.now()
   };
 };
 

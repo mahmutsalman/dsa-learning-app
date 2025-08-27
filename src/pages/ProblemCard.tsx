@@ -25,6 +25,7 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
+import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange } from '../services/answerCardDebugLogger';
 
 export default function ProblemCard() {
   const { problemId, cardId } = useParams();
@@ -38,6 +39,9 @@ export default function ProblemCard() {
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
   const [recordingHistory, setRecordingHistory] = useState({ isOpen: false });
   const [previousProblemId, setPreviousProblemId] = useState<string | null>(null);
+  
+  // Store original regular card when entering solution mode
+  const originalCardRef = useRef<Card | null>(null);
   
   // Enhanced workspace feature flag
   const [useEnhancedWorkspace] = useState(true);
@@ -324,6 +328,19 @@ export default function ProblemCard() {
     });
     
     if (currentCard) {
+      logAnswerCardState('ProblemCard', 'currentCard', null, {
+        id: currentCard.id,
+        problemId: currentCard.problem_id,
+        codeLength: currentCard.code?.length || 0,
+        notesLength: currentCard.notes?.length || 0,
+        language: currentCard.language,
+        cardNumber: currentCard.card_number,
+        isSolution: currentCard.is_solution || false
+      }, {
+        timestamp: new Date().toISOString(),
+        triggerContext: 'useEffect[currentCard]'
+      });
+      
       setCode(currentCard.code || '');
       setNotes(currentCard.notes || '');
       setLanguage(currentCard.language || 'javascript');
@@ -335,6 +352,14 @@ export default function ProblemCard() {
     try {
       setLoading(true);
       setError(null);
+      
+      // Initialize debug logging for new session
+      await AnswerCardDebugLogger.clearLog();
+      await logSolutionFlow('ComponentInit', 'ProblemCard component initialized, starting new debug session', {
+        problemId,
+        cardId,
+        timestamp: new Date().toISOString()
+      });
       
       console.log('ProblemCard: Loading problem and cards', { problemId });
       
@@ -478,41 +503,151 @@ export default function ProblemCard() {
 
   // Solution card toggle handler
   const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
+    // Log the initial state before any actions
+    await logSolutionFlow('HandleToggleStart', {
+      problemId,
+      currentCardId: currentCard?.id,
+      isShiftAction: isShiftAction(event),
+      solutionCardActive: solutionCard.state.isActive,
+      solutionCardExists: !!solutionCard.state.solutionCard,
+      currentCode: code.substring(0, 100) + '...',
+      currentNotes: notes.substring(0, 100) + '...',
+      currentLanguage: language
+    });
+
     if (!isShiftAction(event)) {
       // Not shift+click, handle regular navigation
+      await logAnswerCardAction('RegularNavigation', 'Navigating to next card instead of solution toggle');
       navigateToCard('next');
       return;
     }
 
     // This is a shift+click - check current mode and act accordingly
+    await logAnswerCardAction('ShiftClick', 'Shift+click detected, processing solution toggle', {
+      isActive: solutionCard.state.isActive,
+      hasSolution: !!solutionCard.state.solutionCard
+    });
+
     try {
       if (solutionCard.state.isActive) {
         // Already in solution mode - exit back to regular cards
+        await logSolutionFlow('ExitSolutionMode', 'Exiting solution mode, returning to regular card');
+        
         solutionCard.actions.exitSolution();
         
-        // Restore current card data
-        if (currentCard) {
-          setCode(currentCard.code);
-          setNotes(currentCard.notes);
-          setLanguage(currentCard.language);
+        // Restore original regular card data
+        const originalCard = originalCardRef.current;
+        if (originalCard) {
+          await logEditorChange('RestoreFromSolution', {
+            code: originalCard.code,
+            notes: originalCard.notes,
+            language: originalCard.language,
+            cardId: originalCard.id
+          }, { originalCardStored: true });
+          
+          // Restore the original card state
+          setCurrentCard(originalCard);
+          window.setTimeout(() => {
+            setCode(originalCard.code);
+            setNotes(originalCard.notes);
+            setLanguage(originalCard.language);
+          }, 0);
+        } else {
+          await logSolutionFlow('ExitSolutionError', 'No original card stored to restore from');
         }
+        
+        await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution mode');
       } else {
         // Not in solution mode - enter solution view
+        await logSolutionFlow('EnterSolutionMode', 'Entering solution mode, calling toggle API');
+        
+        // Store the current regular card before switching to solution
+        if (currentCard) {
+          originalCardRef.current = { ...currentCard }; // Create a copy to avoid reference issues
+          await logSolutionFlow('StoreOriginalCard', 'Stored original card for restoration', {
+            originalCardId: currentCard.id,
+            originalCardCode: currentCard.code.length,
+            originalCardNotes: currentCard.notes.length
+          });
+        }
+        
         await solutionCard.actions.toggle();
+        
+        await logSolutionFlow('ToggleApiComplete', 'Toggle API completed, checking result', {
+          isActive: solutionCard.state.isActive,
+          hasSolutionCard: !!solutionCard.state.solutionCard,
+          solutionCardData: solutionCard.state.solutionCard ? {
+            id: solutionCard.state.solutionCard.id,
+            problemId: solutionCard.state.solutionCard.problem_id,
+            codeLength: solutionCard.state.solutionCard.code.length,
+            notesLength: solutionCard.state.solutionCard.notes.length,
+            language: solutionCard.state.solutionCard.language
+          } : null
+        });
         
         if (solutionCard.state.solutionCard) {
           // Update editors with solution data
           const solution = solutionCardToCard(solutionCard.state.solutionCard);
-          setCode(solution.code);
-          setNotes(solution.notes);
-          setLanguage(solution.language);
+          
+          await logSolutionFlow('ConvertSolutionCard', 'Converting solution card to regular card format', {
+            originalSolution: {
+              id: solutionCard.state.solutionCard.id,
+              problemId: solutionCard.state.solutionCard.problem_id,
+              codeLength: solutionCard.state.solutionCard.code.length,
+              notesLength: solutionCard.state.solutionCard.notes.length
+            },
+            convertedCard: {
+              id: solution.id,
+              problemId: solution.problem_id,
+              codeLength: solution.code.length,
+              notesLength: solution.notes.length,
+              cardNumber: solution.card_number
+            }
+          });
+          
+          await logEditorChange('LoadSolutionData', {
+            code: solution.code,
+            notes: solution.notes,
+            language: solution.language,
+            cardId: solution.id
+          });
+          
+          // Force state updates in the correct order to ensure React detects changes
+          // First update the current card to trigger React key changes
           setCurrentCard(solution);
+          
+          // Then update editor states - use setTimeout to ensure state is updated in next render cycle
+          window.setTimeout(() => {
+            setCode(solution.code);
+            setNotes(solution.notes);
+            setLanguage(solution.language);
+          }, 0);
+          
+          await logSolutionFlow('EnterSolutionComplete', 'Successfully entered solution mode and updated editors', {
+            newCurrentCardId: solution.id,
+            editorUpdated: true
+          });
+        } else {
+          await logSolutionFlow('EnterSolutionError', 'Toggle succeeded but no solution card returned', {
+            solutionState: solutionCard.state
+          });
         }
       }
     } catch (error) {
+      await logSolutionFlow('HandleToggleError', 'Error during solution toggle', {
+        error: error instanceof Error ? error.message : String(error),
+        solutionState: solutionCard.state
+      });
       console.error('Failed to toggle solution view:', error);
     }
-  }, [solutionCard, currentCard, navigateToCard]);
+
+    await logSolutionFlow('HandleToggleComplete', 'Solution toggle handler completed', {
+      finalSolutionActive: solutionCard.state.isActive,
+      finalCurrentCardId: currentCard?.id,
+      finalCodeLength: code.length,
+      finalNotesLength: notes.length
+    });
+  }, [solutionCard, currentCard, navigateToCard, problemId, code, notes, language]);
 
   const deleteCard = async () => {
     if (!currentCard || !currentCard.parent_card_id) {
