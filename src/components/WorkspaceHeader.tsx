@@ -383,7 +383,11 @@ export function WorkspaceHeader({
   return (
     <div 
       ref={headerContainerRef}
-      className="workspace-header-content bg-white dark:bg-gray-800 px-6 h-full flex items-center relative"
+      className={`workspace-header-content px-6 h-full flex items-center relative transition-all duration-200 ease-in-out ${
+        isViewingSolution 
+          ? 'bg-red-50 dark:bg-red-950/30 border-b-2 border-red-200 dark:border-red-800' 
+          : 'bg-white dark:bg-gray-800'
+      }`}
     >
       <div className="workspace-header-grid dynamic-scale">
         {/* Navigation Section - Critical */}
@@ -415,9 +419,20 @@ export function WorkspaceHeader({
         {/* Title Section - Optional */}
         <div className="header-title header-optional focus-minimize">
           <div>
-            <h1 className="header-scale-text large font-semibold text-gray-900 dark:text-white">
-              {problem.title}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="header-scale-text large font-semibold text-gray-900 dark:text-white">
+                {problem.title}
+              </h1>
+              {/* Solution Mode Badge */}
+              {isViewingSolution && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-700 animate-pulse">
+                  <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.236 4.53L7.73 10.36a.75.75 0 00-1.06 1.061l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
+                  </svg>
+                  Solution Mode
+                </span>
+              )}
+            </div>
             <p className="header-scale-text small text-gray-500 dark:text-gray-400">
               {currentCard ? (() => {
                 const allProblemCards = getSiblingCards(currentCard, cards);
