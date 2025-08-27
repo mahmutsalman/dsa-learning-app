@@ -109,6 +109,69 @@
     padding-left: 4px !important;
   }
 
+  /* Focus Mode Line Number Color Fixes */
+  /* Dark theme focus mode line numbers */
+  .focus-mode.dark .monaco-editor .margin-view-overlays .line-numbers {
+    color: #9ca3af !important; /* Light gray for visibility against dark background */
+  }
+
+  /* Light theme focus mode line numbers */  
+  .focus-mode:not(.dark) .monaco-editor .margin-view-overlays .line-numbers {
+    color: #6b7280 !important; /* Medium gray for visibility against light background */
+  }
+
+  /* Focus mode current line number highlighting */
+  .focus-mode.dark .monaco-editor .current-line ~ .margin-view-overlays .line-numbers,
+  .focus-mode.dark .monaco-editor .view-overlays .current-line + .margin-view-overlays .line-numbers {
+    color: #60a5fa !important; /* Light blue highlight for current line in dark theme */
+    font-weight: 600;
+  }
+
+  .focus-mode:not(.dark) .monaco-editor .current-line ~ .margin-view-overlays .line-numbers,
+  .focus-mode:not(.dark) .monaco-editor .view-overlays .current-line + .margin-view-overlays .line-numbers {
+    color: #3b82f6 !important; /* Blue highlight for current line in light theme */
+    font-weight: 600;
+  }
+
+  /* Fallback selectors with higher specificity for line numbers */
+  .focus-mode.dark .monaco-editor .view-overlays .line-numbers,
+  .focus-mode.dark .monaco-editor .margin .line-numbers {
+    color: #9ca3af !important;
+  }
+
+  .focus-mode:not(.dark) .monaco-editor .view-overlays .line-numbers,
+  .focus-mode:not(.dark) .monaco-editor .margin .line-numbers {
+    color: #6b7280 !important;
+  }
+
+  /* Additional Monaco line number selectors for comprehensive coverage */
+  .focus-mode.dark .monaco-editor .line-numbers-content {
+    color: #9ca3af !important;
+  }
+
+  .focus-mode:not(.dark) .monaco-editor .line-numbers-content {
+    color: #6b7280 !important;
+  }
+
+  /* Focus Mode Line Number Background Inheritance Fixes */
+  .focus-mode.dark .monaco-editor .margin-view-overlays {
+    background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+  }
+
+  .focus-mode:not(.dark) .monaco-editor .margin-view-overlays {
+    background: linear-gradient(145deg, #f8fafc 0%, #ffffff 100%) !important;
+  }
+
+  /* Ensure line number elements inherit the background */
+  .focus-mode .monaco-editor .margin-view-overlays .line-numbers {
+    background: transparent !important;
+  }
+
+  /* Also target current line backgrounds */
+  .focus-mode .monaco-editor .margin-view-overlays .current-line {
+    background: transparent !important;
+  }
+
   /* Enhanced minimap in focus mode */
   .focus-mode .monaco-editor .minimap {
     @apply rounded-r-lg opacity-90;
