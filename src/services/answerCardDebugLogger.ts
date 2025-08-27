@@ -29,12 +29,6 @@ interface PerformanceInfo {
   editorChangeLatency?: number;
 }
 
-interface StateTransition {
-  before: any;
-  after: any;
-  changedFields: string[];
-  timestamp: number;
-}
 
 export class AnswerCardDebugLogger {
   private static readonly DEBUG_FILE = 'src-tauri/dev-data/debug/answer-card-debug.txt';
