@@ -11,16 +11,46 @@ interface DebugLogEntry {
   action: string;
   data: any;
   context?: any;
+  timing?: TimingInfo;
+  performance?: PerformanceInfo;
+}
+
+interface TimingInfo {
+  startTime?: number;
+  endTime?: number;
+  duration?: number;
+  operationId?: string;
+}
+
+interface PerformanceInfo {
+  memoryUsage?: number;
+  renderCount?: number;
+  apiResponseTime?: number;
+  editorChangeLatency?: number;
+}
+
+interface StateTransition {
+  before: any;
+  after: any;
+  changedFields: string[];
+  timestamp: number;
 }
 
 export class AnswerCardDebugLogger {
   private static readonly DEBUG_FILE = 'src-tauri/dev-data/debug/answer-card-debug.txt';
   private static isEnabled = true; // Enable for debugging session
+  private static operationTimers = new Map<string, number>();
+  private static renderCounters = new Map<string, number>();
+  private static performanceBaseline = {
+    apiResponseTime: 1000, // 1 second baseline
+    editorChangeLatency: 100, // 100ms baseline
+    memoryUsage: 50 * 1024 * 1024, // 50MB baseline
+  };
 
   /**
-   * Log answer card operation with timestamp and context
+   * Log answer card operation with timestamp, timing, and context
    */
-  static async log(category: string, action: string, data: any, context?: any) {
+  static async log(category: string, action: string, data: any, context?: any, timing?: TimingInfo, performance?: PerformanceInfo) {
     if (!this.isEnabled) return;
 
     const entry: DebugLogEntry = {
@@ -28,7 +58,9 @@ export class AnswerCardDebugLogger {
       category,
       action,
       data,
-      context
+      context,
+      timing,
+      performance
     };
 
     const logLine = this.formatLogEntry(entry);
@@ -47,16 +79,21 @@ export class AnswerCardDebugLogger {
   }
 
   /**
-   * Log frontend state changes
+   * Log frontend state changes with enhanced analysis
    */
-  static async logStateChange(component: string, stateName: string, oldValue: any, newValue: any, context?: any) {
+  static async logStateChange(component: string, stateName: string, oldValue: any, newValue: any, context?: any, timing?: TimingInfo) {
+    const changedFields = this.getChangedFields(oldValue, newValue);
+    const changeAnalysis = this.analyzeStateChange(oldValue, newValue);
+    
     await this.log('State', 'Change', {
       component,
       stateName,
       oldValue: this.safeStringify(oldValue),
       newValue: this.safeStringify(newValue),
-      changed: !this.isEqual(oldValue, newValue)
-    }, context);
+      changed: !this.isEqual(oldValue, newValue),
+      changedFields,
+      changeAnalysis
+    }, context, timing);
   }
 
   /**
@@ -67,14 +104,27 @@ export class AnswerCardDebugLogger {
   }
 
   /**
-   * Log API calls
+   * Log API calls with enhanced performance analysis
    */
-  static async logApiCall(method: string, params: any, response: any, context?: any) {
+  static async logApiCall(method: string, params: any, response: any, context?: any, timing?: TimingInfo) {
+    const performance: PerformanceInfo = {};
+    
+    if (timing?.duration) {
+      performance.apiResponseTime = timing.duration;
+    }
+    
+    const isSlowResponse = timing?.duration && timing.duration > this.performanceBaseline.apiResponseTime;
+    const successStatus = this.analyzeApiResponse(response);
+    
     await this.log('API', method, {
       params: this.safeStringify(params),
       response: this.safeStringify(response),
-      success: response?.success !== false
-    }, context);
+      success: successStatus.success,
+      statusCode: successStatus.statusCode,
+      errorType: successStatus.errorType,
+      isSlowResponse,
+      performanceWarning: isSlowResponse ? `API call took ${timing?.duration}ms (baseline: ${this.performanceBaseline.apiResponseTime}ms)` : null
+    }, context, timing, performance);
   }
 
   /**
@@ -85,15 +135,32 @@ export class AnswerCardDebugLogger {
   }
 
   /**
-   * Log editor state changes
+   * Log editor state changes with before/after analysis
    */
-  static async logEditorChange(editorType: string, data: any, context?: any) {
+  static async logEditorChange(editorType: string, data: any, context?: any, timing?: TimingInfo, beforeData?: any) {
+    const performance: PerformanceInfo = {};
+    
+    if (timing?.duration) {
+      performance.editorChangeLatency = timing.duration;
+    }
+    
+    const isSlowChange = timing?.duration && timing.duration > this.performanceBaseline.editorChangeLatency;
+    const contentAnalysis = this.analyzeEditorContent(data, beforeData);
+    
     await this.log('Editor', editorType, {
       codeLength: data.code?.length || 0,
       notesLength: data.notes?.length || 0,
       language: data.language,
-      hasContent: !!(data.code || data.notes)
-    }, context);
+      hasContent: !!(data.code || data.notes),
+      beforeData: beforeData ? {
+        codeLength: beforeData.code?.length || 0,
+        notesLength: beforeData.notes?.length || 0,
+        language: beforeData.language
+      } : null,
+      contentAnalysis,
+      isSlowChange,
+      performanceWarning: isSlowChange ? `Editor change took ${timing?.duration}ms (baseline: ${this.performanceBaseline.editorChangeLatency}ms)` : null
+    }, context, timing, performance);
   }
 
   /**
@@ -122,11 +189,57 @@ export class AnswerCardDebugLogger {
   }
 
   /**
-   * Format log entry for readable output
+   * Format log entry for readable output with enhanced information
    */
   private static formatLogEntry(entry: DebugLogEntry): string {
-    const contextStr = entry.context ? ` | Context: ${this.safeStringify(entry.context)}` : '';
-    return `[${entry.timestamp}] ${entry.category}.${entry.action}: ${this.safeStringify(entry.data)}${contextStr}`;
+    const parts: string[] = [`[${entry.timestamp}]`];
+    
+    // Category and action
+    parts.push(`${entry.category}.${entry.action}:`);
+    
+    // Main data
+    parts.push(this.safeStringify(entry.data));
+    
+    // Timing information
+    if (entry.timing) {
+      const timingParts: string[] = [];
+      if (entry.timing.duration !== undefined) {
+        timingParts.push(`${entry.timing.duration}ms`);
+      }
+      if (entry.timing.operationId) {
+        timingParts.push(`Op:${entry.timing.operationId}`);
+      }
+      if (timingParts.length > 0) {
+        parts.push(`| Timing: ${timingParts.join(', ')}`);
+      }
+    }
+    
+    // Performance information
+    if (entry.performance) {
+      const perfParts: string[] = [];
+      if (entry.performance.apiResponseTime !== undefined) {
+        perfParts.push(`API:${entry.performance.apiResponseTime}ms`);
+      }
+      if (entry.performance.editorChangeLatency !== undefined) {
+        perfParts.push(`Editor:${entry.performance.editorChangeLatency}ms`);
+      }
+      if (entry.performance.renderCount !== undefined) {
+        perfParts.push(`Renders:${entry.performance.renderCount}`);
+      }
+      if (entry.performance.memoryUsage !== undefined) {
+        perfParts.push(`Memory:${Math.round(entry.performance.memoryUsage / 1024 / 1024)}MB`);
+      }
+      if (perfParts.length > 0) {
+        parts.push(`| Performance: ${perfParts.join(', ')}`);
+      }
+    }
+    
+    // Context information
+    if (entry.context) {
+      parts.push(`| Context: ${this.safeStringify(entry.context)}`);
+    }
+    
+    return parts.join(' ');
   }
 
   /**
@@ -177,6 +290,165 @@ export class AnswerCardDebugLogger {
   private static isEqual(a: any, b: any): boolean {
     return JSON.stringify(a) === JSON.stringify(b);
   }
+
+  /**
+   * Start timing an operation
+   */
+  static startTiming(operationId: string): void {
+    this.operationTimers.set(operationId, performance.now());
+  }
+
+  /**
+   * End timing an operation and return timing info
+   */
+  static endTiming(operationId: string): TimingInfo | undefined {
+    const startTime = this.operationTimers.get(operationId);
+    if (startTime === undefined) return undefined;
+    
+    const endTime = performance.now();
+    const duration = Math.round(endTime - startTime);
+    
+    this.operationTimers.delete(operationId);
+    
+    return {
+      startTime,
+      endTime,
+      duration,
+      operationId
+    };
+  }
+
+  /**
+   * Track React component render count
+   */
+  static trackRender(componentName: string): number {
+    const current = this.renderCounters.get(componentName) || 0;
+    const newCount = current + 1;
+    this.renderCounters.set(componentName, newCount);
+    return newCount;
+  }
+
+  /**
+   * Get memory usage information
+   */
+  static getMemoryUsage(): number {
+    if ('memory' in performance) {
+      return (performance as any).memory.usedJSHeapSize;
+    }
+    return 0;
+  }
+
+  /**
+   * Analyze state change to identify what changed
+   */
+  private static analyzeStateChange(oldValue: any, newValue: any): any {
+    if (oldValue === newValue) return { hasChanges: false };
+    
+    const analysis: any = { hasChanges: true };
+    
+    if (typeof oldValue === 'object' && typeof newValue === 'object' && oldValue && newValue) {
+      const oldKeys = Object.keys(oldValue);
+      const newKeys = Object.keys(newValue);
+      
+      analysis.addedKeys = newKeys.filter(key => !oldKeys.includes(key));
+      analysis.removedKeys = oldKeys.filter(key => !newKeys.includes(key));
+      analysis.modifiedKeys = oldKeys.filter(key => 
+        newKeys.includes(key) && !this.isEqual(oldValue[key], newValue[key])
+      );
+    } else {
+      analysis.typeChange = {
+        from: typeof oldValue,
+        to: typeof newValue
+      };
+    }
+    
+    return analysis;
+  }
+
+  /**
+   * Get list of changed fields between two objects
+   */
+  private static getChangedFields(oldValue: any, newValue: any): string[] {
+    if (typeof oldValue !== 'object' || typeof newValue !== 'object' || !oldValue || !newValue) {
+      return oldValue !== newValue ? ['<value>'] : [];
+    }
+    
+    const changed: string[] = [];
+    const allKeys = new Set([...Object.keys(oldValue), ...Object.keys(newValue)]);
+    
+    for (const key of allKeys) {
+      if (!this.isEqual(oldValue[key], newValue[key])) {
+        changed.push(key);
+      }
+    }
+    
+    return changed;
+  }
+
+  /**
+   * Analyze API response for success/failure details
+   */
+  private static analyzeApiResponse(response: any): { success: boolean; statusCode?: number; errorType?: string } {
+    if (response === null || response === undefined) {
+      return { success: false, errorType: 'null_response' };
+    }
+    
+    // Check for explicit success field
+    if (response.success !== undefined) {
+      return {
+        success: response.success,
+        statusCode: response.statusCode,
+        errorType: response.success ? undefined : (response.errorType || 'api_error')
+      };
+    }
+    
+    // Check for error field
+    if (response.error) {
+      return { success: false, errorType: 'error_field' };
+    }
+    
+    // Check for HTTP status codes
+    if (response.status || response.statusCode) {
+      const status = response.status || response.statusCode;
+      return {
+        success: status >= 200 && status < 300,
+        statusCode: status,
+        errorType: status >= 200 && status < 300 ? undefined : 'http_error'
+      };
+    }
+    
+    // Default to success if we have data
+    return { success: true };
+  }
+
+  /**
+   * Analyze editor content changes
+   */
+  private static analyzeEditorContent(newData: any, oldData?: any): any {
+    const analysis: any = {
+      hasContent: !!(newData.code || newData.notes),
+      codeLength: newData.code?.length || 0,
+      notesLength: newData.notes?.length || 0
+    };
+    
+    if (oldData) {
+      const oldCodeLength = oldData.code?.length || 0;
+      const oldNotesLength = oldData.notes?.length || 0;
+      
+      analysis.changes = {
+        codeChange: (newData.code?.length || 0) - oldCodeLength,
+        notesChange: (newData.notes?.length || 0) - oldNotesLength,
+        languageChanged: oldData.language !== newData.language
+      };
+      
+      analysis.changeType = [];
+      if (analysis.changes.codeChange !== 0) analysis.changeType.push('code');
+      if (analysis.changes.notesChange !== 0) analysis.changeType.push('notes');
+      if (analysis.changes.languageChanged) analysis.changeType.push('language');
+    }
+    
+    return analysis;
+  }
 }
 
 // Convenient exports for specific logging scenarios
@@ -185,3 +457,9 @@ export const logAnswerCardAction = AnswerCardDebugLogger.logUserAction.bind(Answ
 export const logAnswerCardApi = AnswerCardDebugLogger.logApiCall.bind(AnswerCardDebugLogger);
 export const logSolutionFlow = AnswerCardDebugLogger.logSolutionFlow.bind(AnswerCardDebugLogger);
 export const logEditorChange = AnswerCardDebugLogger.logEditorChange.bind(AnswerCardDebugLogger);
+
+// Timing and performance utilities
+export const startTiming = AnswerCardDebugLogger.startTiming.bind(AnswerCardDebugLogger);
+export const endTiming = AnswerCardDebugLogger.endTiming.bind(AnswerCardDebugLogger);
+export const trackRender = AnswerCardDebugLogger.trackRender.bind(AnswerCardDebugLogger);
+export const getMemoryUsage = AnswerCardDebugLogger.getMemoryUsage.bind(AnswerCardDebugLogger);
