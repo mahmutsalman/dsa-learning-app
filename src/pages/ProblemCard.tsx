@@ -1007,7 +1007,11 @@ export default function ProblemCard() {
     return (
       <EnhancedWorkspaceProvider>
         <FocusModeShortcutHandler />
-        <div className="flex-1 flex flex-col h-full relative">
+        <div className={`flex-1 flex flex-col h-full relative transition-all duration-200 ease-in-out ${
+          solutionCard.state.isActive 
+            ? 'bg-gradient-to-br from-red-50/30 via-white to-red-50/20 dark:from-red-950/10 dark:via-gray-900 dark:to-red-950/5' 
+            : ''
+        }`}>
           {/* Enhanced Workspace */}
           <EnhancedResizableWorkspace
             header={
@@ -1043,7 +1047,11 @@ export default function ProblemCard() {
               />
             }
             codeEditor={
-              <div className="bg-gray-50 dark:bg-gray-900 h-full flex flex-col">
+              <div className={`h-full flex flex-col transition-all duration-200 ease-in-out ${
+                solutionCard.state.isActive
+                  ? 'bg-red-50/50 dark:bg-red-950/20 border-l-4 border-red-300 dark:border-red-700'
+                  : 'bg-gray-50 dark:bg-gray-900'
+              }`}
                 {/* Editor container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -1067,7 +1075,11 @@ export default function ProblemCard() {
               </div>
             }
             notesEditor={
-              <div className="bg-white dark:bg-gray-800 h-full flex flex-col">
+              <div className={`h-full flex flex-col transition-all duration-200 ease-in-out ${
+                solutionCard.state.isActive
+                  ? 'bg-red-50/30 dark:bg-red-950/10 border-l-4 border-red-300 dark:border-red-700'
+                  : 'bg-white dark:bg-gray-800'
+              }`}
                 {/* Notes container - takes remaining height */}
                 <div className="flex-1 min-h-0">
                   {currentCard ? (
@@ -1129,7 +1141,11 @@ export default function ProblemCard() {
   // Fallback to original workspace system
   return (
     <WorkspaceContext.Provider value={{ state, actions }}>
-      <div className="flex-1 flex flex-col h-full relative">
+      <div className={`flex-1 flex flex-col h-full relative transition-all duration-200 ease-in-out ${
+        solutionCard.state.isActive 
+          ? 'bg-gradient-to-br from-red-50/30 via-white to-red-50/20 dark:from-red-950/10 dark:via-gray-900 dark:to-red-950/5' 
+          : ''
+      }`}>
         {/* Content - Unified Workspace */}
         <div className="flex-1 flex overflow-hidden">
           <ResizableWorkspace
@@ -1166,7 +1182,11 @@ export default function ProblemCard() {
             />
           }
           codeEditor={
-            <div className="bg-gray-50 dark:bg-gray-900 relative h-full">
+            <div className={`relative h-full transition-all duration-200 ease-in-out ${
+              solutionCard.state.isActive
+                ? 'bg-red-50/50 dark:bg-red-950/20 border-l-4 border-red-300 dark:border-red-700'
+                : 'bg-gray-50 dark:bg-gray-900'
+            }`}
               {currentCard ? (
                 <ResizableMonacoEditor
                   value={code}
@@ -1193,7 +1213,11 @@ export default function ProblemCard() {
             </div>
           }
           notesEditor={
-            <div className="bg-white dark:bg-gray-800 relative h-full">
+            <div className={`relative h-full transition-all duration-200 ease-in-out ${
+              solutionCard.state.isActive
+                ? 'bg-red-50/30 dark:bg-red-950/10 border-l-4 border-red-300 dark:border-red-700'
+                : 'bg-white dark:bg-gray-800'
+            }`}
               {currentCard ? (
                 <QuillEditor
                   value={notes}
