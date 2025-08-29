@@ -21,6 +21,7 @@ export interface SolutionCardAutoSaveState {
   isLoading: boolean;
   isSaved: boolean;
   error: string | null;
+  lastSaved: Date | null;
 }
 
 export interface SolutionCardState {

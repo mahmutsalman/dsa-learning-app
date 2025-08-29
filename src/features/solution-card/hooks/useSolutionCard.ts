@@ -11,7 +11,7 @@ import {
   SolutionCardHookReturn,
   SolutionCardAutoSaveState
 } from '../types';
-import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, trackRender, getMemoryUsage } from '../../../services/answerCardDebugLogger';
+import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, getMemoryUsage } from '../../../services/answerCardDebugLogger';
 
 interface UseSolutionCardOptions {
   problemId: string;
@@ -31,9 +31,9 @@ export const useSolutionCard = ({
     solutionCard: null,
     isLoading: false,
     error: null,
-    codeAutoSave: { isLoading: false, isSaved: true, error: null },
-    notesAutoSave: { isLoading: false, isSaved: true, error: null },
-    languageAutoSave: { isLoading: false, isSaved: true, error: null }
+    codeAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null },
+    notesAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null },
+    languageAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null }
   });
 
   // Auto-save debouncing
@@ -435,8 +435,8 @@ export const useSolutionCard = ({
         }, timing);
         
         // Set saved state
-        setCodeAutoSave({ isLoading: false, isSaved: true, error: null });
-        setLanguageAutoSave({ isLoading: false, isSaved: true, error: null });
+        setCodeAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
+        setLanguageAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);
@@ -540,7 +540,7 @@ export const useSolutionCard = ({
         }, timing);
         
         // Set saved state
-        setNotesAutoSave({ isLoading: false, isSaved: true, error: null });
+        setNotesAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);

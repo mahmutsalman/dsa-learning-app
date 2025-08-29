@@ -25,12 +25,12 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
-import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, logRaceCondition, logSetTimeoutUsage, logEditorStateValidation, logRaceConditionPerformance, logRaceConditionError, logContentLoadingSequence, logContentSequenceComplete, startTiming, endTiming, trackRender, getMemoryUsage } from '../services/answerCardDebugLogger';
+import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, logRaceCondition, logSetTimeoutUsage, logEditorStateValidation, logRaceConditionPerformance, logRaceConditionError, logContentLoadingSequence, logContentSequenceComplete, startTiming, endTiming, getMemoryUsage } from '../services/answerCardDebugLogger';
 
 export default function ProblemCard() {
   // Track component renders for performance monitoring
-  const renderCount = 1; // Static value to prevent infinite render loop
-  const componentStartTime = performance.now();
+  // const renderCount = 1; // Static value to prevent infinite render loop - unused
+  // const componentStartTime = performance.now(); // Unused tracking variable
   
   const { problemId, cardId } = useParams();
   const navigate = useNavigate();
