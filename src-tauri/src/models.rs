@@ -315,3 +315,47 @@ pub struct RecordingInfo {
     pub filename: String,
     pub filepath: String,
 }
+
+// TXT Import system models
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImportResult {
+    pub success: bool,
+    pub imported_count: i32,
+    pub skipped_count: i32,
+    pub error_count: i32,
+    pub duplicates: Vec<String>,
+    pub errors: Vec<ImportError>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ImportError {
+    pub line: i32,
+    pub field: Option<String>,
+    pub message: String,
+    pub severity: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedProblem {
+    pub title: String,
+    pub description: String,
+    pub difficulty: String,
+    pub topics: Vec<String>,
+    pub leetcode_url: Option<String>,
+    pub constraints: Vec<String>,
+    pub hints: Vec<String>,
+}
+
+impl ParsedProblem {
+    pub fn new() -> Self {
+        Self {
+            title: String::new(),
+            description: String::new(),
+            difficulty: String::new(),
+            topics: Vec::new(),
+            leetcode_url: None,
+            constraints: Vec::new(),
+            hints: Vec::new(),
+        }
+    }
+}

@@ -2225,4 +2225,149 @@ impl DatabaseManager {
 
         Ok(cards)
     }
+
+    /// Delete a problem and all its related data
+    /// Performs cascading deletion in proper order to maintain referential integrity
+    pub fn delete_problem(&mut self, problem_id: &str) -> anyhow::Result<()> {
+        println!("🗑️ [Database] Starting delete operation for problem: {}", problem_id);
+        
+        // First, verify the problem exists
+        let problem = self.get_problem_by_id(problem_id)?;
+        if problem.is_none() {
+            return Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id));
+        }
+        
+        let problem = problem.unwrap();
+        println!("🗑️ [Database] Confirmed problem exists: '{}'", problem.title);
+
+        // Begin transaction for atomic deletion
+        let tx = self.connection.unchecked_transaction()?;
+        println!("🗑️ [Database] Transaction started for cascading deletion");
+
+        // Step 1: Get all cards for this problem to delete their related data
+        println!("🔍 [Database] Finding all cards for problem...");
+        let card_ids: Vec<String> = tx.prepare(
+            "SELECT id FROM cards WHERE problem_id = ?1"
+        )?
+        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        println!("🗑️ [Database] Found {} cards to delete", card_ids.len());
+
+        // Step 2: Delete time sessions for all cards
+        for card_id in &card_ids {
+            let sessions_deleted = tx.execute(
+                "DELETE FROM time_sessions WHERE card_id = ?1",
+                [card_id],
+            ).unwrap_or(0);
+            if sessions_deleted > 0 {
+                println!("🗑️ [Database] Deleted {} time sessions for card {}", sessions_deleted, card_id);
+            }
+        }
+
+        // Step 3: Delete recordings for all cards
+        for card_id in &card_ids {
+            let recordings_deleted = tx.execute(
+                "DELETE FROM recordings WHERE card_id = ?1",
+                [card_id],
+            ).unwrap_or(0);
+            if recordings_deleted > 0 {
+                println!("🗑️ [Database] Deleted {} recordings for card {}", recordings_deleted, card_id);
+            }
+        }
+
+        // Step 4: Delete connections where any of these cards are source or target
+        for card_id in &card_ids {
+            let connections_deleted = tx.execute(
+                "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
+                [card_id],
+            ).unwrap_or(0);
+            if connections_deleted > 0 {
+                println!("🗑️ [Database] Deleted {} connections for card {}", connections_deleted, card_id);
+            }
+        }
+
+        // Step 5: Delete card tags for all cards
+        for card_id in &card_ids {
+            let card_tags_deleted = tx.execute(
+                "DELETE FROM card_tags WHERE card_id = ?1",
+                [card_id],
+            ).unwrap_or(0);
+            if card_tags_deleted > 0 {
+                println!("🗑️ [Database] Deleted {} card tags for card {}", card_tags_deleted, card_id);
+            }
+        }
+
+        // Step 6: Delete all cards for this problem
+        let cards_deleted = tx.execute(
+            "DELETE FROM cards WHERE problem_id = ?1",
+            [problem_id],
+        )?;
+        println!("🗑️ [Database] Deleted {} cards for problem", cards_deleted);
+
+        // Step 7: Delete problem images
+        let images_deleted = tx.execute(
+            "DELETE FROM problem_images WHERE problem_id = ?1",
+            [problem_id],
+        ).unwrap_or(0);
+        if images_deleted > 0 {
+            println!("🗑️ [Database] Deleted {} problem images", images_deleted);
+        }
+
+        // Step 8: Delete problem tags relationships
+        let problem_tags_deleted = tx.execute(
+            "DELETE FROM problem_tags WHERE problem_id = ?1",
+            [problem_id],
+        ).unwrap_or(0);
+        if problem_tags_deleted > 0 {
+            println!("🗑️ [Database] Deleted {} problem tag relationships", problem_tags_deleted);
+        }
+
+        // Step 9: Remove this problem from other problems' related_problem_ids
+        // This is complex due to JSON storage, so we'll update all problems that might reference this one
+        println!("🔍 [Database] Removing problem from related_problem_ids in other problems...");
+        if self.has_related_problem_ids_column() {
+            // Get all problems that might have this problem in their related_problem_ids
+            let mut stmt = tx.prepare(
+                "SELECT id, related_problem_ids FROM problems WHERE related_problem_ids IS NOT NULL AND related_problem_ids LIKE ?"
+            )?;
+            
+            let problem_pattern = format!("%{}%", problem_id);
+            let problems_to_update: Vec<(String, String)> = stmt.query_map([&problem_pattern], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?.collect::<Result<Vec<_>, _>>()?;
+
+            for (id, related_ids_json) in problems_to_update {
+                if let Ok(mut related_ids) = serde_json::from_str::<Vec<String>>(&related_ids_json) {
+                    if related_ids.contains(&problem_id.to_string()) {
+                        related_ids.retain(|id| id != problem_id);
+                        let updated_json = serde_json::to_string(&related_ids).unwrap_or_else(|_| "[]".to_string());
+                        
+                        tx.execute(
+                            "UPDATE problems SET related_problem_ids = ?1 WHERE id = ?2",
+                            params![updated_json, id]
+                        )?;
+                        println!("🗑️ [Database] Removed problem reference from problem {}", id);
+                    }
+                }
+            }
+        }
+
+        // Step 10: Finally, delete the problem itself
+        let rows_affected = tx.execute(
+            "DELETE FROM problems WHERE id = ?1",
+            [problem_id],
+        )?;
+
+        if rows_affected == 0 {
+            println!("❌ [Database] Failed to delete problem - no rows affected");
+            return Err(anyhow::anyhow!("Failed to delete problem - no rows affected"));
+        }
+
+        // Commit the transaction
+        tx.commit()?;
+        println!("✅ [Database] Successfully deleted problem '{}' and all related data", problem.title);
+        
+        Ok(())
+    }
 }

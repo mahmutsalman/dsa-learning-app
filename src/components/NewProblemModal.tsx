@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { CreateProblemRequest, UpdateProblemRequest, Problem, Difficulty } from '../types';
 import ProblemAutocomplete from './ProblemAutocomplete';
 
@@ -52,6 +52,8 @@ export default function NewProblemModal({
   const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [topicInput, setTopicInput] = useState('');
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,6 +227,28 @@ export default function NewProblemModal({
     }));
   };
 
+  const handleDeleteProblem = async () => {
+    if (!existingProblem) return;
+    
+    setIsDeleting(true);
+    try {
+      await invoke<string>('delete_problem', { id: existingProblem.id });
+      console.log('Problem deleted successfully');
+      
+      // Close confirmation dialog and main modal
+      setShowDeleteConfirmation(false);
+      onClose();
+      
+      // Refresh the parent component (this will be handled by onSave callback)
+      onSave(existingProblem);
+    } catch (error) {
+      console.error('Failed to delete problem:', error);
+      // You could add toast notification here
+      alert('Failed to delete problem: ' + (error as string));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -511,30 +535,119 @@ export default function NewProblemModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isLoading}
-            className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                {editMode ? 'Updating...' : 'Creating...'}
-              </>
-            ) : (
-              editMode ? 'Update Problem' : 'Create Problem'
+        <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+          {/* Delete button - only show in edit mode */}
+          <div className="flex-1">
+            {editMode && existingProblem && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirmation(true)}
+                disabled={isLoading || isDeleting}
+                className="px-4 py-2 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <TrashIcon className="h-4 w-4" />
+                Delete Problem
+              </button>
             )}
-          </button>
+          </div>
+          
+          {/* Cancel and Save buttons */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isDeleting}
+              className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={isLoading || isDeleting}
+              className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  {editMode ? 'Updating...' : 'Creating...'}
+                </>
+              ) : (
+                editMode ? 'Update Problem' : 'Create Problem'
+              )}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmation && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full">
+            {/* Confirmation Header */}
+            <div className="flex items-center gap-3 p-6 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex-shrink-0">
+                <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Delete Problem
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                  This action cannot be undone
+                </p>
+              </div>
+            </div>
+
+            {/* Confirmation Content */}
+            <div className="p-6">
+              <p className="text-gray-700 dark:text-gray-300 mb-4">
+                Are you sure you want to delete <span className="font-semibold">"{existingProblem?.title}"</span>?
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                This will permanently delete:
+              </p>
+              <ul className="text-sm text-gray-600 dark:text-gray-400 mt-2 ml-4 space-y-1">
+                <li>• The problem and its description</li>
+                <li>• All solution cards and code</li>
+                <li>• All time tracking sessions</li>
+                <li>• All audio recordings</li>
+                <li>• All problem images</li>
+                <li>• All tags and connections</li>
+              </ul>
+            </div>
+
+            {/* Confirmation Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirmation(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteProblem}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <TrashIcon className="h-4 w-4" />
+                    Delete Problem
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

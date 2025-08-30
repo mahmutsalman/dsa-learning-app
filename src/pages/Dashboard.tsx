@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
 import SearchWithAutocomplete from '../components/SearchWithAutocomplete';
+import { ProblemImporter } from '../components/ProblemImporter/ProblemImporter';
+import { ImportResult } from '../components/ProblemImporter/types';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
 import { useStats } from '../contexts/StatsContext';
 
@@ -54,6 +56,7 @@ export default function Dashboard() {
   const [showTagModal, setShowTagModal] = useState(false);
   const [showNewProblemModal, setShowNewProblemModal] = useState(false);
   const [showEditProblemModal, setShowEditProblemModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [problemToEdit, setProblemToEdit] = useState<ProblemWithStudyTime | null>(null);
 
   // Helper function to format time display
@@ -124,6 +127,17 @@ export default function Dashboard() {
 
   const createNewProblem = () => {
     setShowNewProblemModal(true);
+  };
+
+  const openImportModal = () => {
+    setShowImportModal(true);
+  };
+
+  const handleImportComplete = async (result: ImportResult) => {
+    if (result.success && result.importedCount > 0) {
+      // Reload problems to show newly imported ones
+      await loadProblems();
+    }
   };
 
   // Handle right-click context menu
@@ -300,13 +314,23 @@ export default function Dashboard() {
             </p>
           </div>
           
-          <button
-            onClick={createNewProblem}
-            className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            New Problem
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={createNewProblem}
+              className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              New Problem
+            </button>
+            
+            <button
+              onClick={openImportModal}
+              className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+            >
+              <ArrowUpTrayIcon className="h-5 w-5 mr-2" />
+              Import from TXT
+            </button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -523,6 +547,13 @@ export default function Dashboard() {
         onSave={handleEditProblemSave}
         editMode={true}
         existingProblem={problemToEdit || undefined}
+      />
+
+      {/* TXT Import Modal */}
+      <ProblemImporter
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportComplete={handleImportComplete}
       />
     </div>
   );

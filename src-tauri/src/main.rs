@@ -157,7 +157,9 @@ async fn main() {
             commands::solution_card::get_regular_cards,
             commands::debug::check_microphone_permission,
             commands::debug::write_file,
-            commands::debug::append_to_file
+            commands::debug::append_to_file,
+            // TXT Import command
+            commands::database::import_problems_from_txt
         ]);
     
     log_to_file("DSA Learning App: Command handlers registered");
