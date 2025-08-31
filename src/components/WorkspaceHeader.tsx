@@ -7,6 +7,8 @@ import {
   PlayIcon, 
   StopIcon,
   MicrophoneIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
   TrashIcon,
   ClockIcon,
   SpeakerWaveIcon,
@@ -14,7 +16,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { LanguageSelector } from './LanguageSelector';
 import { FocusModeToggle } from './FocusModeToggle';
-import { SaveIndicator } from './SaveIndicator';
 import type { Problem, Card } from '../types';
 import type { UseTimerReturn } from '../hooks/useTimer';
 import type { AutoSaveState } from '../hooks/useAutoSave';
@@ -464,13 +465,27 @@ export function WorkspaceHeader({
           screenSize === 'xs' ? 'header-save-xs' : 
           screenSize === 'sm' ? 'header-save-sm' : ''
         }`}>
-          <SaveIndicator
-            codeAutoSave={codeAutoSave}
-            notesAutoSave={notesAutoSave}
-            languageAutoSave={languageAutoSave}
-            screenSize={screenSize}
-            showLabels={screenSize !== 'xs'}
-          />
+          {(codeAutoSave.isLoading || notesAutoSave.isLoading || languageAutoSave.isLoading) && (
+            <div className="flex items-center space-x-1 text-blue-600 dark:text-blue-400">
+              <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent"></div>
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Saving...</span>}
+            </div>
+          )}
+          
+          {(codeAutoSave.isSaved && notesAutoSave.isSaved && languageAutoSave.isSaved && 
+            !codeAutoSave.isLoading && !notesAutoSave.isLoading && !languageAutoSave.isLoading) && (
+            <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
+              <CheckCircleIcon className="h-3 w-3" />
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Saved</span>}
+            </div>
+          )}
+          
+          {(codeAutoSave.error || notesAutoSave.error || languageAutoSave.error) && (
+            <div className="flex items-center space-x-1 text-red-600 dark:text-red-400">
+              <ExclamationCircleIcon className="h-3 w-3" />
+              {screenSize !== 'xs' && <span className="header-scale-text small responsive-hide">Error</span>}
+            </div>
+          )}
         </div>
 
         {/* Unified Controls Section - Navigation + Actions */}

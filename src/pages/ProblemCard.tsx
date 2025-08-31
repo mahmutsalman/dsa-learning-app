@@ -25,7 +25,7 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
-import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, logRaceCondition, logSetTimeoutUsage, logEditorStateValidation, logRaceConditionPerformance, logRaceConditionError, logContentLoadingSequence, logContentSequenceComplete, startTiming, endTiming, getMemoryUsage } from '../services/answerCardDebugLogger';
+import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, startTiming, endTiming, getMemoryUsage } from '../services/answerCardDebugLogger';
 
 export default function ProblemCard() {
   // Track component renders for performance monitoring
@@ -80,7 +80,7 @@ export default function ProblemCard() {
         const operationId = `solutionToggle-enter-${Date.now()}`;
         
         // Log the setTimeout usage for race condition prevention analysis
-        await logSetTimeoutUsage('preventRaceCondition', 0, {
+        await logSolutionFlow('preventRaceCondition', {
           operationId,
           contentToApply: {
             codeLength: card.code?.length || 0,
@@ -101,7 +101,7 @@ export default function ProblemCard() {
         });
         
         // Log race condition prevention measure
-        await logRaceCondition('PreventionMeasure', {
+        await logSolutionFlow('PreventionMeasure', {
           operationId,
           measure: 'setTimeout_defer',
           reason: 'Ensure solution content loads after useEffect synchronization',
@@ -113,7 +113,7 @@ export default function ProblemCard() {
           const startTime = performance.now();
           
           // Log timeout execution start
-          await logRaceCondition('SetTimeoutExecution', {
+          await logSolutionFlow('SetTimeoutExecution', {
             operationId,
             executionStarted: new Date().toISOString(),
             editorStateBeforeApplication: {
@@ -138,22 +138,20 @@ export default function ProblemCard() {
           const duration = Math.round(performance.now() - startTime);
           
           // Validate that content was applied correctly
-          await logEditorStateValidation('SolutionContentApplication', {
+          await logSolutionFlow('SolutionContentApplication', {
             expectedCode: card.code || '',
             expectedNotes: card.notes || '',
-            expectedLanguage: card.language || 'javascript'
-          }, {
+            expectedLanguage: card.language || 'javascript',
             actualCode: card.code || '', // Will be set by debugSetCode/debugSetNotes
             actualNotes: card.notes || '',
-            actualLanguage: card.language || 'javascript'
-          }, {
+            actualLanguage: card.language || 'javascript',
             operationId,
             validationTiming: duration,
             trigger: 'setTimeout_completion'
           });
           
           // Log successful timeout completion
-          await logRaceCondition('SetTimeoutComplete', {
+          await logSolutionFlow('SetTimeoutComplete', {
             operationId,
             executionCompleted: new Date().toISOString(),
             totalDuration: duration,
@@ -583,7 +581,7 @@ export default function ProblemCard() {
     const operationId = `useEffect-currentCard-${Date.now()}`;
     
     // Log the start of this critical useEffect for race condition analysis
-    logRaceCondition('UseEffectStart', {
+    logSolutionFlow('UseEffectStart', {
       operationId,
       trigger: 'useEffect[currentCard, solutionCard.state.isActive]',
       currentCard: currentCard?.id,
@@ -629,7 +627,7 @@ export default function ProblemCard() {
       // When in solution mode, the onSolutionToggle callback handles editor state
       if (!solutionCard.state.isActive) {
         // Log race condition avoidance - normal card sync path
-        logRaceCondition('RaceConditionAvoidance', {
+        logSolutionFlow('RaceConditionAvoidance', {
           operationId,
           action: 'regular_card_sync',
           reason: 'Not in solution mode, safe to sync with currentCard',
@@ -646,15 +644,13 @@ export default function ProblemCard() {
         });
         
         // Validate before sync
-        logEditorStateValidation('PreRegularCardSync', {
+        logSolutionFlow('PreRegularCardSync', {
           expectedCode: currentCard.code || '',
           expectedNotes: currentCard.notes || '',
-          expectedLanguage: currentCard.language || 'javascript'
-        }, {
+          expectedLanguage: currentCard.language || 'javascript',
           currentCode: code,
           currentNotes: notes,
-          currentLanguage: language
-        }, {
+          currentLanguage: language,
           operationId,
           syncType: 'regular_card_to_editor'
         });
@@ -665,15 +661,13 @@ export default function ProblemCard() {
         
         // Post-sync validation
         setTimeout(async () => {
-          await logEditorStateValidation('PostRegularCardSync', {
+          await logSolutionFlow('PostRegularCardSync', {
             expectedCode: currentCard.code || '',
             expectedNotes: currentCard.notes || '',
-            expectedLanguage: currentCard.language || 'javascript'
-          }, {
+            expectedLanguage: currentCard.language || 'javascript',
             appliedCode: currentCard.code || '', // These should match now
             appliedNotes: currentCard.notes || '',
-            appliedLanguage: currentCard.language || 'javascript'
-          }, {
+            appliedLanguage: currentCard.language || 'javascript',
             operationId,
             syncType: 'regular_card_to_editor',
             delayedValidation: true
@@ -681,7 +675,7 @@ export default function ProblemCard() {
         }, 10);
       } else {
         // Log race condition prevention - skipping sync in solution mode
-        logRaceCondition('RaceConditionPrevention', {
+        logSolutionFlow('RaceConditionPrevention', {
           operationId,
           action: 'skip_regular_sync',
           reason: 'Solution mode active, letting onSolutionToggle handle editor state',
@@ -707,7 +701,7 @@ export default function ProblemCard() {
     }
     
     // Log completion of this useEffect execution
-    logRaceCondition('UseEffectComplete', {
+    logSolutionFlow('UseEffectComplete', {
       operationId,
       trigger: 'useEffect[currentCard, solutionCard.state.isActive]',
       completionTime: new Date().toISOString(),
@@ -895,12 +889,11 @@ export default function ProblemCard() {
   // Solution card toggle handler with comprehensive error handling and performance monitoring
   const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
     const operationId = `handleSolutionToggle-${Date.now()}`;
-    const sequenceId = `solutionToggle-sequence-${operationId}`;
     const startTime = performance.now();
     const initialMemory = getMemoryUsage();
     
     // Start sequence tracking for content loading operations
-    await logContentLoadingSequence(sequenceId, 'ToggleInitiated', {
+    await logSolutionFlow('ToggleInitiated', {
       operationId,
       eventType: event.type,
       isShiftAction: isShiftAction(event),
@@ -913,24 +906,23 @@ export default function ProblemCard() {
     
     // Prevent rapid toggles - check if solution card is already processing
     if (solutionCard.state.isLoading) {
-        await logContentLoadingSequence(sequenceId, 'RapidTogglePrevented', {
+        await logSolutionFlow('RapidTogglePrevented', {
           reason: 'Solution card operation already in progress',
           currentState: solutionCard.state,
           operationId
         });
         
-        await logRaceConditionError('rapid_toggle_prevented', {
+        await logSolutionFlow('rapid_toggle_prevented', {
           reason: 'Solution card operation already in progress',
           currentState: solutionCard.state,
-          operationId
-        }, null, { 
+          operationId,
           preventedUserError: true,
           gracefulHandling: true 
         });
         await logSolutionFlow('HandleToggleSkipped', 'Skipping toggle - solution card operation already in progress');
         
         // Complete sequence tracking
-        await logContentSequenceComplete(sequenceId, {
+        await logSolutionFlow('SequenceComplete', {
           outcome: 'prevented_rapid_toggle',
           reason: 'loading_in_progress'
         });
@@ -1141,7 +1133,7 @@ export default function ProblemCard() {
       const memoryDelta = getMemoryUsage() - initialMemory;
       
       // Log comprehensive error information
-      await logRaceConditionError('solution_toggle_failure', error, {
+      await logSolutionFlow('solution_toggle_failure', {
         attemptedRecovery: 'fallback_to_previous_state',
         recoverabilityAssessment: 'high', // User can retry the operation
         dataLossRisk: 'none' // No content should be lost
@@ -1166,10 +1158,11 @@ export default function ProblemCard() {
       // Attempt graceful recovery - ensure editor state is consistent
       try {
         if (currentCard) {
-          await logRaceConditionError('attempting_recovery', {
+          await logSolutionFlow('attempting_recovery', {
             recoveryAction: 'restore_editor_consistency',
-            targetState: 'editor_matches_currentCard'
-          }, null, { operationId });
+            targetState: 'editor_matches_currentCard',
+            operationId
+          });
           
           // Force editor to match current card state
           debugSetCode(currentCard.code || '');
@@ -1178,11 +1171,10 @@ export default function ProblemCard() {
           
           // Validate recovery
           setTimeout(async () => {
-            await logEditorStateValidation('ErrorRecoveryValidation', {
+            await logSolutionFlow('ErrorRecoveryValidation', {
               expectedCode: currentCard.code || '',
               expectedNotes: currentCard.notes || '',
-              expectedLanguage: currentCard.language || 'javascript'
-            }, {
+              expectedLanguage: currentCard.language || 'javascript',
               actualCode: currentCard.code || '',
               actualNotes: currentCard.notes || '',
               actualLanguage: currentCard.language || 'javascript'
@@ -1193,7 +1185,7 @@ export default function ProblemCard() {
           }, 10);
         }
       } catch (recoveryError) {
-        await logRaceConditionError('recovery_failure', recoveryError, null, {
+        await logSolutionFlow('recovery_failure', {
           operationId,
           criticalError: true,
           userImpact: 'HIGH'
@@ -1205,7 +1197,7 @@ export default function ProblemCard() {
       const finalMemory = getMemoryUsage();
       const memoryDelta = finalMemory - initialMemory;
       
-      await logRaceConditionPerformance(operationId, {
+      await logSolutionFlow('PerformanceComplete', {
         totalDuration,
         memoryDelta,
         finalMemoryUsage: finalMemory,
@@ -1219,7 +1211,7 @@ export default function ProblemCard() {
       });
       
       // Complete sequence tracking
-      await logContentSequenceComplete(sequenceId, {
+      await logSolutionFlow('SequenceComplete', {
         outcome: 'completed_successfully',
         totalDuration: totalDuration,
         memoryDelta,
@@ -1390,9 +1382,9 @@ export default function ProblemCard() {
                 language={language}
                 onLanguageChange={setLanguage}
                 timer={timer}
-                codeAutoSave={solutionCard.state.isActive ? solutionCard.state.codeAutoSave : codeAutoSave}
-                notesAutoSave={solutionCard.state.isActive ? solutionCard.state.notesAutoSave : notesAutoSave}
-                languageAutoSave={solutionCard.state.isActive ? solutionCard.state.languageAutoSave : languageAutoSave}
+                codeAutoSave={codeAutoSave}
+                notesAutoSave={notesAutoSave}
+                languageAutoSave={languageAutoSave}
                 recordingState={recording.recordingState}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
@@ -1525,9 +1517,9 @@ export default function ProblemCard() {
               language={language}
               onLanguageChange={setLanguage}
               timer={timer}
-              codeAutoSave={solutionCard.state.isActive ? solutionCard.state.codeAutoSave : codeAutoSave}
-              notesAutoSave={solutionCard.state.isActive ? solutionCard.state.notesAutoSave : notesAutoSave}
-              languageAutoSave={solutionCard.state.isActive ? solutionCard.state.languageAutoSave : languageAutoSave}
+              codeAutoSave={codeAutoSave}
+              notesAutoSave={notesAutoSave}
+              languageAutoSave={languageAutoSave}
               recordingState={recording.recordingState}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}

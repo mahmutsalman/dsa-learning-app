@@ -8,10 +8,9 @@ import { solutionCardApi, SolutionCardApiError } from '../services/solutionCardA
 import {
   SolutionCard,
   SolutionCardState,
-  SolutionCardHookReturn,
-  SolutionCardAutoSaveState
+  SolutionCardHookReturn
 } from '../types';
-import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, getMemoryUsage } from '../../../services/answerCardDebugLogger';
+import { logSolutionFlow, logAnswerCardApi, logAnswerCardState, logEditorChange, startTiming, endTiming, trackRender, getMemoryUsage } from '../../../services/answerCardDebugLogger';
 
 interface UseSolutionCardOptions {
   problemId: string;
@@ -24,16 +23,13 @@ export const useSolutionCard = ({
   problemId,
   onSolutionToggle,
   onError,
-  autoSaveDelay = 3000
+  autoSaveDelay = 1000
 }: UseSolutionCardOptions): SolutionCardHookReturn => {
   const [state, setState] = useState<SolutionCardState>({
     isActive: false,
     solutionCard: null,
     isLoading: false,
-    error: null,
-    codeAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null },
-    notesAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null },
-    languageAutoSave: { isLoading: false, isSaved: true, error: null, lastSaved: null }
+    error: null
   });
 
   // Auto-save debouncing
@@ -47,6 +43,7 @@ export const useSolutionCard = ({
       // Enhanced logging with performance tracking
       logAnswerCardState('useSolutionCard', 'isLoading', prev.isLoading, loading, {
         trigger: 'setLoading',
+        componentRender: trackRender('useSolutionCard'),
         memoryUsage: getMemoryUsage()
       });
       
@@ -63,6 +60,7 @@ export const useSolutionCard = ({
         trigger: 'setError',
         hasError: !!error,
         errorType: error ? 'user_error' : 'cleared',
+        componentRender: trackRender('useSolutionCard'),
         memoryUsage: getMemoryUsage()
       });
       
@@ -81,28 +79,6 @@ export const useSolutionCard = ({
     console.error(defaultMessage, error);
     setError(errorMessage);
   }, [setError]);
-
-  // Helper functions to update auto-save states
-  const setCodeAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
-    setState(prev => ({
-      ...prev,
-      codeAutoSave: { ...prev.codeAutoSave, ...update }
-    }));
-  }, []);
-
-  const setNotesAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
-    setState(prev => ({
-      ...prev,
-      notesAutoSave: { ...prev.notesAutoSave, ...update }
-    }));
-  }, []);
-
-  const setLanguageAutoSave = useCallback((update: Partial<SolutionCardAutoSaveState>) => {
-    setState(prev => ({
-      ...prev,
-      languageAutoSave: { ...prev.languageAutoSave, ...update }
-    }));
-  }, []);
 
   /**
    * Load solution card for the current problem
@@ -144,7 +120,8 @@ export const useSolutionCard = ({
           trigger: 'load_complete',
           operationId,
           hasCard: !!card,
-          cardId: card?.id
+          cardId: card?.id,
+          componentRender: trackRender('useSolutionCard')
         }, timing);
         
         return newState;
@@ -218,7 +195,8 @@ export const useSolutionCard = ({
           trigger: 'create_complete',
           operationId,
           cardCreated: true,
-          cardId: card.id
+          cardId: card.id,
+          componentRender: trackRender('useSolutionCard')
         }, timing);
         
         return newState;
@@ -257,7 +235,7 @@ export const useSolutionCard = ({
   const toggle = useCallback(async () => {
     if (!problemId) {
       await logSolutionFlow('ToggleError', 'No problemId provided to toggle function');
-      throw new Error('No problemId provided to toggle function');
+      return { isViewingSolution: false, card: null };
     }
 
     const operationId = `toggle-${problemId}-${Date.now()}`;
@@ -275,7 +253,8 @@ export const useSolutionCard = ({
       problemId,
       currentState,
       operationId,
-      memoryUsage: getMemoryUsage()
+      memoryUsage: getMemoryUsage(),
+      renderCount: trackRender('useSolutionCard')
     });
 
     setLoading(true);
@@ -316,7 +295,8 @@ export const useSolutionCard = ({
             hadCard: !!prev.solutionCard,
             hasCard: !!result.card,
             cardChanged: prev.solutionCard?.id !== result.card?.id
-          }
+          },
+          componentRender: trackRender('useSolutionCard')
         }, timing);
         
         return newState;
@@ -382,10 +362,7 @@ export const useSolutionCard = ({
           ...prev.solutionCard,
           code,
           language
-        },
-        // Mark code as unsaved when changed
-        codeAutoSave: { ...prev.codeAutoSave, isSaved: false, error: null },
-        languageAutoSave: { ...prev.languageAutoSave, isSaved: false, error: null }
+        }
       };
       
       // Log editor change with performance tracking
@@ -393,7 +370,8 @@ export const useSolutionCard = ({
       logEditorChange('CodeEditor', { code, language, notes: prev.solutionCard.notes }, {
         operationId,
         trigger: 'updateCode',
-        cardId
+        cardId,
+        componentRender: trackRender('useSolutionCard')
       }, {
         duration: changeLatency,
         operationId
@@ -416,10 +394,6 @@ export const useSolutionCard = ({
       const saveOperationId = `saveCode-${capturedCardId}-${Date.now()}`;
       startTiming(saveOperationId);
       
-      // Set loading state
-      setCodeAutoSave({ isLoading: true, error: null });
-      setLanguageAutoSave({ isLoading: true, error: null });
-      
       try {
         await solutionCardApi.updateCode(capturedCardId, code, language);
         const timing = endTiming(saveOperationId);
@@ -434,14 +408,9 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
-        // Set saved state
-        setCodeAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
-        setLanguageAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to save solution code';
-        
         await logAnswerCardApi('update_solution_code', { 
           cardId: capturedCardId, 
           codeLength: code.length, 
@@ -452,13 +421,10 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
-        // Set error state
-        setCodeAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
-        setLanguageAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
         handleApiError(error, 'Failed to save solution code');
       }
     }, autoSaveDelay);
-  }, [autoSaveDelay, handleApiError, setError, setCodeAutoSave, setLanguageAutoSave]);
+  }, [autoSaveDelay, handleApiError, setError]);
 
   /**
    * Update solution card notes with debounced auto-save
@@ -486,9 +452,7 @@ export const useSolutionCard = ({
         solutionCard: {
           ...prev.solutionCard,
           notes
-        },
-        // Mark notes as unsaved when changed
-        notesAutoSave: { ...prev.notesAutoSave, isSaved: false, error: null }
+        }
       };
       
       // Log editor change with performance tracking
@@ -500,7 +464,8 @@ export const useSolutionCard = ({
       }, {
         operationId,
         trigger: 'updateNotes',
-        cardId
+        cardId,
+        componentRender: trackRender('useSolutionCard')
       }, {
         duration: changeLatency,
         operationId
@@ -523,9 +488,6 @@ export const useSolutionCard = ({
       const saveOperationId = `saveNotes-${capturedCardId}-${Date.now()}`;
       startTiming(saveOperationId);
       
-      // Set loading state
-      setNotesAutoSave({ isLoading: true, error: null });
-      
       try {
         await solutionCardApi.updateNotes(capturedCardId, notes);
         const timing = endTiming(saveOperationId);
@@ -539,13 +501,9 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
-        // Set saved state
-        setNotesAutoSave({ isLoading: false, isSaved: true, error: null, lastSaved: new Date() });
         setError(null);
       } catch (error) {
         const timing = endTiming(saveOperationId);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to save solution notes';
-        
         await logAnswerCardApi('update_solution_notes', { 
           cardId: capturedCardId, 
           notesLength: notes.length 
@@ -555,12 +513,10 @@ export const useSolutionCard = ({
           operationId: saveOperationId
         }, timing);
         
-        // Set error state
-        setNotesAutoSave({ isLoading: false, isSaved: false, error: errorMessage });
         handleApiError(error, 'Failed to save solution notes');
       }
     }, autoSaveDelay);
-  }, [autoSaveDelay, handleApiError, setError, setNotesAutoSave]);
+  }, [autoSaveDelay, handleApiError, setError]);
 
   /**
    * Exit solution view and return to regular cards
@@ -580,7 +536,8 @@ export const useSolutionCard = ({
     await logSolutionFlow('ExitSolutionStart', 'Starting to exit solution view', {
       currentState,
       operationId,
-      memoryUsage: getMemoryUsage()
+      memoryUsage: getMemoryUsage(),
+      renderCount: trackRender('useSolutionCard')
     });
     
     // Use functional state update to avoid stale closure
@@ -604,6 +561,7 @@ export const useSolutionCard = ({
           hasCard: false,
           cardCleared: true
         },
+        componentRender: trackRender('useSolutionCard')
       }, timing);
       
       return newState;

@@ -147,6 +147,11 @@ async fn main() {
             commands::audio::get_audio_devices,
             commands::audio::switch_audio_device,
             commands::audio::refresh_audio_devices,
+            // Debug commands
+            commands::debug::debug_paths,
+            commands::debug::debug_recording_paths,
+            commands::debug::debug_audio_loading,
+            commands::debug::get_absolute_path,
             // Solution card commands
             commands::solution_card::get_solution_card,
             commands::solution_card::create_solution_card,
@@ -156,7 +161,11 @@ async fn main() {
             commands::solution_card::solution_card_exists,
             commands::solution_card::get_regular_cards,
             // TXT Import command
-            commands::database::import_problems_from_txt
+            commands::database::import_problems_from_txt,
+            // Debug commands continued
+            commands::debug::check_microphone_permission,
+            commands::debug::write_file,
+            commands::debug::append_to_file
         ]);
     
     log_to_file("DSA Learning App: Command handlers registered");

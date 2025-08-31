@@ -17,22 +17,11 @@ export interface SolutionCard {
   is_solution: boolean;
 }
 
-export interface SolutionCardAutoSaveState {
-  isLoading: boolean;
-  isSaved: boolean;
-  error: string | null;
-  lastSaved: Date | null;
-}
-
 export interface SolutionCardState {
   isActive: boolean;
   solutionCard: SolutionCard | null;
   isLoading: boolean;
   error: string | null;
-  // Auto-save state for save indicators
-  codeAutoSave: SolutionCardAutoSaveState;
-  notesAutoSave: SolutionCardAutoSaveState;
-  languageAutoSave: SolutionCardAutoSaveState;
 }
 
 export interface SolutionCardHookReturn {
