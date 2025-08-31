@@ -3,7 +3,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { XMarkIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Tag, TagModalProps, AddProblemTagRequest, RemoveProblemTagRequest } from '../types';
 
-export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModalProps) {
+export default function TagModal({ isOpen, onClose, onSave, problemId, problemIds }: TagModalProps) {
+  const isBulkMode = !!problemIds && problemIds.length > 0;
   const [currentTags, setCurrentTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -38,10 +39,25 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
   const loadTags = async () => {
     setIsLoading(true);
     try {
-      const [problemTags, allTagsData] = await Promise.all([
-        invoke<Tag[]>('get_problem_tags', { problemId }),
-        invoke<Tag[]>('get_all_tags')
-      ]);
+      let problemTags: Tag[] = [];
+      
+      if (isBulkMode) {
+        // For bulk mode, get tags that are common to all selected problems
+        const allProblemTags = await Promise.all(
+          problemIds!.map(id => invoke<Tag[]>('get_problem_tags', { problemId: id }))
+        );
+        
+        // Find tags that appear in all problems
+        if (allProblemTags.length > 0) {
+          problemTags = allProblemTags[0].filter(tag => 
+            allProblemTags.every(tags => tags.some(t => t.id === tag.id))
+          );
+        }
+      } else {
+        problemTags = await invoke<Tag[]>('get_problem_tags', { problemId });
+      }
+      
+      const allTagsData = await invoke<Tag[]>('get_all_tags');
       
       setCurrentTags(problemTags);
       setAllTags(allTagsData);
@@ -153,15 +169,31 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
     }
 
     try {
-      const request: AddProblemTagRequest = {
-        problem_id: problemId,
-        tag_name: tagName.trim(),
-        category: 'custom'
-      };
+      if (isBulkMode) {
+        // Bulk mode - add tag to all selected problems
+        const newTags = await invoke<Tag[]>('add_tag_to_problems', {
+          problemIds,
+          tagName: tagName.trim(),
+          category: 'custom'
+        });
+        
+        if (newTags.length > 0) {
+          setCurrentTags(prev => [...prev, ...newTags.filter(tag => 
+            !prev.some(existingTag => existingTag.id === tag.id)
+          )]);
+        }
+      } else {
+        // Single mode - add tag to one problem
+        const request: AddProblemTagRequest = {
+          problem_id: problemId,
+          tag_name: tagName.trim(),
+          category: 'custom'
+        };
 
-      const newTag = await invoke<Tag>('add_problem_tag', { request });
+        const newTag = await invoke<Tag>('add_problem_tag', { request });
+        setCurrentTags(prev => [...prev, newTag]);
+      }
       
-      setCurrentTags(prev => [...prev, newTag]);
       setInputValue('');
       setSuggestions([]);
       setShowSuggestions(false);
@@ -178,12 +210,21 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
 
   const removeTag = async (tag: Tag) => {
     try {
-      const request: RemoveProblemTagRequest = {
-        problem_id: problemId,
-        tag_id: tag.id
-      };
+      if (isBulkMode) {
+        // Bulk mode - remove tag from all selected problems
+        await invoke('remove_tag_from_problems', {
+          problemIds,
+          tagId: tag.id
+        });
+      } else {
+        // Single mode - remove tag from one problem
+        const request: RemoveProblemTagRequest = {
+          problem_id: problemId,
+          tag_id: tag.id
+        };
 
-      await invoke('remove_problem_tag', { request });
+        await invoke('remove_problem_tag', { request });
+      }
       
       setCurrentTags(prev => prev.filter(t => t.id !== tag.id));
     } catch (err) {
@@ -217,7 +258,7 @@ export default function TagModal({ isOpen, onClose, onSave, problemId }: TagModa
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
             <TagIcon className="h-5 w-5" />
-            Manage Tags
+            {isBulkMode ? `Manage Tags for ${problemIds?.length} Problems` : 'Manage Tags'}
           </h3>
           <button
             onClick={handleClose}

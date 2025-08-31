@@ -232,6 +232,113 @@ pub async fn get_tag_suggestions(
     db.get_tag_suggestions(&query, limit.unwrap_or(10)).map_err(|e| e.to_string())
 }
 
+// Bulk tag operations
+#[tauri::command]
+pub async fn add_tag_to_problems(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+    tag_name: String,
+    category: Option<String>,
+) -> Result<Vec<Tag>, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let mut added_tags = Vec::new();
+    let category = category.unwrap_or_else(|| "custom".to_string());
+    
+    for problem_id in problem_ids {
+        let request = AddProblemTagRequest {
+            problem_id: problem_id.clone(),
+            tag_name: tag_name.clone(),
+            color: None,
+            category: Some(category.clone()),
+        };
+        
+        match db.add_problem_tag(request) {
+            Ok(tag) => {
+                // Only add the tag once to the result
+                if added_tags.is_empty() || !added_tags.iter().any(|t: &Tag| t.id == tag.id) {
+                    added_tags.push(tag);
+                }
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to add tag '{}' to problem {}: {}", tag_name, problem_id, e);
+            }
+        }
+    }
+    
+    Ok(added_tags)
+}
+
+#[tauri::command]
+pub async fn remove_tag_from_problems(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+    tag_id: String,
+) -> Result<(), String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    for problem_id in problem_ids {
+        let request = RemoveProblemTagRequest {
+            problem_id: problem_id.clone(),
+            tag_id: tag_id.clone(),
+        };
+        
+        if let Err(e) = db.remove_problem_tag(request) {
+            eprintln!("Warning: Failed to remove tag from problem {}: {}", problem_id, e);
+        }
+    }
+    
+    Ok(())
+}
+
+// Bulk deletion operations
+#[tauri::command]
+pub async fn delete_problems_bulk(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let total_problems = problem_ids.len();
+    eprintln!("🗑️ [Bulk Delete] Starting bulk deletion of {} problems", total_problems);
+    
+    let mut deleted_count = 0;
+    let mut errors = Vec::new();
+    
+    for (index, problem_id) in problem_ids.iter().enumerate() {
+        eprintln!("🗑️ [Bulk Delete] Deleting problem {}/{}: {}", index + 1, total_problems, problem_id);
+        
+        match db.delete_problem_with_files(problem_id) {
+            Ok(_) => {
+                deleted_count += 1;
+                eprintln!("✅ [Bulk Delete] Successfully deleted problem: {}", problem_id);
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to delete problem {}: {}", problem_id, e);
+                eprintln!("❌ [Bulk Delete] {}", error_msg);
+                errors.push(error_msg);
+            }
+        }
+    }
+    
+    let result_msg = if errors.is_empty() {
+        format!("Successfully deleted {} problem(s)", deleted_count)
+    } else if deleted_count > 0 {
+        format!("Deleted {} out of {} problems. Errors: {}", 
+               deleted_count, total_problems, errors.join("; "))
+    } else {
+        format!("Failed to delete problems. Errors: {}", errors.join("; "))
+    };
+    
+    eprintln!("🗑️ [Bulk Delete] Completed: {}", result_msg);
+    
+    if errors.is_empty() {
+        Ok(result_msg)
+    } else {
+        Err(result_msg)
+    }
+}
+
 // Search commands for Name/Topic/Tags search system
 #[tauri::command]
 pub async fn search_problems_by_name(

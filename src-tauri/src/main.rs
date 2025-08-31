@@ -102,6 +102,11 @@ async fn main() {
             commands::database::add_problem_tag,
             commands::database::remove_problem_tag,
             commands::database::get_tag_suggestions,
+            // Bulk tag operations
+            commands::database::add_tag_to_problems,
+            commands::database::remove_tag_from_problems,
+            // Bulk delete operations
+            commands::database::delete_problems_bulk,
             // Search commands for Name/Topic/Tags system
             commands::database::search_problems_by_name,
             commands::database::search_problems_by_topic,
