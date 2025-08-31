@@ -210,6 +210,7 @@ export interface TagModalProps {
   onClose: () => void;
   onSave: (tags: Tag[]) => void;
   problemId: string;
+  problemIds?: string[]; // For bulk operations
 }
 
 export interface ProblemContextMenuProps {

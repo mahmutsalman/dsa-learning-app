@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
@@ -58,6 +58,11 @@ export default function Dashboard() {
   const [showEditProblemModal, setShowEditProblemModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [problemToEdit, setProblemToEdit] = useState<ProblemWithStudyTime | null>(null);
+
+  // Multi-selection state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedProblemIds, setSelectedProblemIds] = useState<Set<string>>(new Set());
+  const [isBulkTagModal, setIsBulkTagModal] = useState(false);
 
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
@@ -153,12 +158,40 @@ export default function Dashboard() {
     setShowContextMenu(true);
   };
 
-  // Handle card click for navigation
+  // Handle card click for navigation or selection
   const handleCardClick = (e: React.MouseEvent, problemId: string) => {
-    // Only navigate on left click, not on right click
-    if (e.button === 0) {
-      e.preventDefault();
+    // Only handle left click
+    if (e.button !== 0) return;
+    
+    e.preventDefault();
+    
+    // Ctrl/Cmd + Click: Toggle individual selection
+    if (e.ctrlKey || e.metaKey) {
+      if (!isSelectionMode) {
+        enterSelectionMode(problemId);
+      } else {
+        toggleSelection(problemId);
+      }
+      return;
+    }
+    
+    // In selection mode, toggle selection instead of navigating
+    if (isSelectionMode) {
+      toggleSelection(problemId);
+    } else {
       navigate(`/problem/${problemId}`);
+    }
+  };
+
+  // Handle checkbox click
+  const handleCheckboxClick = (e: React.MouseEvent, problemId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!isSelectionMode) {
+      enterSelectionMode(problemId);
+    } else {
+      toggleSelection(problemId);
     }
   };
 
@@ -171,6 +204,12 @@ export default function Dashboard() {
   const handleTagSave = async () => {
     // Reload problems to get updated tags
     await loadProblems();
+    
+    // If it was a bulk operation, clear selection and exit selection mode
+    if (isBulkTagModal) {
+      setIsBulkTagModal(false);
+      clearSelection();
+    }
   };
 
   // Handle new problem save
@@ -266,6 +305,40 @@ export default function Dashboard() {
     handleSearch(suggestion, searchState.searchType);
   };
 
+  // Multi-selection handlers
+  const toggleSelection = (problemId: string) => {
+    setSelectedProblemIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(problemId)) {
+        newSet.delete(problemId);
+      } else {
+        newSet.add(problemId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedProblemIds(new Set(filteredProblems.map(p => p.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedProblemIds(new Set());
+    setIsSelectionMode(false);
+  };
+
+  const enterSelectionMode = (problemId?: string) => {
+    setIsSelectionMode(true);
+    if (problemId) {
+      setSelectedProblemIds(new Set([problemId]));
+    }
+  };
+
+  const handleBulkAddTags = () => {
+    setIsBulkTagModal(true);
+    setShowTagModal(true);
+  };
+
   // Close context menu when clicking elsewhere
   useEffect(() => {
     const handleClickOutside = () => {
@@ -277,6 +350,34 @@ export default function Dashboard() {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [showContextMenu]);
+
+  // Keyboard shortcuts for multi-selection
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if we're in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.contentEditable === 'true') {
+        return;
+      }
+
+      // Ctrl/Cmd + A: Select all visible problems
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        if (!isSelectionMode) {
+          setIsSelectionMode(true);
+        }
+        selectAll();
+      }
+
+      // Escape: Exit selection mode and clear selection
+      if (e.key === 'Escape' && isSelectionMode) {
+        clearSelection();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSelectionMode, filteredProblems]);
 
   if (loading) {
     return (
@@ -450,13 +551,34 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
-              {filteredProblems.map((problem) => (
+              {filteredProblems.map((problem) => {
+                const isSelected = selectedProblemIds.has(problem.id);
+                return (
                 <div
                   key={problem.id}
                   onClick={(e) => handleCardClick(e, problem.id)}
                   onContextMenu={(e) => handleRightClick(e, problem.id)}
-                  className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600 transition-colors group cursor-pointer select-none"
+                  className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border transition-colors group cursor-pointer select-none relative ${
+                    isSelected
+                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
+                  }`}
                 >
+                  {/* Selection checkbox */}
+                  <div className="absolute top-3 left-3 z-10">
+                    <button
+                      onClick={(e) => handleCheckboxClick(e, problem.id)}
+                      className={`w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center ${
+                        isSelected
+                          ? 'bg-primary-500 border-primary-500 text-white'
+                          : isSelectionMode
+                          ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-primary-400'
+                          : 'border-transparent opacity-0 group-hover:opacity-100 group-hover:border-gray-300 dark:group-hover:border-gray-600 bg-white dark:bg-gray-800'
+                      }`}
+                    >
+                      {isSelected && <CheckIcon className="h-3 w-3" />}
+                    </button>
+                  </div>
                   <div className="flex items-start justify-between mb-3">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400">
                       {problem.title}
@@ -506,11 +628,47 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      {/* Bulk Selection Toolbar */}
+      {selectedProblemIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center gap-4">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {selectedProblemIds.size} selected
+            </span>
+            
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAll}
+                className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Select All ({filteredProblems.length})
+              </button>
+              
+              <button
+                onClick={clearSelection}
+                className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Clear
+              </button>
+              
+              <button
+                onClick={handleBulkAddTags}
+                className="flex items-center px-3 py-1 bg-primary-500 text-white text-xs rounded hover:bg-primary-600 transition-colors"
+              >
+                <TagIcon className="h-3 w-3 mr-1" />
+                Add Tags
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Context Menu */}
       <ProblemContextMenu
@@ -525,9 +683,13 @@ export default function Dashboard() {
       {/* Tag Modal */}
       <TagModal
         isOpen={showTagModal}
-        onClose={() => setShowTagModal(false)}
+        onClose={() => {
+          setShowTagModal(false);
+          setIsBulkTagModal(false);
+        }}
         onSave={handleTagSave}
-        problemId={selectedProblemId}
+        problemId={isBulkTagModal ? '' : selectedProblemId}
+        problemIds={isBulkTagModal ? Array.from(selectedProblemIds) : undefined}
       />
 
       {/* New Problem Modal */}

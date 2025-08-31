@@ -232,6 +232,65 @@ pub async fn get_tag_suggestions(
     db.get_tag_suggestions(&query, limit.unwrap_or(10)).map_err(|e| e.to_string())
 }
 
+// Bulk tag operations
+#[tauri::command]
+pub async fn add_tag_to_problems(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+    tag_name: String,
+    category: Option<String>,
+) -> Result<Vec<Tag>, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let mut added_tags = Vec::new();
+    let category = category.unwrap_or_else(|| "custom".to_string());
+    
+    for problem_id in problem_ids {
+        let request = AddProblemTagRequest {
+            problem_id: problem_id.clone(),
+            tag_name: tag_name.clone(),
+            color: None,
+            category: Some(category.clone()),
+        };
+        
+        match db.add_problem_tag(request) {
+            Ok(tag) => {
+                // Only add the tag once to the result
+                if added_tags.is_empty() || !added_tags.iter().any(|t: &Tag| t.id == tag.id) {
+                    added_tags.push(tag);
+                }
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to add tag '{}' to problem {}: {}", tag_name, problem_id, e);
+            }
+        }
+    }
+    
+    Ok(added_tags)
+}
+
+#[tauri::command]
+pub async fn remove_tag_from_problems(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+    tag_id: String,
+) -> Result<(), String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    for problem_id in problem_ids {
+        let request = RemoveProblemTagRequest {
+            problem_id: problem_id.clone(),
+            tag_id: tag_id.clone(),
+        };
+        
+        if let Err(e) = db.remove_problem_tag(request) {
+            eprintln!("Warning: Failed to remove tag from problem {}: {}", problem_id, e);
+        }
+    }
+    
+    Ok(())
+}
+
 // Search commands for Name/Topic/Tags search system
 #[tauri::command]
 pub async fn search_problems_by_name(
