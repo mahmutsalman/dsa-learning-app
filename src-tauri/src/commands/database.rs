@@ -291,6 +291,54 @@ pub async fn remove_tag_from_problems(
     Ok(())
 }
 
+// Bulk deletion operations
+#[tauri::command]
+pub async fn delete_problems_bulk(
+    state: State<'_, AppState>,
+    problem_ids: Vec<String>,
+) -> Result<String, String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    let total_problems = problem_ids.len();
+    eprintln!("🗑️ [Bulk Delete] Starting bulk deletion of {} problems", total_problems);
+    
+    let mut deleted_count = 0;
+    let mut errors = Vec::new();
+    
+    for (index, problem_id) in problem_ids.iter().enumerate() {
+        eprintln!("🗑️ [Bulk Delete] Deleting problem {}/{}: {}", index + 1, total_problems, problem_id);
+        
+        match db.delete_problem_with_files(problem_id) {
+            Ok(_) => {
+                deleted_count += 1;
+                eprintln!("✅ [Bulk Delete] Successfully deleted problem: {}", problem_id);
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to delete problem {}: {}", problem_id, e);
+                eprintln!("❌ [Bulk Delete] {}", error_msg);
+                errors.push(error_msg);
+            }
+        }
+    }
+    
+    let result_msg = if errors.is_empty() {
+        format!("Successfully deleted {} problem(s)", deleted_count)
+    } else if deleted_count > 0 {
+        format!("Deleted {} out of {} problems. Errors: {}", 
+               deleted_count, total_problems, errors.join("; "))
+    } else {
+        format!("Failed to delete problems. Errors: {}", errors.join("; "))
+    };
+    
+    eprintln!("🗑️ [Bulk Delete] Completed: {}", result_msg);
+    
+    if errors.is_empty() {
+        Ok(result_msg)
+    } else {
+        Err(result_msg)
+    }
+}
+
 // Search commands for Name/Topic/Tags search system
 #[tauri::command]
 pub async fn search_problems_by_name(

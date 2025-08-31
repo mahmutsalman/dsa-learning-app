@@ -2370,4 +2370,85 @@ impl DatabaseManager {
         
         Ok(())
     }
+
+    pub fn delete_problem_with_files(&mut self, problem_id: &str) -> anyhow::Result<()> {
+        println!("🗑️ [Database] Starting delete operation with file cleanup for problem: {}", problem_id);
+        
+        // First, verify the problem exists
+        let problem = self.get_problem_by_id(problem_id)?;
+        if problem.is_none() {
+            return Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id));
+        }
+        
+        let problem = problem.unwrap();
+        println!("🗑️ [Database] Confirmed problem exists: '{}'", problem.title);
+
+        // Step 1: Get all files that need to be deleted before starting database transaction
+        let mut files_to_delete = Vec::new();
+        
+        // Get audio recording files
+        let recording_files: Vec<String> = self.connection.prepare(
+            "SELECT DISTINCT filepath FROM recordings r 
+             JOIN cards c ON r.card_id = c.id 
+             WHERE c.problem_id = ?1"
+        )?
+        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        files_to_delete.extend(recording_files);
+        
+        // Get problem image files
+        let image_files: Vec<String> = self.connection.prepare(
+            "SELECT image_path FROM problem_images WHERE problem_id = ?1"
+        )?
+        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        files_to_delete.extend(image_files);
+        
+        println!("🗑️ [Database] Found {} files to delete", files_to_delete.len());
+
+        // Step 2: Delete files from filesystem
+        for file_path in &files_to_delete {
+            match self.delete_file_safely(file_path) {
+                Ok(_) => println!("🗑️ [Database] Deleted file: {}", file_path),
+                Err(e) => println!("⚠️ [Database] Failed to delete file {}: {}", file_path, e),
+            }
+        }
+
+        // Step 3: Proceed with database deletion using existing method
+        self.delete_problem(problem_id)?;
+        
+        Ok(())
+    }
+
+    fn delete_file_safely(&self, file_path: &str) -> anyhow::Result<()> {
+        use std::path::Path;
+        
+        // Handle different path formats (dev-data, app-data, absolute paths)
+        let absolute_path = if file_path.starts_with("dev-data/") {
+            let current_dir = std::env::current_dir()?;
+            current_dir.join(file_path)
+        } else if file_path.starts_with("app-data/") {
+            // For production, we'd need to get app data directory
+            // For now, assume dev mode and convert to dev-data path
+            let current_dir = std::env::current_dir()?;
+            current_dir.join("dev-data").join(&file_path[9..])
+        } else if Path::new(file_path).is_absolute() {
+            Path::new(file_path).to_path_buf()
+        } else {
+            // Relative path, assume it's relative to current dir
+            let current_dir = std::env::current_dir()?;
+            current_dir.join(file_path)
+        };
+        
+        if absolute_path.exists() {
+            std::fs::remove_file(&absolute_path)?;
+            println!("✅ [Database] Deleted file: {:?}", absolute_path);
+        } else {
+            println!("⚠️ [Database] File not found (may already be deleted): {:?}", absolute_path);
+        }
+        
+        Ok(())
+    }
 }

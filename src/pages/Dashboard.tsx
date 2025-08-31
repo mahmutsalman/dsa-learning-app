@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
 import SearchWithAutocomplete from '../components/SearchWithAutocomplete';
 import { ProblemImporter } from '../components/ProblemImporter/ProblemImporter';
+import BulkDeleteDialog from '../components/BulkDeleteDialog';
 import { ImportResult } from '../components/ProblemImporter/types';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
 import { useStats } from '../contexts/StatsContext';
@@ -63,6 +64,7 @@ export default function Dashboard() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedProblemIds, setSelectedProblemIds] = useState<Set<string>>(new Set());
   const [isBulkTagModal, setIsBulkTagModal] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
@@ -337,6 +339,26 @@ export default function Dashboard() {
   const handleBulkAddTags = () => {
     setIsBulkTagModal(true);
     setShowTagModal(true);
+  };
+
+  const handleBulkDelete = () => {
+    setShowBulkDeleteDialog(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    try {
+      const problemIds = Array.from(selectedProblemIds);
+      await invoke('delete_problems_bulk', { problemIds });
+      
+      // Reload problems to reflect changes
+      await loadProblems();
+      
+      // Clear selection and exit selection mode
+      clearSelection();
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      throw error; // Re-throw to let dialog handle it
+    }
   };
 
   // Close context menu when clicking elsewhere
@@ -665,6 +687,14 @@ export default function Dashboard() {
                 <TagIcon className="h-3 w-3 mr-1" />
                 Add Tags
               </button>
+              
+              <button
+                onClick={handleBulkDelete}
+                className="flex items-center px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+              >
+                <TrashIcon className="h-3 w-3 mr-1" />
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -716,6 +746,22 @@ export default function Dashboard() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImportComplete={handleImportComplete}
+      />
+
+      {/* Bulk Delete Dialog */}
+      <BulkDeleteDialog
+        isOpen={showBulkDeleteDialog}
+        onClose={() => setShowBulkDeleteDialog(false)}
+        onConfirm={handleBulkDeleteConfirm}
+        selectedCount={selectedProblemIds.size}
+        selectedProblems={filteredProblems
+          .filter(problem => selectedProblemIds.has(problem.id))
+          .map(problem => ({
+            id: problem.id,
+            title: problem.title,
+            cardCount: problem.cardCount
+          }))
+        }
       />
     </div>
   );

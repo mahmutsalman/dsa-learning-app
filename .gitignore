@@ -221,6 +221,9 @@ add-sample-data.js
 check-database-status.js
 verify-migration.cjs
 
+# Examples and test data
+examples/
+
 # =============================================================================
 # AI and Development Tools
 # =============================================================================
