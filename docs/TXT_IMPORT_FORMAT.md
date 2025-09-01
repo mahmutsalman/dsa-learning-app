@@ -106,9 +106,3 @@ An input string is valid if:
 4. **Server Import**: Send validated problems to Rust backend for database insertion
 5. **Progress Tracking**: Real-time updates on import progress
 6. **Results Summary**: Show success/failure count with detailed error log
-
-## Example Files
-See `/examples/` directory for sample TXT files:
-- `basic_problems.txt` - Simple examples
-- `leetcode_problems.txt` - Real LeetCode problems
-- `advanced_problems.txt` - Complex problems with all fields
