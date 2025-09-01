@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
@@ -23,7 +23,11 @@ interface ProblemWithStudyTime extends Problem {
   totalStudyTime: number; // in seconds
   cardCount: number;
   problemTags?: Tag[]; // Optional tags for the problem
+  lastUpdatedAt?: string; // Most recent card modification date
 }
+
+export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title';
+export type SortDirection = 'asc' | 'desc';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -38,6 +42,10 @@ export default function Dashboard() {
     searchType: 'name',
     isSearching: false
   });
+  
+  // Sorting state
+  const [sortBy, setSortBy] = useState<SortOption>('created_at');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   
   // Use stats context
   const { showStats } = useStats();
@@ -66,6 +74,48 @@ export default function Dashboard() {
   const [isBulkTagModal, setIsBulkTagModal] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
+  // Sort problems based on selected criteria
+  const sortProblems = (problemsToSort: ProblemWithStudyTime[], sortOption: SortOption, direction: SortDirection): ProblemWithStudyTime[] => {
+    return [...problemsToSort].sort((a, b) => {
+      let aValue: string | undefined;
+      let bValue: string | undefined;
+      
+      switch (sortOption) {
+        case 'created_at':
+          aValue = a.created_at;
+          bValue = b.created_at;
+          break;
+        case 'lastUpdatedAt':
+          aValue = a.lastUpdatedAt;
+          bValue = b.lastUpdatedAt;
+          break;
+        case 'title':
+          aValue = a.title;
+          bValue = b.title;
+          break;
+        default:
+          aValue = a.created_at;
+          bValue = b.created_at;
+      }
+      
+      // Handle undefined values (put them at the end)
+      if (!aValue && !bValue) return 0;
+      if (!aValue) return 1;
+      if (!bValue) return -1;
+      
+      // For date fields, parse as dates
+      if (sortOption !== 'title') {
+        const aDate = new Date(aValue).getTime();
+        const bDate = new Date(bValue).getTime();
+        return direction === 'asc' ? aDate - bDate : bDate - aDate;
+      }
+      
+      // For title, use string comparison
+      const comparison = aValue.localeCompare(bValue);
+      return direction === 'asc' ? comparison : -comparison;
+    });
+  };
+
   // Helper function to format time display
   const formatTimeDisplay = (seconds: number): string => {
     const hours = Math.floor(seconds / 3600);
@@ -82,6 +132,59 @@ export default function Dashboard() {
     }
   };
 
+  // Helper function to format dates for display with detailed time info
+  const formatDateDisplay = (dateString: string): string => {
+    const date = new Date(dateString);
+    const timeString = date.toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    });
+    
+    const now = new Date();
+    const diffTime = now.getTime() - date.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+      return `Today ${timeString}`;
+    } else if (diffDays === 1) {
+      return `Yesterday ${timeString}`;
+    } else if (diffDays < 7) {
+      return `${diffDays} days ago ${timeString}`;
+    } else if (diffDays < 30) {
+      const weeks = Math.floor(diffDays / 7);
+      const weekText = weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+      return `${weekText} ${timeString}`;
+    } else if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      const monthText = months === 1 ? '1 month ago' : `${months} months ago`;
+      return `${monthText} ${timeString}`;
+    } else {
+      const dateStr = date.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      return `${dateStr} ${timeString}`;
+    }
+  };
+
+  // Handle sorting change
+  const handleSortChange = (newSortBy: SortOption, newSortDirection?: SortDirection) => {
+    const direction = newSortDirection || (newSortBy === sortBy ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc');
+    setSortBy(newSortBy);
+    setSortDirection(direction);
+    
+    // Apply sorting to current problems
+    const sortedProblems = sortProblems(problems, newSortBy, direction);
+    setProblems(sortedProblems);
+    
+    // Apply sorting to filtered problems as well
+    const sortedFilteredProblems = sortProblems(filteredProblems, newSortBy, direction);
+    setFilteredProblems(sortedFilteredProblems);
+  };
+
   useEffect(() => {
     loadProblems();
   }, []);
@@ -91,7 +194,7 @@ export default function Dashboard() {
       setLoading(true);
       const baseProblems = await invoke<Problem[]>('get_problems');
       
-      // For each problem, get its cards, tags and calculate total study time
+      // For each problem, get its cards, tags, time sessions and calculate additional fields
       const problemsWithStudyTime = await Promise.all(
         baseProblems.map(async (problem) => {
           try {
@@ -103,11 +206,20 @@ export default function Dashboard() {
             // Sum up total_duration from all cards for this problem
             const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0), 0);
             
+            // Find the most recent card modification date
+            const lastUpdatedAt = cards.length > 0 
+              ? cards
+                  .map(card => card.last_modified)
+                  .filter(date => date) // Filter out null/undefined dates
+                  .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+              : undefined;
+            
             return {
               ...problem,
               totalStudyTime,
               cardCount: cards.length,
-              problemTags: tags
+              problemTags: tags,
+              lastUpdatedAt
             } as ProblemWithStudyTime;
           } catch (err) {
             console.error(`Failed to load data for problem ${problem.id}:`, err);
@@ -115,14 +227,16 @@ export default function Dashboard() {
               ...problem,
               totalStudyTime: 0,
               cardCount: 0,
-              problemTags: []
+              problemTags: [],
+              lastUpdatedAt: undefined
             } as ProblemWithStudyTime;
           }
         })
       );
       
-      setProblems(problemsWithStudyTime);
-      setFilteredProblems(problemsWithStudyTime); // Initialize filtered problems
+      const sortedProblems = sortProblems(problemsWithStudyTime, sortBy, sortDirection);
+      setProblems(sortedProblems);
+      setFilteredProblems(sortedProblems); // Initialize filtered problems
       setError(null);
     } catch (err) {
       setError(err as string);
@@ -503,6 +617,59 @@ export default function Dashboard() {
             className="mb-4"
           />
           
+          {/* Sorting Controls */}
+          <div className="flex items-center justify-center space-x-4 mb-4">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Sort by:</span>
+            
+            <button
+              onClick={() => handleSortChange('created_at')}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sortBy === 'created_at' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' 
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              Creation Date
+              {sortBy === 'created_at' && (
+                sortDirection === 'asc' 
+                  ? <ChevronUpIcon className="ml-1 h-4 w-4" />
+                  : <ChevronDownIcon className="ml-1 h-4 w-4" />
+              )}
+            </button>
+            
+            <button
+              onClick={() => handleSortChange('lastUpdatedAt')}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sortBy === 'lastUpdatedAt' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' 
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              Last Updated
+              {sortBy === 'lastUpdatedAt' && (
+                sortDirection === 'asc' 
+                  ? <ChevronUpIcon className="ml-1 h-4 w-4" />
+                  : <ChevronDownIcon className="ml-1 h-4 w-4" />
+              )}
+            </button>
+            
+            <button
+              onClick={() => handleSortChange('title')}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sortBy === 'title' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' 
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              Title
+              {sortBy === 'title' && (
+                sortDirection === 'asc' 
+                  ? <ChevronUpIcon className="ml-1 h-4 w-4" />
+                  : <ChevronDownIcon className="ml-1 h-4 w-4" />
+              )}
+            </button>
+          </div>
+          
           {/* Search Results Info */}
           {searchState.query && (
             <div className="text-sm text-gray-600 dark:text-gray-400 text-center">
@@ -645,7 +812,17 @@ export default function Dashboard() {
                         </span>
                       )}
                     </div>
-                    <span className="text-primary-500 dark:text-primary-400">
+                  </div>
+                  
+                  {/* Date Information */}
+                  <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500 mt-2">
+                    <div className="flex space-x-4">
+                      <span>Created: {formatDateDisplay(problem.created_at)}</span>
+                      {problem.lastUpdatedAt && (
+                        <span>Updated: {formatDateDisplay(problem.lastUpdatedAt)}</span>
+                      )}
+                    </div>
+                    <span className="text-primary-500 dark:text-primary-400 text-sm">
                       Open →
                     </span>
                   </div>
