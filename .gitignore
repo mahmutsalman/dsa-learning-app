@@ -221,6 +221,11 @@ add-sample-data.js
 check-database-status.js
 verify-migration.cjs
 
+# Environment-specific migration scripts (moved to localResources)
+apply-*-migration.*
+*-migration.js
+*-migration.cjs
+
 # Debug files and development traces
 **/debug/
 **/*debug*.txt
