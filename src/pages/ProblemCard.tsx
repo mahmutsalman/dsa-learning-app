@@ -25,7 +25,6 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
-import { AnswerCardDebugLogger, logAnswerCardState, logAnswerCardAction, logSolutionFlow, logEditorChange, startTiming, endTiming, getMemoryUsage } from '../services/answerCardDebugLogger';
 
 export default function ProblemCard() {
   // Track component renders for performance monitoring
@@ -80,48 +79,12 @@ export default function ProblemCard() {
         const operationId = `solutionToggle-enter-${Date.now()}`;
         
         // Log the setTimeout usage for race condition prevention analysis
-        await logSolutionFlow('preventRaceCondition', {
-          operationId,
-          contentToApply: {
-            codeLength: card.code?.length || 0,
-            notesLength: card.notes?.length || 0,
-            language: card.language,
-            codePreview: card.code?.substring(0, 50) || '(empty)',
-            notesPreview: card.notes?.substring(0, 50) || '(empty)'
-          },
-          currentEditorState: {
-            codeLength: code.length,
-            notesLength: notes.length,
-            language
-          }
-        }, {
-          trigger: 'onSolutionToggle',
-          mode: 'entering_solution',
-          cardId: card.id
-        });
         
         // Log race condition prevention measure
-        await logSolutionFlow('PreventionMeasure', {
-          operationId,
-          measure: 'setTimeout_defer',
-          reason: 'Ensure solution content loads after useEffect synchronization',
-          currentState: 'entering_solution_mode',
-          preventedRace: 'onSolutionToggle vs useEffect[currentCard]'
-        });
         
         setTimeout(async () => {
-          const startTime = performance.now();
           
           // Log timeout execution start
-          await logSolutionFlow('SetTimeoutExecution', {
-            operationId,
-            executionStarted: new Date().toISOString(),
-            editorStateBeforeApplication: {
-              code: code.substring(0, 50) || '(empty)',
-              notes: notes.substring(0, 50) || '(empty)',
-              language
-            }
-          });
           
           console.debug('Applying solution card content to editor (after timeout)', {
             operationId,
@@ -135,29 +98,11 @@ export default function ProblemCard() {
           debugSetNotes(card.notes || '');
           setLanguage(card.language || 'javascript');
           
-          const duration = Math.round(performance.now() - startTime);
+          // Performance tracking removed
           
           // Validate that content was applied correctly
-          await logSolutionFlow('SolutionContentApplication', {
-            expectedCode: card.code || '',
-            expectedNotes: card.notes || '',
-            expectedLanguage: card.language || 'javascript',
-            actualCode: card.code || '', // Will be set by debugSetCode/debugSetNotes
-            actualNotes: card.notes || '',
-            actualLanguage: card.language || 'javascript',
-            operationId,
-            validationTiming: duration,
-            trigger: 'setTimeout_completion'
-          });
           
           // Log successful timeout completion
-          await logSolutionFlow('SetTimeoutComplete', {
-            operationId,
-            executionCompleted: new Date().toISOString(),
-            totalDuration: duration,
-            contentApplied: true,
-            raceConditionPrevented: true
-          });
         }, 0);
       } else if (!isActive && currentCard) {
         // Exiting solution mode - restore regular card content
@@ -184,27 +129,6 @@ export default function ProblemCard() {
   // useEffect(() => {
   //   const renderDuration = Math.round(performance.now() - componentStartTime);
   //   
-  //   logAnswerCardState('ProblemCard', 'componentRender', null, {
-  //     renderCount,
-  //     renderDuration,
-  //     memoryUsage: getMemoryUsage(),
-  //     problemId,
-  //     cardId,
-  //     hasCurrentCard: !!currentCard,
-  //     cardsCount: cards.length,
-  //     isLoading: loading,
-  //     hasError: !!error,
-  //     solutionCardActive: solutionCard.state.isActive
-  //   }, {
-  //     trigger: 'component_render',
-  //     renderPerformance: {
-  //       isSlowRender: renderDuration > 16, // 16ms = 60fps threshold
-  //       baselineExceeded: renderDuration > 50 // Performance baseline
-  //     }
-  //   }, {
-  //     duration: renderDuration,
-  //     operationId: `render-${renderCount}`
-  //   });
   // });
 
   // Helper function to format time display with validation
@@ -248,67 +172,11 @@ export default function ProblemCard() {
   // Throttled debug wrapper for setNotes - prevents excessive logging during typing
   const debugSetNotes = useCallback((newNotes: string) => {
     setNotes(newNotes);
-    
-    // Only log significant changes or periodically to prevent performance issues
-    const lengthDiff = Math.abs(newNotes.length - notes.length);
-    const shouldLog = lengthDiff > 50 || (lengthDiff > 0 && Date.now() % 1000 < 100);
-    
-    if (shouldLog) {
-      const operationId = `setNotes-${Date.now()}`;
-      const beforeData = {
-        notes,
-        code,
-        language,
-        length: notes.length
-      };
-      
-      logEditorChange('NotesEditor', {
-        notes: newNotes,
-        code,
-        language
-      }, {
-        operationId,
-        trigger: 'ProblemCard.debugSetNotes',
-        cardId: currentCard?.id,
-        lengthDifference: newNotes.length - notes.length
-      }, {
-        duration: 0,
-        operationId
-      }, beforeData);
-    }
   }, [notes, code, language, currentCard]);
 
   // Throttled debug wrapper for setCode - prevents excessive logging during typing
   const debugSetCode = useCallback((newCode: string) => {
     setCode(newCode);
-    
-    // Only log significant changes or periodically to prevent performance issues
-    const lengthDiff = Math.abs(newCode.length - code.length);
-    const shouldLog = lengthDiff > 50 || (lengthDiff > 0 && Date.now() % 1000 < 100);
-    
-    if (shouldLog) {
-      const operationId = `setCode-${Date.now()}`;
-      const beforeData = {
-        code,
-        notes,
-        language,
-        length: code.length
-      };
-      
-      logEditorChange('CodeEditor', {
-        code: newCode,
-        notes,
-        language
-      }, {
-        operationId,
-        trigger: 'ProblemCard.debugSetCode',
-        cardId: currentCard?.id,
-        lengthDifference: newCode.length - code.length
-      }, {
-        duration: 0,
-        operationId
-      }, beforeData);
-    }
   }, [code, notes, language, currentCard]);
   
   
@@ -337,7 +205,7 @@ export default function ProblemCard() {
 
   // Workspace layout management
   const { state, actions } = useWorkspaceLayout({ 
-    onLayoutChange: useCallback((_layout) => {
+    onLayoutChange: useCallback((_layout: any) => {
       // Trigger Monaco Editor resize when workspace layout changes (throttled)
       throttledResizeDispatch();
     }, [throttledResizeDispatch])
@@ -397,7 +265,7 @@ export default function ProblemCard() {
         updatedCard.code !== currentCard.code || 
         updatedCard.notes !== currentCard.notes || 
         updatedCard.language !== currentCard.language ||
-        updatedCard.updated_at !== currentCard.updated_at
+        (updatedCard as any).updated_at !== (currentCard as any).updated_at
       )) {
         setCurrentCard(updatedCard);
         setCards(prev => prev.map(card => 
@@ -630,16 +498,6 @@ export default function ProblemCard() {
     const operationId = `useEffect-currentCard-${Date.now()}`;
     
     // Log the start of this critical useEffect for race condition analysis
-    logSolutionFlow('UseEffectStart', {
-      operationId,
-      trigger: 'useEffect[currentCard, solutionCard.state.isActive]',
-      currentCard: currentCard?.id,
-      solutionModeActive: solutionCard.state.isActive,
-      dependencies: {
-        currentCardChanged: true,
-        solutionActiveChanged: true
-      }
-    });
     
     console.debug('ProblemCard: Card changed, syncing editor state', {
       operationId,
@@ -654,35 +512,11 @@ export default function ProblemCard() {
     });
     
     if (currentCard) {
-      logAnswerCardState('ProblemCard', 'currentCard', null, {
-        id: currentCard.id,
-        problemId: currentCard.problem_id,
-        codeLength: currentCard.code?.length || 0,
-        notesLength: currentCard.notes?.length || 0,
-        language: currentCard.language,
-        cardNumber: currentCard.card_number,
-        isSolution: currentCard.is_solution || false,
-        codePreview: currentCard.code?.substring(0, 50) || '(empty)',
-        notesPreview: currentCard.notes?.substring(0, 50) || '(empty)'
-      }, {
-        timestamp: new Date().toISOString(),
-        triggerContext: 'useEffect[currentCard]',
-        editorSyncPending: true,
-        solutionModeActive: solutionCard.state.isActive,
-        operationId
-      });
       
       // Only sync editor state with current card when NOT in solution mode
       // When in solution mode, the onSolutionToggle callback handles editor state
       if (!solutionCard.state.isActive) {
         // Log race condition avoidance - normal card sync path
-        logSolutionFlow('RaceConditionAvoidance', {
-          operationId,
-          action: 'regular_card_sync',
-          reason: 'Not in solution mode, safe to sync with currentCard',
-          preventedConflict: false,
-          syncDecision: 'proceed_with_sync'
-        });
         
         console.debug('ProblemCard: Syncing editor with regular card', {
           operationId,
@@ -693,16 +527,6 @@ export default function ProblemCard() {
         });
         
         // Validate before sync
-        logSolutionFlow('PreRegularCardSync', {
-          expectedCode: currentCard.code || '',
-          expectedNotes: currentCard.notes || '',
-          expectedLanguage: currentCard.language || 'javascript',
-          currentCode: code,
-          currentNotes: notes,
-          currentLanguage: language,
-          operationId,
-          syncType: 'regular_card_to_editor'
-        });
         
         debugSetCode(currentCard.code || '');
         debugSetNotes(currentCard.notes || '');
@@ -710,33 +534,9 @@ export default function ProblemCard() {
         
         // Post-sync validation
         setTimeout(async () => {
-          await logSolutionFlow('PostRegularCardSync', {
-            expectedCode: currentCard.code || '',
-            expectedNotes: currentCard.notes || '',
-            expectedLanguage: currentCard.language || 'javascript',
-            appliedCode: currentCard.code || '', // These should match now
-            appliedNotes: currentCard.notes || '',
-            appliedLanguage: currentCard.language || 'javascript',
-            operationId,
-            syncType: 'regular_card_to_editor',
-            delayedValidation: true
-          });
         }, 10);
       } else {
         // Log race condition prevention - skipping sync in solution mode
-        logSolutionFlow('RaceConditionPrevention', {
-          operationId,
-          action: 'skip_regular_sync',
-          reason: 'Solution mode active, letting onSolutionToggle handle editor state',
-          preventedConflict: true,
-          conflictType: 'currentCard_vs_solutionCard_content',
-          solutionCardId: solutionCard.state.solutionCard?.id,
-          preservedEditorState: {
-            codeLength: code.length,
-            notesLength: notes.length,
-            language
-          }
-        });
         
         console.debug('ProblemCard: Skipping editor sync - solution mode active', {
           operationId,
@@ -750,33 +550,15 @@ export default function ProblemCard() {
     }
     
     // Log completion of this useEffect execution
-    logSolutionFlow('UseEffectComplete', {
-      operationId,
-      trigger: 'useEffect[currentCard, solutionCard.state.isActive]',
-      completionTime: new Date().toISOString(),
-      actionTaken: solutionCard.state.isActive ? 'skipped_sync' : 'performed_sync',
-      raceConditionHandling: 'successful'
-    });
     
   }, [currentCard, solutionCard.state.isActive]);
 
   const loadProblem = async () => {
-    const operationId = `loadProblem-${problemId}-${Date.now()}`;
-    startTiming(operationId);
-    
-    try {
+    const operationId = `loadProblem-${problemId}-${Date.now()}`;    try {
       setLoading(true);
       setError(null);
       
-      // Initialize debug logging for new session
-      await AnswerCardDebugLogger.clearLog();
-      await logSolutionFlow('ComponentInit', 'ProblemCard component initialized, starting new debug session', {
-        problemId,
-        cardId,
-        operationId,
-        timestamp: new Date().toISOString(),
-        memoryUsage: getMemoryUsage()
-      });
+      // Debug logging removed for performance
       
       console.log('ProblemCard: Loading problem and cards', { problemId, operationId });
       
@@ -831,30 +613,16 @@ export default function ProblemCard() {
       }
       
     } catch (err) {
-      const timing = endTiming(operationId);
       const errorMessage = err as string;
       setError(errorMessage);
       console.error('ProblemCard: Failed to load problem', { problemId, error: errorMessage, operationId });
       
-      await logSolutionFlow('LoadProblemError', 'Failed to load problem data', {
-        error: errorMessage,
-        problemId,
-        operationId,
-        duration: timing?.duration
-      });
       
       setCards([]);
       setCurrentCard(null);
     } finally {
-      const timing = endTiming(operationId);
       setLoading(false);
       
-      await logSolutionFlow('LoadProblemComplete', 'Load problem operation completed', {
-        problemId,
-        operationId,
-        duration: timing?.duration,
-        finalMemoryUsage: getMemoryUsage()
-      });
     }
   };
 
@@ -937,89 +705,35 @@ export default function ProblemCard() {
 
   // Solution card toggle handler with comprehensive error handling and performance monitoring
   const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
-    const operationId = `handleSolutionToggle-${Date.now()}`;
-    const startTime = performance.now();
-    const initialMemory = getMemoryUsage();
-    
     // Start sequence tracking for content loading operations
-    await logSolutionFlow('ToggleInitiated', {
-      operationId,
-      eventType: event.type,
-      isShiftAction: isShiftAction(event),
-      currentState: {
-        solutionActive: solutionCard.state.isActive,
-        isLoading: solutionCard.state.isLoading,
-        currentCardId: currentCard?.id
-      }
-    });
     
     // Prevent rapid toggles - check if solution card is already processing
     if (solutionCard.state.isLoading) {
-        await logSolutionFlow('RapidTogglePrevented', {
-          reason: 'Solution card operation already in progress',
-          currentState: solutionCard.state,
-          operationId
-        });
         
-        await logSolutionFlow('rapid_toggle_prevented', {
-          reason: 'Solution card operation already in progress',
-          currentState: solutionCard.state,
-          operationId,
-          preventedUserError: true,
-          gracefulHandling: true 
-        });
-        await logSolutionFlow('HandleToggleSkipped', 'Skipping toggle - solution card operation already in progress');
         
         // Complete sequence tracking
-        await logSolutionFlow('SequenceComplete', {
-          outcome: 'prevented_rapid_toggle',
-          reason: 'loading_in_progress'
-        });
         return;
       }
     
     // Log the initial state before any actions
-    await logSolutionFlow('HandleToggleStart', {
-      problemId,
-      currentCardId: currentCard?.id,
-      isShiftAction: isShiftAction(event),
-      solutionCardActive: solutionCard.state.isActive,
-      solutionCardExists: !!solutionCard.state.solutionCard,
-      currentCode: code.substring(0, 100) + '...',
-      currentNotes: notes.substring(0, 100) + '...',
-      currentLanguage: language,
-      solutionCardLoading: solutionCard.state.isLoading
-    });
 
     if (!isShiftAction(event)) {
       // Not shift+click, handle regular navigation
-      await logAnswerCardAction('RegularNavigation', 'Navigating to next card instead of solution toggle');
       navigateToCard('next');
       return;
     }
 
     // This is a shift+click - check current mode and act accordingly
-    await logAnswerCardAction('ShiftClick', 'Shift+click detected, processing solution toggle', {
-      isActive: solutionCard.state.isActive,
-      hasSolution: !!solutionCard.state.solutionCard
-    });
 
     try {
       if (solutionCard.state.isActive) {
         // Already in solution mode - exit back to regular cards
-        await logSolutionFlow('ExitSolutionMode', 'Exiting solution mode, returning to regular card');
         
         solutionCard.actions.exitSolution();
         
         // Restore original regular card data
         const originalCard = originalCardRef.current;
         if (originalCard) {
-          await logEditorChange('RestoreFromSolution', {
-            code: originalCard.code,
-            notes: originalCard.notes,
-            language: originalCard.language,
-            cardId: originalCard.id
-          }, { originalCardStored: true, restorationStarted: true });
           
           // Use React's batch update approach for more reliable state restoration
           // First restore the card context, then update editor states synchronously
@@ -1034,20 +748,10 @@ export default function ProblemCard() {
           // Clear the stored original card to prevent memory leaks
           originalCardRef.current = null;
           
-          await logSolutionFlow('RestoreComplete', 'Successfully restored original card state', {
-            restoredCardId: originalCard.id,
-            restoredCodeLength: (originalCard.code || '').length,
-            restoredNotesLength: (originalCard.notes || '').length,
-            restoredLanguage: originalCard.language || 'javascript'
-          });
         } else {
-          await logSolutionFlow('ExitSolutionError', 'No original card stored to restore from - user may lose unsaved changes');
           
           // Fallback: Try to restore to the current card if available
           if (currentCard && !solutionCard.state.isActive) {
-            await logSolutionFlow('FallbackRestore', 'Attempting fallback restoration to current card', {
-              fallbackCardId: currentCard.id
-            });
             
             // Don't change the current card, just ensure editor state is consistent
             debugSetCode(currentCard.code || '');
@@ -1056,24 +760,8 @@ export default function ProblemCard() {
           }
         }
         
-        await logSolutionFlow('ExitSolutionComplete', 'Successfully exited solution mode', {
-          finalState: {
-            isActive: solutionCard.state.isActive,
-            currentCardId: currentCard?.id,
-            currentCode: code.length,
-            currentNotes: notes.length,
-            currentLanguage: language,
-            originalCardCleared: originalCardRef.current === null
-          },
-          validationChecks: {
-            solutionModeExited: !solutionCard.state.isActive,
-            editorsRestored: true,
-            memoryCleared: originalCardRef.current === null
-          }
-        });
       } else {
         // Not in solution mode - enter solution view
-        await logSolutionFlow('EnterSolutionMode', 'Entering solution mode, calling toggle API');
         
         // Store the current regular card before switching to solution
         // CRITICAL: Store the current editor state, not just the card database state
@@ -1085,66 +773,16 @@ export default function ProblemCard() {
             notes: notes,
             language: language
           };
-          await logSolutionFlow('StoreOriginalCard', 'Stored original card with current editor state for restoration', {
-            originalCardId: currentCard.id,
-            originalCardCode: code.length, // Use current editor code, not card.code
-            originalCardNotes: notes.length, // Use current editor notes, not card.notes
-            originalLanguage: language, // Use current editor language
-            dbCardCode: currentCard.code.length, // Log db state for comparison
-            dbCardNotes: currentCard.notes.length,
-            hasUnsavedCode: code !== currentCard.code,
-            hasUnsavedNotes: notes !== currentCard.notes,
-            hasUnsavedLanguage: language !== currentCard.language
-          });
         }
         
         const toggleResult = await solutionCard.actions.toggle();
         
-        await logSolutionFlow('ToggleApiComplete', 'Toggle API completed, checking result', {
-          apiResult: toggleResult,
-          isActive: solutionCard.state.isActive,
-          hasSolutionCard: !!solutionCard.state.solutionCard,
-          solutionCardData: toggleResult?.card ? {
-            id: toggleResult.card.id,
-            problemId: toggleResult.card.problem_id,
-            codeLength: toggleResult.card.code.length,
-            notesLength: toggleResult.card.notes.length,
-            language: toggleResult.card.language
-          } : null
-        });
         
         if (toggleResult?.isViewingSolution && toggleResult?.card) {
           // Update editors with solution data
           const solution = solutionCardToCard(toggleResult.card);
           
-          await logSolutionFlow('ConvertSolutionCard', 'Converting solution card to regular card format', {
-            originalSolution: {
-              id: toggleResult.card.id,
-              problemId: toggleResult.card.problem_id,
-              codeLength: toggleResult.card.code.length,
-              notesLength: toggleResult.card.notes.length,
-              language: toggleResult.card.language,
-              codePreview: toggleResult.card.code.substring(0, 50),
-              notesPreview: toggleResult.card.notes.substring(0, 50)
-            },
-            convertedCard: {
-              id: solution.id,
-              problemId: solution.problem_id,
-              codeLength: solution.code.length,
-              notesLength: solution.notes.length,
-              cardNumber: solution.card_number,
-              language: solution.language,
-              codePreview: solution.code.substring(0, 50),
-              notesPreview: solution.notes.substring(0, 50)
-            }
-          });
           
-          await logEditorChange('LoadSolutionData', {
-            code: solution.code,
-            notes: solution.notes,
-            language: solution.language,
-            cardId: solution.id
-          });
           
           // Use React's batch update approach for reliable solution state loading
           // First set the card context, then update editor states synchronously
@@ -1156,62 +794,20 @@ export default function ProblemCard() {
           debugSetNotes(solution.notes || '');
           setLanguage(solution.language || 'javascript');
           
-          await logSolutionFlow('EnterSolutionComplete', 'Successfully entered solution mode and updated editors', {
-            newCurrentCardId: solution.id,
-            editorsUpdatedDirectly: true,
-            solutionDataPreservation: {
-              codePreserved: solution.code === (solutionCard.state.solutionCard?.code || ''),
-              notesPreserved: solution.notes === (solutionCard.state.solutionCard?.notes || ''),
-              languagePreserved: solution.language === (solutionCard.state.solutionCard?.language || 'javascript')
-            },
-            editorState: {
-              codeLength: (solution.code || '').length,
-              notesLength: (solution.notes || '').length,
-              language: solution.language || 'javascript'
-            }
-          });
         } else {
-          await logSolutionFlow('EnterSolutionError', 'Toggle succeeded but no solution card returned', {
-            apiResult: toggleResult,
-            solutionState: solutionCard.state
-          });
         }
       }
     } catch (error) {
-      const duration = Math.round(performance.now() - startTime);
-      const memoryDelta = getMemoryUsage() - initialMemory;
+      // Error handling without performance tracking
       
       // Log comprehensive error information
-      await logSolutionFlow('solution_toggle_failure', {
-        attemptedRecovery: 'fallback_to_previous_state',
-        recoverabilityAssessment: 'high', // User can retry the operation
-        dataLossRisk: 'none' // No content should be lost
-      }, {
-        operationId,
-        duration,
-        memoryDelta,
-        solutionState: solutionCard.state,
-        userImpact: 'MEDIUM' // Operation failed but no data loss
-      });
       
-      await logSolutionFlow('HandleToggleError', 'Error during solution toggle', {
-        error: error instanceof Error ? error.message : String(error),
-        solutionState: solutionCard.state,
-        operationId,
-        duration,
-        memoryDelta
-      });
       
       console.error('Failed to toggle solution view:', error);
       
       // Attempt graceful recovery - ensure editor state is consistent
       try {
         if (currentCard) {
-          await logSolutionFlow('attempting_recovery', {
-            recoveryAction: 'restore_editor_consistency',
-            targetState: 'editor_matches_currentCard',
-            operationId
-          });
           
           // Force editor to match current card state
           debugSetCode(currentCard.code || '');
@@ -1220,83 +816,17 @@ export default function ProblemCard() {
           
           // Validate recovery
           setTimeout(async () => {
-            await logSolutionFlow('ErrorRecoveryValidation', {
-              expectedCode: currentCard.code || '',
-              expectedNotes: currentCard.notes || '',
-              expectedLanguage: currentCard.language || 'javascript',
-              actualCode: currentCard.code || '',
-              actualNotes: currentCard.notes || '',
-              actualLanguage: currentCard.language || 'javascript'
-            }, {
-              operationId,
-              recoveryContext: 'post_error_state_restoration'
-            });
           }, 10);
         }
       } catch (recoveryError) {
-        await logSolutionFlow('recovery_failure', {
-          operationId,
-          criticalError: true,
-          userImpact: 'HIGH'
-        });
       }
     } finally {
-      // Always log performance metrics for analysis
-      const totalDuration = Math.round(performance.now() - startTime);
-      const finalMemory = getMemoryUsage();
-      const memoryDelta = finalMemory - initialMemory;
+      // Performance tracking removed
       
-      await logSolutionFlow('PerformanceComplete', {
-        totalDuration,
-        memoryDelta,
-        finalMemoryUsage: finalMemory,
-        operationType: 'solution_toggle',
-        consistencyRate: 100, // Assume 100% if no errors occurred
-        userExperience: totalDuration < 200 ? 'excellent' : totalDuration < 500 ? 'good' : 'poor'
-      }, {
-        completionStatus: 'finished',
-        memoryEfficient: memoryDelta < 1024 * 1024, // Less than 1MB delta is good
-        performanceTarget: 'sub_200ms'
-      });
       
       // Complete sequence tracking
-      await logSolutionFlow('SequenceComplete', {
-        outcome: 'completed_successfully',
-        totalDuration: totalDuration,
-        memoryDelta,
-        operationType: 'solution_toggle',
-        finalState: {
-          solutionActive: solutionCard.state.isActive,
-          currentCardId: currentCard?.id,
-          editorSynced: true
-        }
-      }, {
-        performanceMetrics: {
-          duration: totalDuration,
-          memoryEfficient: memoryDelta < 1024 * 1024
-        }
-      });
     }
 
-    await logSolutionFlow('HandleToggleComplete', 'Solution toggle handler completed', {
-      finalState: {
-        solutionActive: solutionCard.state.isActive,
-        currentCardId: currentCard?.id,
-        codeLength: code.length,
-        notesLength: notes.length,
-        language: language,
-        hasSolutionCard: !!solutionCard.state.solutionCard,
-        originalCardStored: !!originalCardRef.current
-      },
-      stateValidation: {
-        // When in solution mode, should have solution card and original card stored
-        solutionModeValid: solutionCard.state.isActive ? !!solutionCard.state.solutionCard : true,
-        originalCardManagement: solutionCard.state.isActive ? !!originalCardRef.current : originalCardRef.current === null,
-        editorsConsistent: true,
-        memoryUsage: getMemoryUsage()
-      },
-      transitionSuccess: true
-    });
   }, [solutionCard, currentCard, navigateToCard, problemId, code, notes, language]);
 
   const deleteCard = async () => {
