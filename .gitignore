@@ -221,6 +221,11 @@ add-sample-data.js
 check-database-status.js
 verify-migration.cjs
 
+# Debug files and development traces
+**/debug/
+**/*debug*.txt
+**/dev-data/debug/
+
 # Examples and test data
 examples/
 # =============================================================================

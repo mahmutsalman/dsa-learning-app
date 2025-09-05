@@ -522,6 +522,30 @@ pub async fn import_problems_from_txt(
         match db.create_problem(request) {
             Ok(created_problem) => {
                 eprintln!("✅ Rust: Successfully created problem '{}' with ID: {}", problem.title, created_problem.id);
+                
+                // Create tags for the problem if any exist
+                if !problem.tags.is_empty() {
+                    eprintln!("🏷️ Rust: Creating {} tags for problem '{}'", problem.tags.len(), problem.title);
+                    for tag_name in &problem.tags {
+                        let tag_request = AddProblemTagRequest {
+                            problem_id: created_problem.id.clone(),
+                            tag_name: tag_name.clone(),
+                            color: None,
+                            category: Some("custom".to_string()),
+                        };
+                        
+                        match db.add_problem_tag(tag_request) {
+                            Ok(tag) => {
+                                eprintln!("✅ Rust: Created tag '{}' for problem '{}'", tag.name, problem.title);
+                            },
+                            Err(e) => {
+                                eprintln!("⚠️ Rust: Failed to create tag '{}' for problem '{}': {}", tag_name, problem.title, e);
+                                // Don't fail the entire import for tag creation failures
+                            }
+                        }
+                    }
+                }
+                
                 result.imported_count += 1;
             },
             Err(e) => {
@@ -736,8 +760,7 @@ fn set_problem_field(problem: &mut ParsedProblem, field: &str, value: &str) -> R
             problem.hints = parse_list_field(value);
         },
         "tags" => {
-            // Handle tags as additional topics for now
-            problem.topics.extend(parse_list_field(value));
+            problem.tags = parse_list_field(value);
         },
         _ => return Err(format!("Unknown field: {}", field)),
     }
