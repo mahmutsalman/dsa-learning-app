@@ -206,13 +206,8 @@ export default function Dashboard() {
             // Sum up total_duration from all cards for this problem
             const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0), 0);
             
-            // Find the most recent card modification date
-            const lastUpdatedAt = cards.length > 0 
-              ? cards
-                  .map(card => card.last_modified)
-                  .filter(date => date) // Filter out null/undefined dates
-                  .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
-              : undefined;
+            // Use problem.updated_at as the last updated timestamp (simplified)
+            const lastUpdatedAt = problem.updated_at;
             
             return {
               ...problem,

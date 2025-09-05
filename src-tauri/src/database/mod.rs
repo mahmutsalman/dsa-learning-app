@@ -2,7 +2,7 @@ mod schema;
 
 use rusqlite::{Connection, params, OptionalExtension};
 use anyhow::Context;
-use chrono::Utc;
+use chrono::{Utc, DateTime, NaiveDateTime};
 use uuid::Uuid;
 use crate::models::*;
 use schema::{CREATE_TABLES_SQL, CREATE_INDEXES_SQL};
@@ -45,8 +45,26 @@ fn convert_problem_to_frontend(db_problem: Problem) -> FrontendProblem {
         hints: parse_json_array(&db_problem.hints),
         related_problem_ids,
         created_at: db_problem.created_at,
+        updated_at: db_problem.updated_at,
         tags: Vec::new(), // Will be populated separately if needed
     }
+}
+
+// Helper function to parse datetime strings with multiple format support
+fn parse_datetime_flexible(datetime_str: &str) -> DateTime<Utc> {
+    // Try parsing as RFC3339/ISO 8601 first (new format)
+    if let Ok(dt) = datetime_str.parse::<DateTime<Utc>>() {
+        return dt;
+    }
+    
+    // Try parsing as simple datetime format (old format: "2025-08-07 19:10:58")
+    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S") {
+        return naive_dt.and_utc();
+    }
+    
+    // If all parsing fails, return current time as fallback
+    eprintln!("⚠️ Failed to parse datetime '{}', using current time as fallback", datetime_str);
+    Utc::now()
 }
 
 pub struct DatabaseManager {
@@ -711,6 +729,7 @@ impl DatabaseManager {
             hints: req.hints,
             related_problem_ids: req.related_problem_ids.unwrap_or_default(),
             created_at: now,
+            updated_at: now,
             tags: Vec::new(), // Empty for newly created problems
         })
     }
@@ -720,9 +739,9 @@ impl DatabaseManager {
         let has_related_column = self.has_related_problem_ids_column();
         
         let sql = if has_related_column {
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at FROM problems ORDER BY created_at DESC"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at FROM problems ORDER BY created_at DESC"
         } else {
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at FROM problems ORDER BY created_at DESC"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at, updated_at FROM problems ORDER BY created_at DESC"
         };
         
         let mut stmt = self.connection.prepare(sql)?;
@@ -738,7 +757,8 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
+                updated_at: parse_datetime_flexible(&row.get::<_, String>(10)?),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -756,9 +776,9 @@ impl DatabaseManager {
         let has_related_column = self.has_related_problem_ids_column();
         
         let sql = if has_related_column {
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at FROM problems WHERE id = ?1"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at FROM problems WHERE id = ?1"
         } else {
-            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at FROM problems WHERE id = ?1"
+            "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at, updated_at FROM problems WHERE id = ?1"
         };
         
         let mut stmt = self.connection.prepare(sql)?;
@@ -774,7 +794,8 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
+                updated_at: parse_datetime_flexible(&row.get::<_, String>(10)?),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -848,6 +869,11 @@ impl DatabaseManager {
         if update_fields.is_empty() {
             return Ok(existing_problem);
         }
+
+        // Always update the updated_at timestamp when any field is modified
+        let now = Utc::now();
+        update_fields.push("updated_at = ?");
+        update_values.push(Box::new(now.to_rfc3339()));
 
         // Build the SQL query
         let sql = format!(
@@ -1143,9 +1169,10 @@ impl DatabaseManager {
             |row| row.get(0),
         )?;
         
+        let now = Utc::now();
         self.connection.execute(
-            "UPDATE cards SET total_duration = total_duration + ?1 WHERE id = ?2",
-            params![duration, &card_id],
+            "UPDATE cards SET total_duration = total_duration + ?1, last_modified = ?2 WHERE id = ?3",
+            params![duration, &now.to_rfc3339(), &card_id],
         )?;
         
         Ok(())
@@ -1207,9 +1234,10 @@ impl DatabaseManager {
                 }
                 
                 // Update card's total duration (subtract the deleted session duration)
+                let now = Utc::now();
                 tx.execute(
-                    "UPDATE cards SET total_duration = total_duration - ?1 WHERE id = ?2",
-                    params![duration, &card_id]
+                    "UPDATE cards SET total_duration = total_duration - ?1, last_modified = ?2 WHERE id = ?3",
+                    params![duration, &now.to_rfc3339(), &card_id]
                 )?;
                 
                 // Commit the transaction
@@ -1786,6 +1814,7 @@ impl DatabaseManager {
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                     created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                    updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             },
@@ -1858,6 +1887,7 @@ impl DatabaseManager {
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8)?,
                     created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                    updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             })?;
@@ -1949,6 +1979,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
                 created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
@@ -2009,6 +2040,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
                 created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;

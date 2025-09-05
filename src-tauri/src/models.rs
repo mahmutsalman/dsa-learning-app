@@ -70,6 +70,7 @@ pub struct Problem {
     pub hints: String,       // JSON string for array
     pub related_problem_ids: Option<String>, // JSON string for array of problem IDs
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // Frontend-compatible version with parsed arrays
@@ -85,6 +86,7 @@ pub struct FrontendProblem {
     pub hints: Vec<String>,
     pub related_problem_ids: Vec<String>, // Array of related problem IDs
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
     pub tags: Vec<String>, // For compatibility with frontend expectations
 }
 
