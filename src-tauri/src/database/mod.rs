@@ -683,8 +683,8 @@ impl DatabaseManager {
                 .unwrap_or_else(|| "[]".to_string());
                 
             self.connection.execute(
-                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     &id,
                     &req.title,
@@ -696,13 +696,14 @@ impl DatabaseManager {
                     &hints_json,
                     &related_problem_ids_json,
                     &now.to_rfc3339(),
+                    &now.to_rfc3339(),
                 ],
             )?;
         } else {
             // Use old schema without related_problem_ids column
             self.connection.execute(
-                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     &id,
                     &req.title,
@@ -712,6 +713,7 @@ impl DatabaseManager {
                     leetcode_url,
                     &constraints_json,
                     &hints_json,
+                    &now.to_rfc3339(),
                     &now.to_rfc3339(),
                 ],
             )?;
