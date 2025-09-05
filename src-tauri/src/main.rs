@@ -88,6 +88,7 @@ async fn main() {
             commands::database::get_problem_by_id,
             commands::database::update_problem,
             commands::database::delete_problem,
+            commands::database::get_problem_delete_stats,
             commands::database::create_card,
             commands::database::get_cards_for_problem,
             commands::database::get_card_by_id,

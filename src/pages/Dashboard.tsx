@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { Problem, Difficulty, Card, Tag, SearchState, SearchType } from '../types';
+import { Problem, Difficulty, Card, Tag, SearchState, SearchType, ProblemDeleteStats } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
 import NewProblemModal from '../components/NewProblemModal';
 import SearchWithAutocomplete from '../components/SearchWithAutocomplete';
 import { ProblemImporter } from '../components/ProblemImporter/ProblemImporter';
 import BulkDeleteDialog from '../components/BulkDeleteDialog';
+import DeleteProblemDialog from '../components/DeleteProblemDialog';
 import { ImportResult } from '../components/ProblemImporter/types';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
 import { useStats } from '../contexts/StatsContext';
@@ -73,6 +74,12 @@ export default function Dashboard() {
   const [selectedProblemIds, setSelectedProblemIds] = useState<Set<string>>(new Set());
   const [isBulkTagModal, setIsBulkTagModal] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+
+  // Single problem delete state
+  const [showDeleteProblemDialog, setShowDeleteProblemDialog] = useState(false);
+  const [problemToDelete, setProblemToDelete] = useState<ProblemWithStudyTime | null>(null);
+  const [deleteStats, setDeleteStats] = useState<ProblemDeleteStats | null>(null);
+  const [isLoadingDeleteStats, setIsLoadingDeleteStats] = useState(false);
 
   // Sort problems based on selected criteria
   const sortProblems = (problemsToSort: ProblemWithStudyTime[], sortOption: SortOption, direction: SortDirection): ProblemWithStudyTime[] => {
@@ -359,6 +366,67 @@ export default function Dashboard() {
     // Reload problems to show the updated problem
     await loadProblems();
     setProblemToEdit(null);
+  };
+
+  // Handle delete problem action
+  const handleDeleteProblem = async () => {
+    const selectedProblem = problems.find(p => p.id === selectedProblemId);
+    if (!selectedProblem) {
+      console.error('Selected problem not found');
+      return;
+    }
+
+    setProblemToDelete(selectedProblem);
+    setIsLoadingDeleteStats(true);
+    setDeleteStats(null);
+    setShowDeleteProblemDialog(true);
+
+    try {
+      // Load deletion stats
+      const stats = await invoke<ProblemDeleteStats | null>('get_problem_delete_stats', { 
+        problemId: selectedProblemId 
+      });
+      setDeleteStats(stats);
+    } catch (error) {
+      console.error('Failed to load delete stats:', error);
+      // Still show dialog even if stats fail to load
+      setDeleteStats(null);
+    } finally {
+      setIsLoadingDeleteStats(false);
+    }
+  };
+
+  // Handle delete problem confirmation
+  const handleDeleteProblemConfirm = async () => {
+    if (!problemToDelete) return;
+
+    try {
+      await invoke('delete_problem', { id: problemToDelete.id });
+      
+      // Reload problems to reflect changes
+      await loadProblems();
+      
+      // Close dialog and reset state
+      setShowDeleteProblemDialog(false);
+      setProblemToDelete(null);
+      setDeleteStats(null);
+      
+      // Show success notification (you can add a toast notification system if desired)
+      console.log(`Problem "${problemToDelete.title}" deleted successfully`);
+      
+    } catch (error) {
+      console.error('Failed to delete problem:', error);
+      // You might want to show an error message to the user here
+      alert(`Failed to delete problem: ${error}`);
+    }
+  };
+
+  // Handle delete problem cancel
+  const handleDeleteProblemCancel = () => {
+    setShowDeleteProblemDialog(false);
+    setProblemToDelete(null);
+    setDeleteStats(null);
+    setIsLoadingDeleteStats(false);
   };
 
   // Handle search functionality
@@ -878,6 +946,7 @@ export default function Dashboard() {
         onClose={() => setShowContextMenu(false)}
         onManageTags={handleManageTags}
         onEditProblem={handleEditProblem}
+        onDeleteProblem={handleDeleteProblem}
         position={contextMenuPosition}
         problemId={selectedProblemId}
       />
@@ -934,6 +1003,16 @@ export default function Dashboard() {
             cardCount: problem.cardCount
           }))
         }
+      />
+
+      {/* Delete Problem Dialog */}
+      <DeleteProblemDialog
+        isOpen={showDeleteProblemDialog}
+        onClose={handleDeleteProblemCancel}
+        onConfirm={handleDeleteProblemConfirm}
+        problemTitle={problemToDelete?.title || ''}
+        deleteStats={deleteStats}
+        isLoading={isLoadingDeleteStats}
       />
     </div>
   );

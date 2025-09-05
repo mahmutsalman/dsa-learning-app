@@ -88,8 +88,59 @@ pub async fn delete_problem(
     id: String,
 ) -> Result<String, String> {
     eprintln!("🗑️ Rust: delete_problem called for ID: {}", id);
+    
+    // Step 1: Get all files that need to be deleted before starting database transaction
+    let mut files_to_delete: Vec<String> = Vec::new();
+    
+    {
+        let db = state.db.lock().map_err(|e| {
+            eprintln!("❌ Rust: Failed to acquire database lock in delete_problem: {}", e);
+            e.to_string()
+        })?;
+        
+        // Get audio recording files using the public method
+        let recording_files = match db.get_recording_files_for_problem(&id) {
+            Ok(files) => files,
+            Err(e) => {
+                eprintln!("⚠️ Rust: Failed to query recording files: {}", e);
+                Vec::new()
+            }
+        };
+        
+        files_to_delete.extend(recording_files);
+        
+        // Get problem image files using the public method
+        let image_files = match db.get_image_files_for_problem(&id) {
+            Ok(files) => files,
+            Err(e) => {
+                eprintln!("⚠️ Rust: Failed to query image files: {}", e);
+                Vec::new()
+            }
+        };
+        
+        files_to_delete.extend(image_files);
+    }
+    
+    eprintln!("🗑️ Rust: Found {} files to delete", files_to_delete.len());
+    
+    // Step 2: Delete files from filesystem using PathResolver
+    for file_path in &files_to_delete {
+        let full_path = state.path_resolver.resolve_relative_path(file_path);
+        eprintln!("🔄 Rust: Resolving file path: {} -> {}", file_path, full_path.display());
+        
+        if full_path.exists() {
+            match std::fs::remove_file(&full_path) {
+                Ok(_) => eprintln!("✅ Rust: Deleted file: {}", full_path.display()),
+                Err(e) => eprintln!("⚠️ Rust: Failed to delete file {}: {}", full_path.display(), e),
+            }
+        } else {
+            eprintln!("⚠️ Rust: File not found (may already be deleted): {}", full_path.display());
+        }
+    }
+    
+    // Step 3: Delete from database
     let mut db = state.db.lock().map_err(|e| {
-        eprintln!("❌ Rust: Failed to acquire database lock in delete_problem: {}", e);
+        eprintln!("❌ Rust: Failed to acquire database lock for deletion: {}", e);
         e.to_string()
     })?;
     
@@ -100,6 +151,29 @@ pub async fn delete_problem(
         },
         Err(e) => {
             eprintln!("❌ Rust: Failed to delete problem with ID {}: {}", id, e);
+            Err(e.to_string())
+        }
+    }
+}
+
+#[tauri::command]
+pub async fn get_problem_delete_stats(
+    state: State<'_, AppState>,
+    problem_id: String,
+) -> Result<Option<ProblemDeleteStats>, String> {
+    eprintln!("📊 Rust: get_problem_delete_stats called for ID: {}", problem_id);
+    let db = state.db.lock().map_err(|e| {
+        eprintln!("❌ Rust: Failed to acquire database lock in get_problem_delete_stats: {}", e);
+        e.to_string()
+    })?;
+    
+    match db.get_problem_delete_stats(&problem_id) {
+        Ok(stats) => {
+            eprintln!("✅ Rust: Successfully retrieved delete stats for problem: {}", problem_id);
+            Ok(stats)
+        },
+        Err(e) => {
+            eprintln!("❌ Rust: Failed to get delete stats for problem {}: {}", problem_id, e);
             Err(e.to_string())
         }
     }
@@ -297,18 +371,18 @@ pub async fn delete_problems_bulk(
     state: State<'_, AppState>,
     problem_ids: Vec<String>,
 ) -> Result<String, String> {
-    let mut db = state.db.lock().map_err(|e| e.to_string())?;
-    
     let total_problems = problem_ids.len();
     eprintln!("🗑️ [Bulk Delete] Starting bulk deletion of {} problems", total_problems);
     
     let mut deleted_count = 0;
     let mut errors = Vec::new();
     
+    // Process each problem individually using the single delete function
+    // which has proper file handling with PathResolver
     for (index, problem_id) in problem_ids.iter().enumerate() {
         eprintln!("🗑️ [Bulk Delete] Deleting problem {}/{}: {}", index + 1, total_problems, problem_id);
         
-        match db.delete_problem_with_files(problem_id) {
+        match delete_problem(state.clone(), problem_id.clone()).await {
             Ok(_) => {
                 deleted_count += 1;
                 eprintln!("✅ [Bulk Delete] Successfully deleted problem: {}", problem_id);

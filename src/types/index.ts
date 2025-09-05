@@ -219,6 +219,7 @@ export interface ProblemContextMenuProps {
   onClose: () => void;
   onManageTags: () => void;
   onEditProblem: () => void;
+  onDeleteProblem: () => void;
   position: { x: number; y: number };
   problemId: string;
 }
@@ -305,4 +306,23 @@ export interface SearchSuggestion {
   value: string;
   type: SearchType;
   count?: number; // Number of problems matching this suggestion
+}
+
+// Problem deletion types
+export interface ProblemDeleteStats {
+  total_cards: number;
+  main_cards: number;
+  child_cards: number;
+  recordings_count: number;
+  images_count: number;
+  total_duration: number; // in seconds
+}
+
+export interface DeleteProblemDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  problemTitle: string;
+  deleteStats: ProblemDeleteStats | null;
+  isLoading: boolean;
 }

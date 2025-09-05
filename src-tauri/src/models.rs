@@ -363,3 +363,14 @@ impl ParsedProblem {
         }
     }
 }
+
+// Problem deletion stats
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProblemDeleteStats {
+    pub total_cards: i32,
+    pub main_cards: i32,
+    pub child_cards: i32,
+    pub recordings_count: i32,
+    pub images_count: i32,
+    pub total_duration: i32, // in seconds
+}

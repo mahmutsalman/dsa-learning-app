@@ -2485,4 +2485,99 @@ impl DatabaseManager {
         
         Ok(())
     }
+
+    /// Get statistics about what data will be deleted with a problem
+    pub fn get_problem_delete_stats(&self, problem_id: &str) -> anyhow::Result<Option<crate::models::ProblemDeleteStats>> {
+        println!("📊 [Database] Getting delete stats for problem: {}", problem_id);
+        
+        // First verify the problem exists
+        let problem_exists: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problems WHERE id = ?1",
+            [problem_id],
+            |row| row.get(0)
+        )?;
+        
+        if problem_exists == 0 {
+            println!("❌ [Database] Problem not found: {}", problem_id);
+            return Ok(None);
+        }
+
+        // Get card counts
+        let (total_cards, main_cards, child_cards): (i32, i32, i32) = self.connection.query_row(
+            "SELECT 
+                COUNT(*) as total_cards,
+                COUNT(CASE WHEN parent_card_id IS NULL THEN 1 END) as main_cards,
+                COUNT(CASE WHEN parent_card_id IS NOT NULL THEN 1 END) as child_cards
+             FROM cards 
+             WHERE problem_id = ?1",
+            [problem_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        )?;
+
+        // Get recordings count
+        let recordings_count: i32 = self.connection.query_row(
+            "SELECT COUNT(DISTINCT r.id) 
+             FROM recordings r
+             JOIN cards c ON r.card_id = c.id 
+             WHERE c.problem_id = ?1",
+            [problem_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Get images count
+        let images_count: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problem_images WHERE problem_id = ?1",
+            [problem_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        // Get total duration from time sessions
+        let total_duration: i32 = self.connection.query_row(
+            "SELECT COALESCE(SUM(duration), 0)
+             FROM time_sessions ts
+             JOIN cards c ON ts.card_id = c.id
+             WHERE c.problem_id = ?1 AND ts.duration IS NOT NULL",
+            [problem_id],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        let stats = crate::models::ProblemDeleteStats {
+            total_cards,
+            main_cards,
+            child_cards,
+            recordings_count,
+            images_count,
+            total_duration,
+        };
+
+        println!("📊 [Database] Delete stats for {}: {} cards ({} main, {} child), {} recordings, {} images, {}s total duration", 
+                 problem_id, stats.total_cards, stats.main_cards, stats.child_cards, 
+                 stats.recordings_count, stats.images_count, stats.total_duration);
+
+        Ok(Some(stats))
+    }
+
+    /// Get recording file paths for a specific problem
+    pub fn get_recording_files_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<String>> {
+        let recording_files: Vec<String> = self.connection.prepare(
+            "SELECT DISTINCT filepath FROM recordings r 
+             JOIN cards c ON r.card_id = c.id 
+             WHERE c.problem_id = ?1"
+        )?
+        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        Ok(recording_files)
+    }
+
+    /// Get image file paths for a specific problem
+    pub fn get_image_files_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<String>> {
+        let image_files: Vec<String> = self.connection.prepare(
+            "SELECT image_path FROM problem_images WHERE problem_id = ?1"
+        )?
+        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        Ok(image_files)
+    }
 }
