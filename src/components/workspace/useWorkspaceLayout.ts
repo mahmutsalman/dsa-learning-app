@@ -294,10 +294,17 @@ export function useWorkspaceLayout(options: UseWorkspaceLayoutOptions = {}) {
     }, [calculateConstraints, setStoredProblemWidth, setStoredCodeHeight, setStoredLayoutMode, setStoredCollapsedState]),
   };
 
-  // Trigger layout change callback
+  // Trigger layout change callback only when layout actually changes (not just any state update)
   useEffect(() => {
     onLayoutChange?.(state);
-  }, [state, onLayoutChange]);
+  }, [
+    state.dimensions.problemPanelWidth, 
+    state.dimensions.codeEditorHeight, 
+    state.layout.mode, 
+    state.layout.isCollapsed.problemPanel, 
+    state.layout.isCollapsed.notesEditor,
+    onLayoutChange
+  ]);
 
   return { state, actions };
 }

@@ -210,10 +210,10 @@ export function QuillEditor({
         console.debug('QuillEditor: No initial content to set');
       }
 
-      // Handle content changes
+      // Handle content changes - throttled logging for performance
+      let lastLogTime = 0;
       quill.on('text-change', () => {
         if (isUpdatingRef.current) {
-          console.debug('QuillEditor: Skipping text-change - currently updating');
           return;
         }
         
@@ -221,12 +221,17 @@ export function QuillEditor({
         const isEmpty = html === '<p><br></p>' || html === '<p></p>' || !html.trim();
         const newValue = isEmpty ? '' : html;
         
-        console.debug('QuillEditor: Text changed', {
-          html: html,
-          isEmpty: isEmpty,
-          newValue: newValue,
-          length: newValue.length
-        });
+        // Only log every 2 seconds to prevent performance issues
+        const now = Date.now();
+        if (now - lastLogTime > 2000) {
+          console.debug('QuillEditor: Text changed', {
+            html: html.substring(0, 100) + (html.length > 100 ? '...' : ''),
+            isEmpty: isEmpty,
+            newValue: newValue.substring(0, 100) + (newValue.length > 100 ? '...' : ''),
+            length: newValue.length
+          });
+          lastLogTime = now;
+        }
         
         stableOnChange(newValue);
       });
@@ -288,23 +293,29 @@ export function QuillEditor({
       }
 
       if (!quillRef.current) {
-        console.debug('QuillEditor: Quill not ready, will retry when available', {
-          hasValue: !!value,
-          valueLength: value?.length || 0
-        });
+        // Only log occasionally to prevent spam
+        if (Math.random() < 0.1) { // Log 10% of the time
+          console.debug('QuillEditor: Quill not ready, will retry when available', {
+            hasValue: !!value,
+            valueLength: value?.length || 0
+          });
+        }
         return false;
       }
       
       const currentContent = quillRef.current.root.innerHTML;
       const needsUpdate = value !== currentContent;
       
-      console.debug('QuillEditor: External content update check', {
-        valueLength: value?.length || 0,
-        currentLength: currentContent?.length || 0,
-        needsUpdate,
-        valuePreview: value ? value.substring(0, 50) + '...' : 'empty',
-        currentPreview: currentContent ? currentContent.substring(0, 50) + '...' : 'empty'
-      });
+      // Only log external content update checks occasionally for performance
+      if (needsUpdate || Math.random() < 0.01) { // Log 1% of checks or when update is needed
+        console.debug('QuillEditor: External content update check', {
+          valueLength: value?.length || 0,
+          currentLength: currentContent?.length || 0,
+          needsUpdate,
+          valuePreview: value ? value.substring(0, 50) + '...' : 'empty',
+          currentPreview: currentContent ? currentContent.substring(0, 50) + '...' : 'empty'
+        });
+      }
       
       if (needsUpdate) {
         console.debug('QuillEditor: Updating content externally');
@@ -348,11 +359,17 @@ export function QuillEditor({
     if (value && value.trim() && !quillRef.current) {
       console.debug('QuillEditor: Setting up retry mechanism for content update');
       
+      let retryCount = 0;
       const retryInterval = window.setInterval(() => {
-        console.debug('QuillEditor: Retrying content update', {
-          hasQuill: !!quillRef.current,
-          hasValue: !!value
-        });
+        retryCount++;
+        // Only log every 10th retry (every 500ms) to reduce console spam
+        if (retryCount % 10 === 0) {
+          console.debug('QuillEditor: Retrying content update', {
+            hasQuill: !!quillRef.current,
+            hasValue: !!value,
+            retryCount
+          });
+        }
         
         if (updateContent()) {
           console.debug('QuillEditor: Content update retry successful');

@@ -35,6 +35,8 @@ export class AnswerCardDebugLogger {
   private static isEnabled = true; // Enable for debugging session
   private static operationTimers = new Map<string, number>();
   private static renderCounters = new Map<string, number>();
+  private static lastLogTime = 0; // Throttle frequent logging
+  private static logCounter = 0;
   private static performanceBaseline = {
     apiResponseTime: 1000, // 1 second baseline
     editorChangeLatency: 100, // 100ms baseline
@@ -42,10 +44,24 @@ export class AnswerCardDebugLogger {
   };
 
   /**
-   * Log answer card operation with timestamp, timing, and context
+   * Log answer card operation with timestamp, timing, and context (throttled)
    */
   static async log(category: string, action: string, data: any, context?: any, timing?: TimingInfo, performance?: PerformanceInfo) {
     if (!this.isEnabled) return;
+
+    // Throttle frequent logging - only log every 500ms for editor changes
+    const now = Date.now();
+    const isEditorLog = category.includes('Editor') || action.includes('Editor');
+    
+    if (isEditorLog) {
+      this.logCounter++;
+      // Only log every 10th editor change or if 2 seconds have passed
+      if (this.logCounter % 10 !== 0 && (now - this.lastLogTime) < 2000) {
+        return;
+      }
+    }
+    
+    this.lastLogTime = now;
 
     const entry: DebugLogEntry = {
       timestamp: new Date().toISOString(),
@@ -65,8 +81,13 @@ export class AnswerCardDebugLogger {
         content: logLine + '\n'
       });
       
-      // Also log to console for immediate feedback
-      console.debug(`[AnswerCard] ${category}.${action}:`, data, context ? `Context: ${JSON.stringify(context)}` : '');
+      // Also log to console for immediate feedback (less verbose for editor changes)
+      if (isEditorLog) {
+        console.debug(`[AnswerCard] ${category}.${action}: (${this.logCounter})`, 
+          typeof data === 'object' ? `Length: ${data.codeLength || 0}/${data.notesLength || 0}` : data);
+      } else {
+        console.debug(`[AnswerCard] ${category}.${action}:`, data, context ? `Context: ${JSON.stringify(context)}` : '');
+      }
     } catch (error) {
       console.error('Failed to write answer card debug log:', error instanceof Error ? error.message : String(error));
     }

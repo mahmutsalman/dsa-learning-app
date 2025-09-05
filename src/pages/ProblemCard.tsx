@@ -245,82 +245,70 @@ export default function ProblemCard() {
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
 
-  // Enhanced debug wrapper for setNotes to track state changes with performance monitoring
+  // Throttled debug wrapper for setNotes - prevents excessive logging during typing
   const debugSetNotes = useCallback((newNotes: string) => {
-    const operationId = `setNotes-${Date.now()}`;
-    const changeStartTime = performance.now();
-    
-    const beforeData = {
-      notes,
-      code,
-      language,
-      length: notes.length
-    };
-    
-    console.debug('ProblemCard: setNotes called', {
-      oldValue: notes,
-      newValue: newNotes,
-      currentCard: currentCard?.id,
-      autoSaveEnabled: !!currentCard,
-      operationId
-    });
-    
     setNotes(newNotes);
     
-    // Log editor change with timing
-    const changeLatency = Math.round(performance.now() - changeStartTime);
-    logEditorChange('NotesEditor', {
-      notes: newNotes,
-      code,
-      language
-    }, {
-      operationId,
-      trigger: 'ProblemCard.debugSetNotes',
-      cardId: currentCard?.id,
-      lengthDifference: newNotes.length - notes.length
-    }, {
-      duration: changeLatency,
-      operationId
-    }, beforeData);
+    // Only log significant changes or periodically to prevent performance issues
+    const lengthDiff = Math.abs(newNotes.length - notes.length);
+    const shouldLog = lengthDiff > 50 || (lengthDiff > 0 && Date.now() % 1000 < 100);
+    
+    if (shouldLog) {
+      const operationId = `setNotes-${Date.now()}`;
+      const beforeData = {
+        notes,
+        code,
+        language,
+        length: notes.length
+      };
+      
+      logEditorChange('NotesEditor', {
+        notes: newNotes,
+        code,
+        language
+      }, {
+        operationId,
+        trigger: 'ProblemCard.debugSetNotes',
+        cardId: currentCard?.id,
+        lengthDifference: newNotes.length - notes.length
+      }, {
+        duration: 0,
+        operationId
+      }, beforeData);
+    }
   }, [notes, code, language, currentCard]);
 
-  // Enhanced debug wrapper for setCode to track state changes with performance monitoring
+  // Throttled debug wrapper for setCode - prevents excessive logging during typing
   const debugSetCode = useCallback((newCode: string) => {
-    const operationId = `setCode-${Date.now()}`;
-    const changeStartTime = performance.now();
-    
-    const beforeData = {
-      code,
-      notes,
-      language,
-      length: code.length
-    };
-    
-    console.debug('ProblemCard: setCode called', {
-      oldValue: code,
-      newValue: newCode,
-      currentCard: currentCard?.id,
-      autoSaveEnabled: !!currentCard,
-      operationId
-    });
-    
     setCode(newCode);
     
-    // Log editor change with timing
-    const changeLatency = Math.round(performance.now() - changeStartTime);
-    logEditorChange('CodeEditor', {
-      code: newCode,
-      notes,
-      language
-    }, {
-      operationId,
-      trigger: 'ProblemCard.debugSetCode',
-      cardId: currentCard?.id,
-      lengthDifference: newCode.length - code.length
-    }, {
-      duration: changeLatency,
-      operationId
-    }, beforeData);
+    // Only log significant changes or periodically to prevent performance issues
+    const lengthDiff = Math.abs(newCode.length - code.length);
+    const shouldLog = lengthDiff > 50 || (lengthDiff > 0 && Date.now() % 1000 < 100);
+    
+    if (shouldLog) {
+      const operationId = `setCode-${Date.now()}`;
+      const beforeData = {
+        code,
+        notes,
+        language,
+        length: code.length
+      };
+      
+      logEditorChange('CodeEditor', {
+        code: newCode,
+        notes,
+        language
+      }, {
+        operationId,
+        trigger: 'ProblemCard.debugSetCode',
+        cardId: currentCard?.id,
+        lengthDifference: newCode.length - code.length
+      }, {
+        duration: 0,
+        operationId
+      }, beforeData);
+    }
   }, [code, notes, language, currentCard]);
   
   
@@ -328,17 +316,31 @@ export default function ProblemCard() {
 
   // Ref for the main content container to help calculate dynamic constraints
   const contentContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Throttle Monaco Editor resize events to prevent infinite loops
+  const resizeThrottleRef = useRef<{ lastResize: number; timeoutId?: number }>({ lastResize: 0 });
+  
+  const throttledResizeDispatch = useCallback(() => {
+    const now = Date.now();
+    
+    if (now - resizeThrottleRef.current.lastResize > 500) { // Throttle to max once per 500ms
+      if (resizeThrottleRef.current.timeoutId) {
+        clearTimeout(resizeThrottleRef.current.timeoutId);
+      }
+      
+      resizeThrottleRef.current.timeoutId = window.setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        resizeThrottleRef.current.lastResize = now;
+      }, 100);
+    }
+  }, []);
 
   // Workspace layout management
   const { state, actions } = useWorkspaceLayout({ 
-    onLayoutChange: (_layout) => {
-      // Trigger Monaco Editor resize when workspace layout changes
-      setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
-      }, 100);
-      // Optional: handle layout changes for debugging or analytics
-      // console.debug('Workspace layout changed:', layout);
-    }
+    onLayoutChange: useCallback((_layout) => {
+      // Trigger Monaco Editor resize when workspace layout changes (throttled)
+      throttledResizeDispatch();
+    }, [throttledResizeDispatch])
   });
 
   // Legacy state - kept for compatibility but not used in workspace mode
@@ -373,20 +375,41 @@ export default function ProblemCard() {
   const saveCard = useCallback(async () => {
     if (!currentCard) return;
     
+    // Check if anything actually needs to be saved
+    const hasCodeChange = code !== currentCard.code;
+    const hasNotesChange = notes !== currentCard.notes;
+    const hasLanguageChange = language !== currentCard.language;
+    
+    if (!hasCodeChange && !hasNotesChange && !hasLanguageChange) {
+      return; // Nothing to save
+    }
+    
     try {
       const updatedCard = await invoke<Card | null>('update_card', {
         cardId: currentCard.id,
-        code: code !== currentCard.code ? code : null,
-        notes: notes !== currentCard.notes ? notes : null,
-        language: language !== currentCard.language ? language : null,
+        code: hasCodeChange ? code : null,
+        notes: hasNotesChange ? notes : null,
+        language: hasLanguageChange ? language : null,
       });
       
-      // Update the current card and cards array if we got a card back
-      if (updatedCard) {
+      // Only update state if we got a card back and it's actually different
+      if (updatedCard && (
+        updatedCard.code !== currentCard.code || 
+        updatedCard.notes !== currentCard.notes || 
+        updatedCard.language !== currentCard.language ||
+        updatedCard.updated_at !== currentCard.updated_at
+      )) {
         setCurrentCard(updatedCard);
         setCards(prev => prev.map(card => 
           card.id === updatedCard.id ? updatedCard : card
         ));
+        
+        // Update our tracking reference
+        lastSavedValuesRef.current = {
+          code: updatedCard.code || '',
+          notes: updatedCard.notes || '',
+          language: updatedCard.language || 'javascript'
+        };
       }
       
     } catch (err) {
@@ -395,11 +418,29 @@ export default function ProblemCard() {
     }
   }, [currentCard, code, notes, language]);
 
-  // Auto-save hooks with solution mode coordination
+  // Create a stable reference to prevent unnecessary saves
+  const lastSavedValuesRef = useRef({ code: '', notes: '', language: '' });
+  
+  // Initialize the saved values reference when currentCard changes
+  useEffect(() => {
+    if (currentCard) {
+      lastSavedValuesRef.current = {
+        code: currentCard.code || '',
+        notes: currentCard.notes || '',
+        language: currentCard.language || 'javascript'
+      };
+    }
+  }, [currentCard?.id, currentCard?.code, currentCard?.notes, currentCard?.language]);
+  
+  // Auto-save hooks with solution mode coordination and improved change detection
   const codeAutoSave = useAutoSave(code, async () => {
     // Don't auto-save during solution mode transitions or when loading
     if (solutionCard.state.isLoading) {
-      console.debug('ProblemCard: Skipping code auto-save - solution mode transition in progress');
+      return;
+    }
+    
+    // Only save if the code has actually changed from what we last saved
+    if (code === lastSavedValuesRef.current.code) {
       return;
     }
     
@@ -407,20 +448,24 @@ export default function ProblemCard() {
     if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
       // Save to solution card
       if (code !== solutionCard.state.solutionCard.code) {
-        console.debug('ProblemCard: Auto-saving code to solution card');
         await solutionCard.actions.updateCode(code, language);
+        lastSavedValuesRef.current.code = code;
       }
     } else if (currentCard && code !== currentCard.code) {
       // Save to regular card
-      console.debug('ProblemCard: Auto-saving code to regular card');
       await saveCard();
+      lastSavedValuesRef.current.code = code;
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
   const notesAutoSave = useAutoSave(notes, async () => {
     // Don't auto-save during solution mode transitions or when loading
     if (solutionCard.state.isLoading) {
-      console.debug('ProblemCard: Skipping notes auto-save - solution mode transition in progress');
+      return;
+    }
+    
+    // Only save if the notes have actually changed from what we last saved
+    if (notes === lastSavedValuesRef.current.notes) {
       return;
     }
     
@@ -428,20 +473,24 @@ export default function ProblemCard() {
     if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
       // Save to solution card
       if (notes !== solutionCard.state.solutionCard.notes) {
-        console.debug('ProblemCard: Auto-saving notes to solution card');
         await solutionCard.actions.updateNotes(notes);
+        lastSavedValuesRef.current.notes = notes;
       }
     } else if (currentCard && notes !== currentCard.notes) {
       // Save to regular card
-      console.debug('ProblemCard: Auto-saving notes to regular card');
       await saveCard();
+      lastSavedValuesRef.current.notes = notes;
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
   const languageAutoSave = useAutoSave(language, async () => {
     // Don't auto-save during solution mode transitions or when loading
     if (solutionCard.state.isLoading) {
-      console.debug('ProblemCard: Skipping language auto-save - solution mode transition in progress');
+      return;
+    }
+    
+    // Only save if the language has actually changed from what we last saved
+    if (language === lastSavedValuesRef.current.language) {
       return;
     }
     
@@ -449,15 +498,15 @@ export default function ProblemCard() {
     if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
       // Save to solution card (language changes are handled via updateCode)
       if (language !== solutionCard.state.solutionCard.language) {
-        console.debug('ProblemCard: Auto-saving language to solution card');
         await solutionCard.actions.updateCode(code, language);
+        lastSavedValuesRef.current.language = language;
       }
     } else if (currentCard && language !== currentCard.language) {
       // Save to regular card
-      console.debug('ProblemCard: Auto-saving language to regular card');
       await saveCard();
+      lastSavedValuesRef.current.language = language;
     }
-  }, { delay: 1000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Faster save for language changes
+  }, { delay: 2000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Increased delay to prevent excessive saves
 
   // Manual save function
   const handleManualSave = useCallback(async () => {
