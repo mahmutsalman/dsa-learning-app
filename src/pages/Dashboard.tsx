@@ -28,7 +28,7 @@ interface ProblemWithStudyTime extends Problem {
   lastUpdatedAt?: string; // Most recent card modification date
 }
 
-export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title';
+export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title' | 'studyTime';
 export type SortDirection = 'asc' | 'desc';
 
 export default function Dashboard() {
@@ -105,6 +105,11 @@ export default function Dashboard() {
           aValue = a.title;
           bValue = b.title;
           break;
+        case 'studyTime':
+          // For study time, we'll use numeric comparison directly
+          const aTime = a.totalStudyTime || 0;
+          const bTime = b.totalStudyTime || 0;
+          return direction === 'asc' ? aTime - bTime : bTime - aTime;
         default:
           aValue = a.created_at;
           bValue = b.created_at;
@@ -804,6 +809,23 @@ export default function Dashboard() {
                 <span className="ml-1 bg-primary-500 text-white text-xs rounded-full px-1.5 py-0.5">
                   {selectedFilterTags.length}
                 </span>
+              )}
+            </button>
+            
+            <button
+              onClick={() => handleSortChange('studyTime')}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                sortBy === 'studyTime' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' 
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <ClockIcon className="h-4 w-4 mr-1" />
+              Study Time
+              {sortBy === 'studyTime' && (
+                sortDirection === 'asc' 
+                  ? <ChevronUpIcon className="ml-1 h-4 w-4" />
+                  : <ChevronDownIcon className="ml-1 h-4 w-4" />
               )}
             </button>
           </div>
