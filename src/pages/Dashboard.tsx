@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType, ProblemDeleteStats } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
+import TagFilterModal from '../components/TagFilterModal';
 import NewProblemModal from '../components/NewProblemModal';
 import SearchWithAutocomplete from '../components/SearchWithAutocomplete';
 import { ProblemImporter } from '../components/ProblemImporter/ProblemImporter';
@@ -47,6 +48,10 @@ export default function Dashboard() {
   // Sorting state
   const [sortBy, setSortBy] = useState<SortOption>('created_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  
+  // Tag filtering state
+  const [selectedFilterTags, setSelectedFilterTags] = useState<Tag[]>([]);
+  const [showTagFilterModal, setShowTagFilterModal] = useState(false);
   
   // Use stats context
   const { showStats } = useStats();
@@ -484,6 +489,59 @@ export default function Dashboard() {
     handleSearch(suggestion, searchState.searchType);
   };
 
+  // Handle tag filtering
+  const handleTagFilter = async (tags: Tag[]) => {
+    setSelectedFilterTags(tags);
+    
+    if (tags.length === 0) {
+      // No tags selected, show all problems (respecting search if any)
+      if (searchState.query) {
+        // If there's a search query, keep the search results
+        return;
+      } else {
+        setFilteredProblems(problems);
+      }
+      return;
+    }
+
+    try {
+      console.log('DEBUG: Filtering by tags:', tags.map(t => t.name));
+      const tagIds = tags.map(tag => tag.id);
+      const filteredProblemsData = await invoke<Problem[]>('filter_problems_by_tags', { tagIds });
+      
+      // Convert to ProblemWithStudyTime format by finding matches in current problems
+      const filteredProblemIds = new Set(filteredProblemsData.map(p => p.id));
+      let filteredProblemsWithStudyTime = problems.filter(p => filteredProblemIds.has(p.id));
+      
+      // If there's also a search query, further filter the results
+      if (searchState.query) {
+        const searchResultIds = new Set(filteredProblems.map(p => p.id));
+        filteredProblemsWithStudyTime = filteredProblemsWithStudyTime.filter(p => searchResultIds.has(p.id));
+      }
+      
+      // Apply current sorting
+      const sortedResults = sortProblems(filteredProblemsWithStudyTime, sortBy, sortDirection);
+      setFilteredProblems(sortedResults);
+      
+      console.log('DEBUG: Tag filter applied, found', filteredProblemsWithStudyTime.length, 'problems');
+    } catch (error) {
+      console.error('Tag filtering failed:', error);
+      // Show error or fallback to showing all problems
+    }
+  };
+
+  // Clear tag filter
+  const clearTagFilter = () => {
+    setSelectedFilterTags([]);
+    if (searchState.query) {
+      // If there's a search, rerun the search without tag filtering
+      handleSearch(searchState.query, searchState.searchType);
+    } else {
+      // No search, show all problems
+      setFilteredProblems(problems);
+    }
+  };
+
   // Multi-selection handlers
   const toggleSelection = (problemId: string) => {
     setSelectedProblemIds(prev => {
@@ -731,6 +789,23 @@ export default function Dashboard() {
                   : <ChevronDownIcon className="ml-1 h-4 w-4" />
               )}
             </button>
+            
+            <button
+              onClick={() => setShowTagFilterModal(true)}
+              className={`flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                selectedFilterTags.length > 0 
+                  ? 'bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300' 
+                  : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <TagIcon className="h-4 w-4 mr-1" />
+              Tags
+              {selectedFilterTags.length > 0 && (
+                <span className="ml-1 bg-primary-500 text-white text-xs rounded-full px-1.5 py-0.5">
+                  {selectedFilterTags.length}
+                </span>
+              )}
+            </button>
           </div>
           
           {/* Search Results Info */}
@@ -754,6 +829,37 @@ export default function Dashboard() {
                   )}
                 </span>
               )}
+            </div>
+          )}
+          
+          {/* Active Tag Filters */}
+          {selectedFilterTags.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+              <span className="text-gray-600 dark:text-gray-400">Filtered by:</span>
+              {selectedFilterTags.map(tag => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 rounded-full"
+                >
+                  <TagIcon className="h-3 w-3" />
+                  {tag.name}
+                  <button
+                    onClick={() => {
+                      const newTags = selectedFilterTags.filter(t => t.id !== tag.id);
+                      handleTagFilter(newTags);
+                    }}
+                    className="ml-1 hover:bg-primary-200 dark:hover:bg-primary-800 rounded-full p-0.5"
+                  >
+                    <XMarkIcon className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <button
+                onClick={clearTagFilter}
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 underline"
+              >
+                Clear all filters
+              </button>
             </div>
           )}
         </div>
@@ -1013,6 +1119,14 @@ export default function Dashboard() {
         problemTitle={problemToDelete?.title || ''}
         deleteStats={deleteStats}
         isLoading={isLoadingDeleteStats}
+      />
+
+      {/* Tag Filter Modal */}
+      <TagFilterModal
+        isOpen={showTagFilterModal}
+        onClose={() => setShowTagFilterModal(false)}
+        onApply={handleTagFilter}
+        initialSelectedTags={selectedFilterTags}
       />
     </div>
   );

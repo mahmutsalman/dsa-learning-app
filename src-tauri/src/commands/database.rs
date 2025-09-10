@@ -442,6 +442,15 @@ pub async fn search_problems_by_tags(
 }
 
 #[tauri::command]
+pub async fn filter_problems_by_tags(
+    state: State<'_, AppState>,
+    tag_ids: Vec<String>,
+) -> Result<Vec<FrontendProblem>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.filter_problems_by_tags(tag_ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_search_suggestions(
     state: State<'_, AppState>,
     query: String,

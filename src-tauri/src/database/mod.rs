@@ -1747,6 +1747,62 @@ impl DatabaseManager {
         Ok(())
     }
     
+    pub fn filter_problems_by_tags(&self, tag_ids: Vec<String>) -> anyhow::Result<Vec<FrontendProblem>> {
+        if tag_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Check if related_problem_ids column exists for backward compatibility
+        let has_related_column = self.has_related_problem_ids_column();
+        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
+        
+        // Create placeholders for the IN clause
+        let placeholders: Vec<&str> = tag_ids.iter().map(|_| "?").collect();
+        let placeholders_str = placeholders.join(", ");
+        
+        let sql = format!(
+            "SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at 
+             FROM problems p
+             INNER JOIN problem_tags pt ON p.id = pt.problem_id
+             WHERE pt.tag_id IN ({})
+             ORDER BY p.title",
+            related_column_sql, placeholders_str
+        );
+        
+        println!("DEBUG: Filter by tags SQL: {}", sql);
+        println!("DEBUG: Tag IDs: {:?}", tag_ids);
+        
+        let mut stmt = self.connection.prepare(&sql)?;
+        
+        // Convert tag_ids to rusqlite::ToSql compatible values
+        let params: Vec<&dyn rusqlite::ToSql> = tag_ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        
+        let problem_iter = stmt.query_map(&params[..], |row| {
+            let problem = Problem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                difficulty: row.get(3)?,
+                topic: row.get(4)?,
+                leetcode_url: row.get(5)?,
+                constraints: row.get(6)?,
+                hints: row.get(7)?,
+                related_problem_ids: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+            };
+            Ok(convert_problem_to_frontend(problem))
+        })?;
+        
+        let mut problems = Vec::new();
+        for problem in problem_iter {
+            problems.push(problem?);
+        }
+        
+        println!("DEBUG: Found {} problems with selected tags", problems.len());
+        Ok(problems)
+    }
+
     pub fn get_tag_suggestions(&self, query: &str, limit: i32) -> anyhow::Result<Vec<String>> {
         let search_pattern = format!("%{}%", query);
         

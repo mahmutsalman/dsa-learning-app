@@ -247,6 +247,9 @@ CLAUDE.md
 
 # Code tour files
 .tours/
+
+# Development notes and documentation
+.notes/
 # =============================================================================
 # Backup and Archive Files
 # =============================================================================
