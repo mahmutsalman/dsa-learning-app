@@ -23,7 +23,7 @@ export const useSolutionCard = ({
   problemId,
   onSolutionToggle,
   onError,
-  autoSaveDelay = 1000
+  autoSaveDelay = 2000 // Unified auto-save delay to match regular cards
 }: UseSolutionCardOptions): SolutionCardHookReturn => {
   const [state, setState] = useState<SolutionCardState>({
     isActive: false,
@@ -519,6 +519,101 @@ export const useSolutionCard = ({
   }, [autoSaveDelay, handleApiError, setError]);
 
   /**
+   * Save code immediately without timer (for force save)
+   */
+  const saveCodeImmediately = useCallback(async (code: string, language: string) => {
+    if (!state.solutionCard) {
+      throw new Error('No solution card to save');
+    }
+
+    const saveOperationId = `saveCodeImmediate-${state.solutionCard.id}-${Date.now()}`;
+    startTiming(saveOperationId);
+    
+    try {
+      console.debug('Force saving solution card code immediately', { 
+        cardId: state.solutionCard.id, 
+        codeLength: code.length,
+        language 
+      });
+      
+      await solutionCardApi.updateCode(state.solutionCard.id, code, language);
+      const timing = endTiming(saveOperationId);
+      
+      await logAnswerCardApi('update_solution_code', { 
+        cardId: state.solutionCard.id, 
+        codeLength: code.length, 
+        language 
+      }, { success: true }, {
+        hookContext: 'useSolutionCard.saveCodeImmediately',
+        operationId: saveOperationId,
+        immediate: true
+      }, timing);
+      
+    } catch (error) {
+      const timing = endTiming(saveOperationId);
+      console.error('Failed to save solution code immediately:', error);
+      
+      await logAnswerCardApi('update_solution_code', { 
+        cardId: state.solutionCard.id, 
+        codeLength: code.length, 
+        language 
+      }, { success: false, error }, {
+        hookContext: 'useSolutionCard.saveCodeImmediately',
+        operationId: saveOperationId,
+        immediate: true
+      }, timing);
+      
+      throw error;
+    }
+  }, [state.solutionCard]);
+
+  /**
+   * Save notes immediately without timer (for force save)
+   */
+  const saveNotesImmediately = useCallback(async (notes: string) => {
+    if (!state.solutionCard) {
+      throw new Error('No solution card to save');
+    }
+
+    const saveOperationId = `saveNotesImmediate-${state.solutionCard.id}-${Date.now()}`;
+    startTiming(saveOperationId);
+    
+    try {
+      console.debug('Force saving solution card notes immediately', { 
+        cardId: state.solutionCard.id, 
+        notesLength: notes.length 
+      });
+      
+      await solutionCardApi.updateNotes(state.solutionCard.id, notes);
+      const timing = endTiming(saveOperationId);
+      
+      await logAnswerCardApi('update_solution_notes', { 
+        cardId: state.solutionCard.id, 
+        notesLength: notes.length 
+      }, { success: true }, {
+        hookContext: 'useSolutionCard.saveNotesImmediately',
+        operationId: saveOperationId,
+        immediate: true
+      }, timing);
+      
+    } catch (error) {
+      const timing = endTiming(saveOperationId);
+      console.error('Failed to save solution notes immediately:', error);
+      
+      await logAnswerCardApi('update_solution_notes', { 
+        cardId: state.solutionCard.id, 
+        notesLength: notes.length 
+      }, { success: false, error }, {
+        hookContext: 'useSolutionCard.saveNotesImmediately',
+        operationId: saveOperationId,
+        immediate: true
+      }, timing);
+      
+      throw error;
+    }
+  }, [state.solutionCard]);
+
+  /**
    * Exit solution view and return to regular cards
    */
   const exitSolution = useCallback(async () => {
@@ -592,7 +687,9 @@ export const useSolutionCard = ({
       load,
       updateCode,
       updateNotes,
-      exitSolution
+      exitSolution,
+      saveCodeImmediately,
+      saveNotesImmediately
     }
   };
 };

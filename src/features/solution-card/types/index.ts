@@ -33,6 +33,8 @@ export interface SolutionCardHookReturn {
     updateCode: (code: string, language: string) => Promise<void>;
     updateNotes: (notes: string) => Promise<void>;
     exitSolution: () => void;
+    saveCodeImmediately: (code: string, language: string) => Promise<void>;
+    saveNotesImmediately: (notes: string) => Promise<void>;
   };
 }
 

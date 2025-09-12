@@ -437,6 +437,11 @@ export function WorkspaceHeader({
             </div>
             <p className="header-scale-text small text-gray-500 dark:text-gray-400">
               {currentCard ? (() => {
+                // Always show 1/1 for solution cards
+                if (isViewingSolution || currentCard.is_solution) {
+                  return 'Solution Card 1 / 1';
+                }
+                
                 const allProblemCards = getSiblingCards(currentCard, cards);
                 const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
                 const cardType = currentCard.parent_card_id ? 'Child Card' : 'Main Card';
@@ -523,6 +528,11 @@ export function WorkspaceHeader({
                 screenSize === 'sm' ? 'text-xs px-1' : 'text-sm px-2'
               } text-gray-500 dark:text-gray-400`}>
                 {currentCard ? (() => {
+                  // Always show 1/1 for solution cards
+                  if (isViewingSolution || currentCard.is_solution) {
+                    return '1/1';
+                  }
+                  
                   const allProblemCards = getSiblingCards(currentCard, cards);
                   const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
                   

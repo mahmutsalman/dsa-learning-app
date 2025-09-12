@@ -376,6 +376,38 @@ export default function ProblemCard() {
     }
   }, { delay: 2000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Increased delay to prevent excessive saves
 
+  // Force save function to ensure data is saved before card switching
+  const forceSave = useCallback(async () => {
+    try {
+      // Cancel all pending auto-saves first to prevent conflicts
+      console.debug('Cancelling pending auto-saves before force save');
+      codeAutoSave.cancel();
+      notesAutoSave.cancel();
+      languageAutoSave.cancel();
+
+      if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+        // Currently viewing solution card - save solution card data IMMEDIATELY
+        console.debug('Force saving solution card data before switch', {
+          cardId: solutionCard.state.solutionCard.id,
+          codeLength: code.length,
+          notesLength: notes.length,
+          language
+        });
+        await solutionCard.actions.saveCodeImmediately(code, language);
+        await solutionCard.actions.saveNotesImmediately(notes);
+        console.debug('✅ Solution card data saved successfully before switch');
+      } else if (currentCard) {
+        // Currently viewing regular card - save regular card data
+        console.debug('Force saving regular card data before switch');
+        await saveCard();
+        console.debug('✅ Regular card data saved successfully before switch');
+      }
+    } catch (err) {
+      console.error('Force save failed:', err);
+      // Don't throw - allow the switch to continue even if save fails
+    }
+  }, [solutionCard, currentCard, code, notes, language, saveCard, codeAutoSave, notesAutoSave, languageAutoSave]);
+
   // Manual save function
   const handleManualSave = useCallback(async () => {
     try {
@@ -726,6 +758,9 @@ export default function ProblemCard() {
     // This is a shift+click - check current mode and act accordingly
 
     try {
+      // CRITICAL: Force save current editor state before any mode switches
+      await forceSave();
+
       if (solutionCard.state.isActive) {
         // Already in solution mode - exit back to regular cards
         
@@ -764,11 +799,11 @@ export default function ProblemCard() {
         // Not in solution mode - enter solution view
         
         // Store the current regular card before switching to solution
-        // CRITICAL: Store the current editor state, not just the card database state
+        // CRITICAL: Store the current editor state, which was just saved by forceSave()
         if (currentCard) {
           originalCardRef.current = { 
             ...currentCard,
-            // Override with current editor state to preserve unsaved changes
+            // Override with current editor state to preserve the just-saved changes
             code: code,
             notes: notes,
             language: language

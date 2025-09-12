@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDebounce } from './useDebounce';
 
 export interface AutoSaveState {
@@ -37,6 +37,9 @@ export function useAutoSave<T>(
   const debouncedValue = useDebounce(value, delay);
   const [initialValue, setInitialValue] = useState<T>(value);
   const [hasChanged, setHasChanged] = useState(false);
+  
+  // Store timeout reference for cancellation
+  const autoSaveTimeoutRef = useRef<number>();
 
   // Track if the value has changed from initial
   useEffect(() => {
@@ -81,19 +84,43 @@ export function useAutoSave<T>(
     }
   }, [value, onSave]);
 
+  // Cancel pending auto-save
+  const cancel = useCallback(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+      autoSaveTimeoutRef.current = undefined;
+      console.debug('Auto-save cancelled');
+    }
+  }, []);
+
   // Auto-save when debounced value changes
   useEffect(() => {
     if (!enabled || !hasChanged) return;
     
+    // Clear any existing timeout
+    cancel();
+    
     // Only auto-save if the debounced value matches current value
     if (JSON.stringify(debouncedValue) === JSON.stringify(value)) {
-      save(debouncedValue);
+      // Set a timeout to track the auto-save
+      autoSaveTimeoutRef.current = window.setTimeout(() => {
+        save(debouncedValue);
+        autoSaveTimeoutRef.current = undefined;
+      }, 0); // Immediate execution since debouncing is already done
     }
-  }, [debouncedValue, enabled, hasChanged, value, save]);
+  }, [debouncedValue, enabled, hasChanged, value, save, cancel]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      cancel();
+    };
+  }, [cancel]);
 
   return {
     ...state,
     save,
+    cancel,
     hasUnsavedChanges: hasChanged && !state.isLoading
   };
 }
