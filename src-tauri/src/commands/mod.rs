@@ -5,3 +5,4 @@ pub mod audio;
 pub mod solution_card;
 pub mod debug;
 pub mod stats;
+pub mod work_sessions;

@@ -36,6 +36,7 @@ interface WorkspaceHeaderProps {
     isPaused: boolean; 
     elapsedRecordingTime: number; 
   };
+  recordingsCount?: number;
   onToggleTimer: () => void;
   onToggleRecording: () => void;
   onNavigateCard: (direction: 'prev' | 'next') => void;
@@ -193,6 +194,7 @@ export function WorkspaceHeader({
   notesAutoSave,
   languageAutoSave,
   recordingState,
+  recordingsCount = 0,
   onToggleTimer,
   onToggleRecording,
   onNavigateCard,
@@ -755,9 +757,14 @@ export function WorkspaceHeader({
                   aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
                   aria-pressed={recordingState.isRecording}
                 >
-                  {/* Mic Icon */}
-                  <div className="flex-shrink-0">
-                    <MicrophoneIcon className="h-4 w-4" />
+                  {/* Mic Icon with Recording Badge */}
+                  <div className="flex-shrink-0 relative">
+                    <MicrophoneIcon className={`h-4 w-4 ${recordingsCount > 0 ? 'text-blue-500' : ''}`} />
+                    {recordingsCount > 0 && (
+                      <span className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white text-[10px] rounded-full px-1 min-w-[14px] h-3 flex items-center justify-center leading-none font-medium">
+                        ({recordingsCount})
+                      </span>
+                    )}
                   </div>
                   
                   {/* Recording Timer Display - responsive */}

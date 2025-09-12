@@ -2,7 +2,7 @@ mod schema;
 
 use rusqlite::{Connection, params, OptionalExtension};
 use anyhow::Context;
-use chrono::{Utc, DateTime, NaiveDateTime};
+use chrono::{Utc, DateTime, NaiveDateTime, Timelike};
 use uuid::Uuid;
 use crate::models::*;
 use schema::{CREATE_TABLES_SQL, CREATE_INDEXES_SQL};
@@ -1161,28 +1161,33 @@ impl DatabaseManager {
 
     // Timer session operations (disabled until time_sessions table is added)
     #[allow(dead_code)]
-    pub fn start_timer_session(&mut self, card_id: &str) -> anyhow::Result<TimeSession> {
+    pub fn start_timer_session(&mut self, card_id: &str) -> anyhow::Result<(TimeSession, String)> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let date = now.format("%Y-%m-%d").to_string();
         
-        self.connection.execute(
-            "INSERT INTO time_sessions (id, card_id, start_time, date, is_active)
-             VALUES (?1, ?2, ?3, ?4, 1)",
-            params![&id, card_id, &now.to_rfc3339(), &date],
-        )?;
-        
-        // Get the problem_id from the card and update problem timestamp
+        // Get the problem_id from the card first
         let problem_id: String = self.connection.query_row(
             "SELECT problem_id FROM cards WHERE id = ?1",
             [card_id],
             |row| row.get(0),
         )?;
         
+        // Create work session for detailed tracking
+        let work_session_id = self.create_work_session(&problem_id, card_id, now)?;
+        println!("📊 [Database] Created work session {} for timer session {}", work_session_id, id);
+        
+        // Create time session
+        self.connection.execute(
+            "INSERT INTO time_sessions (id, card_id, start_time, date, is_active)
+             VALUES (?1, ?2, ?3, ?4, 1)",
+            params![&id, card_id, &now.to_rfc3339(), &date],
+        )?;
+        
         // Update the problem's updated_at timestamp since a timer was started
         self.update_problem_timestamp(&problem_id)?;
         
-        Ok(TimeSession {
+        let time_session = TimeSession {
             id,
             card_id: card_id.to_string(),
             start_time: now,
@@ -1191,11 +1196,13 @@ impl DatabaseManager {
             date,
             is_active: true,
             notes: None,
-        })
+        };
+        
+        Ok((time_session, work_session_id))
     }
     
     #[allow(dead_code)]
-    pub fn end_timer_session(&mut self, session_id: &str) -> anyhow::Result<()> {
+    pub fn end_timer_session(&mut self, session_id: &str, work_session_id: Option<&str>) -> anyhow::Result<()> {
         let now = Utc::now();
         
         // Get session start time
@@ -1207,6 +1214,14 @@ impl DatabaseManager {
         
         let start_time = start_time.parse::<chrono::DateTime<Utc>>()?;
         let duration = (now - start_time).num_seconds() as i32;
+        
+        // Complete work session for detailed tracking
+        if let Some(work_session_id) = work_session_id {
+            match self.complete_work_session(work_session_id, now) {
+                Ok(()) => println!("📊 [Database] Completed work session {} for timer session {}", work_session_id, session_id),
+                Err(e) => println!("⚠️ [Database] Failed to complete work session {}: {}", work_session_id, e),
+            }
+        }
         
         // Update session
         self.connection.execute(
@@ -2829,5 +2844,355 @@ impl DatabaseManager {
             problems_worked_today,
             completed_problems,
         })
+    }
+
+    // ============================================================================
+    // WORK SESSIONS - Detailed time tracking for visualization and analytics
+    // ============================================================================
+
+    /// Record a new work session when a study session begins
+    pub fn create_work_session(&self, problem_id: &str, card_id: &str, start_timestamp: DateTime<Utc>) -> anyhow::Result<String> {
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let session_date = start_timestamp.format("%Y-%m-%d").to_string();
+        let hour_slot = start_timestamp.hour() as i32;
+        
+        let sql = r#"
+            INSERT INTO work_sessions (
+                id, problem_id, card_id, session_date, 
+                start_timestamp, hour_slot, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        "#;
+        
+        self.connection.execute(sql, params![
+            session_id,
+            problem_id,
+            card_id,
+            session_date,
+            start_timestamp.to_rfc3339(),
+            hour_slot,
+            Utc::now().to_rfc3339()
+        ])?;
+        
+        Ok(session_id)
+    }
+    
+    /// Complete a work session when a study session ends
+    pub fn complete_work_session(&self, session_id: &str, end_timestamp: DateTime<Utc>) -> anyhow::Result<()> {
+        // Get the start timestamp to calculate duration
+        let start_timestamp: DateTime<Utc> = self.connection.query_row(
+            "SELECT start_timestamp FROM work_sessions WHERE id = ?1",
+            [session_id],
+            |row| {
+                let timestamp_str: String = row.get("start_timestamp")?;
+                Ok(timestamp_str.parse().unwrap_or(Utc::now()))
+            }
+        )?;
+        
+        let duration_seconds = (end_timestamp - start_timestamp).num_seconds() as i32;
+        
+        let sql = r#"
+            UPDATE work_sessions 
+            SET end_timestamp = ?1, duration_seconds = ?2
+            WHERE id = ?3
+        "#;
+        
+        self.connection.execute(sql, params![
+            end_timestamp.to_rfc3339(),
+            duration_seconds,
+            session_id
+        ])?;
+        
+        Ok(())
+    }
+    
+    /// Get work sessions for a specific date range
+    pub fn get_work_sessions_by_date_range(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
+        let sql = r#"
+            SELECT 
+                ws.id, ws.problem_id, p.title as problem_title, ws.card_id,
+                ws.session_date, ws.start_timestamp, ws.end_timestamp,
+                ws.duration_seconds, ws.hour_slot, ws.created_at
+            FROM work_sessions ws
+            JOIN problems p ON ws.problem_id = p.id
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+            ORDER BY ws.start_timestamp DESC
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let sessions = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(WorkSessionWithProblem {
+                id: row.get("id")?,
+                problem_id: row.get("problem_id")?,
+                problem_title: row.get("problem_title")?,
+                card_id: row.get("card_id")?,
+                session_date: row.get("session_date")?,
+                start_timestamp: {
+                    let timestamp_str: String = row.get("start_timestamp")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+                end_timestamp: {
+                    let timestamp_opt: Option<String> = row.get("end_timestamp")?;
+                    timestamp_opt.and_then(|s| s.parse().ok())
+                },
+                duration_seconds: row.get("duration_seconds")?,
+                hour_slot: row.get("hour_slot")?,
+                created_at: {
+                    let timestamp_str: String = row.get("created_at")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(sessions)
+    }
+    
+    /// Get work sessions for today
+    pub fn get_work_sessions_today(&self) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
+        let today = Utc::now().format("%Y-%m-%d").to_string();
+        self.get_work_sessions_by_date_range(&today, &today)
+    }
+    
+    /// Get work sessions for yesterday
+    pub fn get_work_sessions_yesterday(&self) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
+        let yesterday = (Utc::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+        self.get_work_sessions_by_date_range(&yesterday, &yesterday)
+    }
+    
+    /// Get work sessions summary for the last N days
+    pub fn get_last_n_days_summary(&self, days: i32) -> anyhow::Result<DateRangeWorkSummary> {
+        let end_date = Utc::now().format("%Y-%m-%d").to_string();
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        
+        // Get overall summary stats
+        let sql_summary = r#"
+            SELECT 
+                COUNT(DISTINCT ws.problem_id) as unique_problems,
+                COUNT(*) as total_sessions,
+                COALESCE(SUM(ws.duration_seconds), 0) as total_duration
+            FROM work_sessions ws
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+        "#;
+        
+        let (unique_problems_count, total_sessions_count, total_duration_seconds) = 
+            self.connection.query_row(sql_summary, params![start_date, end_date], |row| {
+                Ok((
+                    row.get::<_, i32>("unique_problems")?,
+                    row.get::<_, i32>("total_sessions")?,
+                    row.get::<_, i32>("total_duration")?,
+                ))
+            })?;
+        
+        // Get most productive hour
+        let most_productive_hour = self.get_most_productive_hour(days)?;
+        
+        // Get most worked problem
+        let most_worked_problem = self.get_most_worked_problem(&start_date, &end_date)?;
+        
+        // Get daily summaries - simplified version for now
+        let daily_summaries = Vec::new(); // TODO: Implement detailed daily breakdowns
+        
+        Ok(DateRangeWorkSummary {
+            start_date,
+            end_date,
+            total_days: days,
+            total_duration_seconds,
+            unique_problems_count,
+            total_sessions_count,
+            daily_summaries,
+            most_productive_hour,
+            most_worked_problem,
+        })
+    }
+    
+    /// Get hourly breakdown for a specific date
+    pub fn get_hourly_breakdown(&self, date: &str) -> anyhow::Result<Vec<HourlyWorkBreakdown>> {
+        let sql = r#"
+            SELECT 
+                ws.hour_slot as hour,
+                COALESCE(SUM(ws.duration_seconds), 0) as duration_seconds,
+                COUNT(*) as session_count,
+                COUNT(DISTINCT ws.problem_id) as unique_problems_count
+            FROM work_sessions ws
+            WHERE ws.session_date = ?1
+            GROUP BY ws.hour_slot
+            ORDER BY ws.hour_slot ASC
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let breakdowns = stmt.query_map(params![date], |row| {
+            Ok(HourlyWorkBreakdown {
+                hour: row.get("hour")?,
+                duration_seconds: row.get("duration_seconds")?,
+                session_count: row.get("session_count")?,
+                unique_problems_count: row.get("unique_problems_count")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(breakdowns)
+    }
+    
+    /// Get work sessions for a specific problem over the last N days
+    pub fn get_problem_work_history(&self, problem_id: &str, days: i32) -> anyhow::Result<Vec<WorkSession>> {
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        let end_date = Utc::now().format("%Y-%m-%d").to_string();
+        
+        let sql = r#"
+            SELECT 
+                id, problem_id, card_id, session_date,
+                start_timestamp, end_timestamp, duration_seconds,
+                hour_slot, created_at
+            FROM work_sessions
+            WHERE problem_id = ?1 
+            AND session_date >= ?2 AND session_date <= ?3
+            ORDER BY start_timestamp DESC
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let sessions = stmt.query_map(params![problem_id, start_date, end_date], |row| {
+            Ok(WorkSession {
+                id: row.get("id")?,
+                problem_id: row.get("problem_id")?,
+                card_id: row.get("card_id")?,
+                session_date: row.get("session_date")?,
+                start_timestamp: {
+                    let timestamp_str: String = row.get("start_timestamp")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+                end_timestamp: {
+                    let timestamp_opt: Option<String> = row.get("end_timestamp")?;
+                    timestamp_opt.and_then(|s| s.parse().ok())
+                },
+                duration_seconds: row.get("duration_seconds")?,
+                hour_slot: row.get("hour_slot")?,
+                created_at: {
+                    let timestamp_str: String = row.get("created_at")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(sessions)
+    }
+    
+    /// Get daily work aggregates for visualization
+    pub fn get_daily_aggregates(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<DailyWorkSummary>> {
+        let sql = r#"
+            SELECT 
+                ws.session_date,
+                COALESCE(SUM(ws.duration_seconds), 0) as total_duration_seconds,
+                COUNT(DISTINCT ws.problem_id) as unique_problems_count,
+                COUNT(*) as total_sessions_count
+            FROM work_sessions ws
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+            GROUP BY ws.session_date
+            ORDER BY ws.session_date ASC
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let summaries = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(DailyWorkSummary {
+                date: row.get("session_date")?,
+                total_duration_seconds: row.get("total_duration_seconds")?,
+                unique_problems_count: row.get("unique_problems_count")?,
+                total_sessions_count: row.get("total_sessions_count")?,
+                problem_breakdowns: Vec::new(), // Filled separately if needed
+                hourly_breakdown: Vec::new(),   // Filled separately if needed
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(summaries)
+    }
+    
+    /// Get most productive hour over the last N days
+    pub fn get_most_productive_hour(&self, days: i32) -> anyhow::Result<Option<i32>> {
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        let end_date = Utc::now().format("%Y-%m-%d").to_string();
+        
+        let sql = r#"
+            SELECT ws.hour_slot, SUM(ws.duration_seconds) as total_duration
+            FROM work_sessions ws
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+            GROUP BY ws.hour_slot
+            ORDER BY total_duration DESC
+            LIMIT 1
+        "#;
+        
+        let result: Option<i32> = self.connection.query_row(sql, params![start_date, end_date], |row| {
+            Ok(row.get("hour_slot")?)
+        }).optional()?;
+        
+        Ok(result)
+    }
+    
+    /// Get most worked problem in a date range
+    pub fn get_most_worked_problem(&self, start_date: &str, end_date: &str) -> anyhow::Result<Option<ProblemWorkBreakdown>> {
+        let sql = r#"
+            SELECT 
+                ws.problem_id, p.title as problem_title,
+                SUM(ws.duration_seconds) as total_duration_seconds,
+                COUNT(*) as session_count,
+                MIN(ws.start_timestamp) as first_session_time,
+                MAX(ws.start_timestamp) as last_session_time
+            FROM work_sessions ws
+            JOIN problems p ON ws.problem_id = p.id
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+            GROUP BY ws.problem_id, p.title
+            ORDER BY total_duration_seconds DESC
+            LIMIT 1
+        "#;
+        
+        let result = self.connection.query_row(sql, params![start_date, end_date], |row| {
+            Ok(ProblemWorkBreakdown {
+                problem_id: row.get("problem_id")?,
+                problem_title: row.get("problem_title")?,
+                total_duration_seconds: row.get("total_duration_seconds")?,
+                session_count: row.get("session_count")?,
+                first_session_time: {
+                    let timestamp_str: String = row.get("first_session_time")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+                last_session_time: {
+                    let timestamp_str: String = row.get("last_session_time")?;
+                    timestamp_str.parse().unwrap_or(Utc::now())
+                },
+            })
+        }).optional()?;
+        
+        Ok(result)
+    }
+    
+    /// Get productivity pattern analysis for the last N days
+    pub fn get_productivity_by_hour(&self, days: i32) -> anyhow::Result<Vec<HourlyWorkBreakdown>> {
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        let end_date = Utc::now().format("%Y-%m-%d").to_string();
+        
+        let sql = r#"
+            SELECT 
+                ws.hour_slot as hour,
+                COALESCE(SUM(ws.duration_seconds), 0) as duration_seconds,
+                COUNT(*) as session_count,
+                COUNT(DISTINCT ws.problem_id) as unique_problems_count
+            FROM work_sessions ws
+            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+            GROUP BY ws.hour_slot
+            ORDER BY ws.hour_slot ASC
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let breakdowns = stmt.query_map(params![start_date, end_date], |row| {
+            Ok(HourlyWorkBreakdown {
+                hour: row.get("hour")?,
+                duration_seconds: row.get("duration_seconds")?,
+                session_count: row.get("session_count")?,
+                unique_problems_count: row.get("unique_problems_count")?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(breakdowns)
     }
 }

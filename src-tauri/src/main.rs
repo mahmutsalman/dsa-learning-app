@@ -174,7 +174,18 @@ async fn main() {
             // Stats commands
             commands::stats::get_problems_worked_today,
             commands::stats::get_daily_work_stats,
-            commands::stats::get_dashboard_stats
+            commands::stats::get_dashboard_stats,
+            // Work Sessions commands for detailed time tracking and visualization
+            commands::work_sessions::get_work_sessions_date_range,
+            commands::work_sessions::get_work_sessions_today,
+            commands::work_sessions::get_work_sessions_yesterday,
+            commands::work_sessions::get_last_n_days_summary,
+            commands::work_sessions::get_hourly_breakdown,
+            commands::work_sessions::get_problem_work_history,
+            commands::work_sessions::get_daily_aggregates,
+            commands::work_sessions::get_productivity_by_hour,
+            commands::work_sessions::get_most_productive_hour,
+            commands::work_sessions::get_most_worked_problem
         ]);
     
     log_to_file("DSA Learning App: Command handlers registered");

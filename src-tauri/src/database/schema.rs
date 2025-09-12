@@ -109,6 +109,21 @@ CREATE TABLE IF NOT EXISTS problem_images (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (problem_id) REFERENCES problems(id) ON DELETE CASCADE
 );
+
+-- Work sessions table for detailed time tracking and visualization
+CREATE TABLE IF NOT EXISTS work_sessions (
+    id TEXT PRIMARY KEY,
+    problem_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    session_date DATE NOT NULL, -- Date in YYYY-MM-DD format for efficient date queries
+    start_timestamp DATETIME NOT NULL, -- Exact start time
+    end_timestamp DATETIME, -- Exact end time (NULL if session is ongoing)
+    duration_seconds INTEGER DEFAULT 0, -- Cached duration for fast queries
+    hour_slot INTEGER NOT NULL, -- Hour of the day (0-23) for hourly analysis
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (problem_id) REFERENCES problems(id) ON DELETE CASCADE,
+    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+);
 "#;
 
 pub const CREATE_INDEXES_SQL: &str = r#"
@@ -125,4 +140,12 @@ CREATE INDEX IF NOT EXISTS idx_cards_status ON cards(status);
 CREATE INDEX IF NOT EXISTS idx_cards_created_at ON cards(created_at);
 CREATE INDEX IF NOT EXISTS idx_problem_images_problem_id ON problem_images(problem_id);
 CREATE INDEX IF NOT EXISTS idx_problem_images_position ON problem_images(position);
+
+-- Work sessions indexes for fast time tracking queries
+CREATE INDEX IF NOT EXISTS idx_work_sessions_session_date ON work_sessions(session_date);
+CREATE INDEX IF NOT EXISTS idx_work_sessions_problem_id ON work_sessions(problem_id);
+CREATE INDEX IF NOT EXISTS idx_work_sessions_card_id ON work_sessions(card_id);
+CREATE INDEX IF NOT EXISTS idx_work_sessions_date_hour ON work_sessions(session_date, hour_slot);
+CREATE INDEX IF NOT EXISTS idx_work_sessions_problem_date ON work_sessions(problem_id, session_date);
+CREATE INDEX IF NOT EXISTS idx_work_sessions_start_time ON work_sessions(start_timestamp);
 "#;

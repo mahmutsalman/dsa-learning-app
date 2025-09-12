@@ -30,6 +30,7 @@ export interface Recording {
 export interface UseRecordingReturn {
   recordingState: RecordingState;
   recordings: Recording[];
+  recordingsCount: number;
   startRecording: (cardId: string) => Promise<void>;
   stopRecording: (cardId: string) => Promise<void>;
   pauseRecording: () => Promise<void>;
@@ -270,6 +271,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   return {
     recordingState,
     recordings,
+    recordingsCount: recordings.length,
     startRecording,
     stopRecording,
     pauseRecording,

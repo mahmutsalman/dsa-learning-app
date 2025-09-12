@@ -295,6 +295,7 @@ pub struct TimerSession {
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
     pub pause_duration: i32, // in seconds
+    pub work_session_id: Option<String>, // Associated work session ID for detailed tracking
 }
 
 // Recording-specific models for in-memory recording state
@@ -395,4 +396,96 @@ pub struct DailyWorkStats {
     pub problems_worked: i32,
     pub total_study_time_today: i32, // in seconds
     pub date: String, // ISO date string (YYYY-MM-DD)
+}
+
+// Work session models for detailed time tracking and visualization
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkSession {
+    pub id: String,
+    pub problem_id: String,
+    pub card_id: String,
+    pub session_date: String, // YYYY-MM-DD format
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
+    pub duration_seconds: i32,
+    pub hour_slot: i32, // 0-23 hour of the day
+    pub created_at: DateTime<Utc>,
+}
+
+// Work session with problem details for enhanced queries
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct WorkSessionWithProblem {
+    pub id: String,
+    pub problem_id: String,
+    pub problem_title: String,
+    pub card_id: String,
+    pub session_date: String,
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
+    pub duration_seconds: i32,
+    pub hour_slot: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+// Daily work summary with breakdown by problems
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DailyWorkSummary {
+    pub date: String, // YYYY-MM-DD
+    pub total_duration_seconds: i32,
+    pub unique_problems_count: i32,
+    pub total_sessions_count: i32,
+    pub problem_breakdowns: Vec<ProblemWorkBreakdown>,
+    pub hourly_breakdown: Vec<HourlyWorkBreakdown>,
+}
+
+// Problem-specific work breakdown
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProblemWorkBreakdown {
+    pub problem_id: String,
+    pub problem_title: String,
+    pub total_duration_seconds: i32,
+    pub session_count: i32,
+    pub first_session_time: DateTime<Utc>,
+    pub last_session_time: DateTime<Utc>,
+}
+
+// Hourly work breakdown for time distribution analysis
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HourlyWorkBreakdown {
+    pub hour: i32, // 0-23
+    pub duration_seconds: i32,
+    pub session_count: i32,
+    pub unique_problems_count: i32,
+}
+
+// Date range work summary for multi-day analysis
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DateRangeWorkSummary {
+    pub start_date: String,
+    pub end_date: String,
+    pub total_days: i32,
+    pub total_duration_seconds: i32,
+    pub unique_problems_count: i32,
+    pub total_sessions_count: i32,
+    pub daily_summaries: Vec<DailyWorkSummary>,
+    pub most_productive_hour: Option<i32>,
+    pub most_worked_problem: Option<ProblemWorkBreakdown>,
+}
+
+// Request models for work session queries
+#[derive(Debug, Deserialize)]
+pub struct WorkSessionsDateRangeRequest {
+    pub start_date: String, // YYYY-MM-DD
+    pub end_date: String,   // YYYY-MM-DD
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WorkSessionsByProblemRequest {
+    pub problem_id: String,
+    pub days: Option<i32>, // Number of days to look back (default: 30)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HourlyProductivityRequest {
+    pub days: Option<i32>, // Number of days to analyze (default: 7)
 }

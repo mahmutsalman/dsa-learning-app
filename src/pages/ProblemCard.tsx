@@ -965,6 +965,7 @@ export default function ProblemCard() {
                 notesAutoSave={notesAutoSave}
                 languageAutoSave={languageAutoSave}
                 recordingState={recording.recordingState}
+                recordingsCount={recording.recordingsCount}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
                 onNavigateCard={navigateToCard}
@@ -1100,6 +1101,7 @@ export default function ProblemCard() {
               notesAutoSave={notesAutoSave}
               languageAutoSave={languageAutoSave}
               recordingState={recording.recordingState}
+              recordingsCount={recording.recordingsCount}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}
               onNavigateCard={navigateToCard}

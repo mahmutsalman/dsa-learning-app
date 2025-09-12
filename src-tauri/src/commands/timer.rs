@@ -12,13 +12,13 @@ pub async fn start_timer_session(
         if let Some(timer_session) = current_timer.take() {
             // End the previous session
             let mut db = state.db.lock().map_err(|e| e.to_string())?;
-            let _ = db.end_timer_session(&timer_session.id);
+            let _ = db.end_timer_session(&timer_session.id, timer_session.work_session_id.as_deref());
         }
     }
 
     // Start new timer session
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
-    let session = db.start_timer_session(&card_id).map_err(|e| e.to_string())?;
+    let (session, work_session_id) = db.start_timer_session(&card_id).map_err(|e| e.to_string())?;
     
     // Store in current timer state
     let timer_session = TimerSession {
@@ -27,6 +27,7 @@ pub async fn start_timer_session(
         start_time: session.start_time,
         is_paused: false,
         pause_duration: 0,
+        work_session_id: Some(work_session_id),
     };
     
     {
@@ -49,7 +50,7 @@ pub async fn stop_timer_session(state: State<'_, AppState>) -> Result<String, St
     
     if let Some(timer_session) = current_timer.take() {
         let mut db = state.db.lock().map_err(|e| e.to_string())?;
-        db.end_timer_session(&timer_session.id).map_err(|e| e.to_string())?;
+        db.end_timer_session(&timer_session.id, timer_session.work_session_id.as_deref()).map_err(|e| e.to_string())?;
         Ok("Timer session stopped successfully".to_string())
     } else {
         Err("No active timer session".to_string())

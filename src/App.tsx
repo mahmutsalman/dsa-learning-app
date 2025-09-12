@@ -7,6 +7,7 @@ import { StatsProvider } from "./contexts/StatsContext";
 import { GlobalAudioPlayerProvider } from "./contexts/GlobalAudioPlayerContext";
 import Dashboard from "./pages/Dashboard";
 import ProblemCard from "./pages/ProblemCard";
+import Analytics from "./pages/Analytics";
 
 function App() {
   const [isDark, setIsDark] = useState(false);
@@ -98,6 +99,7 @@ function App() {
               <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/analytics" element={<Analytics />} />
                   <Route path="/problem/:problemId" element={<ProblemCard />} />
                   <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
                 </Routes>
