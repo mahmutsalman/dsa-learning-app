@@ -13,7 +13,7 @@ export interface Problem {
   topic: string[];
   tags: string[];
   created_at: string;
-  updated_at: string;
+  updated_at?: string; // Only set when actually updated
   leetcode_url?: string;
   constraints: string[];
   hints: string[];

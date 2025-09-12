@@ -156,16 +156,23 @@ export default function Dashboard() {
 
   // Helper function to format dates for display with detailed time info
   const formatDateDisplay = (dateString: string): string => {
+    // Parse the UTC date string and convert to local timezone
     const date = new Date(dateString);
+    
+    // Format time in local timezone (Istanbul GMT+3)
     const timeString = date.toLocaleTimeString('en-US', { 
       hour12: false, 
       hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+      minute: '2-digit',
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone // Use system timezone
     });
     
     const now = new Date();
-    const diffTime = now.getTime() - date.getTime();
+    
+    // Compare dates in local timezone by getting just the date part
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffTime = nowOnly.getTime() - dateOnly.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays === 0) {
@@ -186,7 +193,8 @@ export default function Dashboard() {
       const dateStr = date.toLocaleDateString('en-US', { 
         year: 'numeric', 
         month: 'short', 
-        day: 'numeric' 
+        day: 'numeric',
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone // Use system timezone
       });
       return `${dateStr} ${timeString}`;
     }

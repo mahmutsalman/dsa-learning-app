@@ -683,8 +683,8 @@ impl DatabaseManager {
                 .unwrap_or_else(|| "[]".to_string());
                 
             self.connection.execute(
-                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     &id,
                     &req.title,
@@ -696,14 +696,13 @@ impl DatabaseManager {
                     &hints_json,
                     &related_problem_ids_json,
                     &now.to_rfc3339(),
-                    &now.to_rfc3339(),
                 ],
             )?;
         } else {
             // Use old schema without related_problem_ids column
             self.connection.execute(
-                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     &id,
                     &req.title,
@@ -713,7 +712,6 @@ impl DatabaseManager {
                     leetcode_url,
                     &constraints_json,
                     &hints_json,
-                    &now.to_rfc3339(),
                     &now.to_rfc3339(),
                 ],
             )?;
@@ -731,7 +729,7 @@ impl DatabaseManager {
             hints: req.hints,
             related_problem_ids: req.related_problem_ids.unwrap_or_default(),
             created_at: now,
-            updated_at: now,
+            updated_at: None, // Not set on creation - only when actually updated
             tags: Vec::new(), // Empty for newly created problems
         })
     }
@@ -760,7 +758,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                 created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
-                updated_at: parse_datetime_flexible(&row.get::<_, String>(10)?),
+                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -797,7 +795,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                 created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
-                updated_at: parse_datetime_flexible(&row.get::<_, String>(10)?),
+                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
@@ -1874,7 +1872,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
                 created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
@@ -1957,7 +1955,7 @@ impl DatabaseManager {
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                     created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+                    updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             },
@@ -2030,7 +2028,7 @@ impl DatabaseManager {
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8)?,
                     created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+                    updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             })?;
@@ -2122,7 +2120,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
                 created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
@@ -2183,7 +2181,7 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
                 created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, String>(10).ok().and_then(|s| s.parse().ok()).unwrap_or_else(|| Utc::now()),
+                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
