@@ -326,3 +326,22 @@ export interface DeleteProblemDialogProps {
   deleteStats: ProblemDeleteStats | null;
   isLoading: boolean;
 }
+
+// Dashboard statistics types
+export interface DashboardStats {
+  total_problems: number;
+  total_study_time: number; // in seconds
+  problems_worked_today: number;
+  completed_problems: number;
+}
+
+export interface ProblemsWorkedTodayResponse {
+  count: number;
+  date: string; // ISO date string (YYYY-MM-DD)
+}
+
+export interface DailyWorkStats {
+  problems_worked: number;
+  total_study_time_today: number; // in seconds
+  date: string; // ISO date string (YYYY-MM-DD)
+}

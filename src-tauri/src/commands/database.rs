@@ -1042,3 +1042,29 @@ fn validate_problem(problem: &ParsedProblem) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[tauri::command]
+pub async fn get_problems_worked_today_list(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    // Get today's date in the local timezone
+    let today = chrono::Local::now().date_naive();
+    let today_str = today.format("%Y-%m-%d").to_string();
+    
+    let problem_ids = db.get_problems_worked_today_list(&today_str).map_err(|e| e.to_string())?;
+    
+    Ok(problem_ids)
+}
+
+#[tauri::command]
+pub async fn get_worked_today_total_duration(state: State<'_, AppState>) -> Result<i32, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    
+    // Get today's date in the local timezone
+    let today = chrono::Local::now().date_naive();
+    let today_str = today.format("%Y-%m-%d").to_string();
+    
+    let total_duration = db.get_worked_today_total_duration(&today_str).map_err(|e| e.to_string())?;
+    
+    Ok(total_duration)
+}

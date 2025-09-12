@@ -374,3 +374,25 @@ pub struct ProblemDeleteStats {
     pub images_count: i32,
     pub total_duration: i32, // in seconds
 }
+
+// Dashboard statistics models
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DashboardStats {
+    pub total_problems: i32,
+    pub total_study_time: i32, // in seconds
+    pub problems_worked_today: i32,
+    pub completed_problems: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProblemsWorkedTodayResponse {
+    pub count: i32,
+    pub date: String, // ISO date string (YYYY-MM-DD)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DailyWorkStats {
+    pub problems_worked: i32,
+    pub total_study_time_today: i32, // in seconds
+    pub date: String, // ISO date string (YYYY-MM-DD)
+}

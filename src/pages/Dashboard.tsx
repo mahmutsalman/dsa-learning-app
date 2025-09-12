@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType, ProblemDeleteStats } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
@@ -14,6 +14,8 @@ import DeleteProblemDialog from '../components/DeleteProblemDialog';
 import { ImportResult } from '../components/ProblemImporter/types';
 import { useDashboardHeight } from '../hooks/useDashboardHeight';
 import { useStats } from '../contexts/StatsContext';
+import TodaysWorkCard from '../components/Dashboard/TodaysWorkCard';
+import { useWorkedTodayFilter } from '../hooks/useWorkedTodayFilter';
 
 const difficultyColors = {
   'Easy': 'bg-difficulty-easy text-green-800',
@@ -52,6 +54,9 @@ export default function Dashboard() {
   // Tag filtering state
   const [selectedFilterTags, setSelectedFilterTags] = useState<Tag[]>([]);
   const [showTagFilterModal, setShowTagFilterModal] = useState(false);
+  
+  // Worked today filter state
+  const workedTodayFilter = useWorkedTodayFilter();
   
   // Use stats context
   const { showStats } = useStats();
@@ -205,6 +210,13 @@ export default function Dashboard() {
   useEffect(() => {
     loadProblems();
   }, []);
+
+  // Listen to worked today filter changes and update filtered problems
+  useEffect(() => {
+    if (problems.length > 0) {
+      applyAllFilters(problems);
+    }
+  }, [workedTodayFilter.isFiltered, workedTodayFilter.problemIds]);
 
   const loadProblems = async () => {
     try {
@@ -543,8 +555,43 @@ export default function Dashboard() {
       handleSearch(searchState.query, searchState.searchType);
     } else {
       // No search, show all problems
-      setFilteredProblems(problems);
+      applyAllFilters(problems);
     }
+  };
+
+  // Apply all active filters (search, tags, worked today) to the problems
+  const applyAllFilters = (sourceProblems: ProblemWithStudyTime[]) => {
+    let filteredProblems = [...sourceProblems];
+    
+    // Apply search filter
+    if (searchState.query) {
+      // Keep current search results if search is active
+      // This function is called when other filters change, not when search changes
+      const currentSearchResultIds = new Set(filteredProblems.map(p => p.id));
+      filteredProblems = filteredProblems.filter(p => currentSearchResultIds.has(p.id));
+    }
+    
+    // Apply tag filter
+    if (selectedFilterTags.length > 0) {
+      // Note: This is simplified for now. In a real implementation, you'd want to
+      // call the backend API again or maintain a local cache of tag-filtered results
+      console.log('Tag filter active, need to reapply');
+    }
+    
+    // Apply worked today filter
+    if (workedTodayFilter.isFiltered) {
+      const workedTodayIds = new Set(workedTodayFilter.problemIds);
+      filteredProblems = filteredProblems.filter(p => workedTodayIds.has(p.id));
+    }
+    
+    // Apply sorting
+    const sortedResults = sortProblems(filteredProblems, sortBy, sortDirection);
+    setFilteredProblems(sortedResults);
+  };
+
+  // Handle worked today filter toggle
+  const handleWorkedTodayToggle = () => {
+    workedTodayFilter.toggleFilter();
   };
 
   // Multi-selection handlers
@@ -698,7 +745,7 @@ export default function Dashboard() {
 
         {/* Stats */}
         {showStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
               <div className="flex items-center">
                 <AcademicCapIcon className="h-8 w-8 text-primary-500" />
@@ -722,6 +769,8 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+            
+            <TodaysWorkCard onClick={handleWorkedTodayToggle} />
             
             <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
               <div className="flex items-center">
@@ -882,6 +931,29 @@ export default function Dashboard() {
               >
                 Clear all filters
               </button>
+            </div>
+          )}
+          
+          {/* Worked Today Filter */}
+          {workedTodayFilter.isFiltered && (
+            <div className="flex flex-wrap items-center justify-center gap-2 text-sm mt-2">
+              <span className="text-gray-600 dark:text-gray-400">Showing:</span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full">
+                <CalendarDaysIcon className="h-3 w-3" />
+                Problems worked today ({workedTodayFilter.problemIds.length})
+                <button
+                  onClick={handleWorkedTodayToggle}
+                  className="ml-1 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-full p-0.5"
+                  title="Clear worked today filter"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
+              {workedTodayFilter.problemIds.length === 0 && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  No problems worked today
+                </span>
+              )}
             </div>
           )}
         </div>

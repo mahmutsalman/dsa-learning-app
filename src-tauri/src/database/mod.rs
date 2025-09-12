@@ -2706,4 +2706,128 @@ impl DatabaseManager {
         
         Ok(image_files)
     }
+
+    /// Get the number of problems that have had study sessions today
+    pub fn get_problems_worked_today(&self, today_str: &str) -> anyhow::Result<i32> {
+        let sql = r#"
+            SELECT COUNT(DISTINCT p.id) as count
+            FROM problems p
+            INNER JOIN cards c ON p.id = c.problem_id
+            INNER JOIN time_sessions ts ON c.id = ts.card_id
+            WHERE DATE(ts.date) = ?1
+            AND ts.duration > 0
+        "#;
+        
+        let count: i32 = self.connection.query_row(sql, [today_str], |row| {
+            Ok(row.get::<_, i32>("count")?)
+        })?;
+        
+        Ok(count)
+    }
+
+    /// Get the list of problem IDs that have had study sessions today
+    pub fn get_problems_worked_today_list(&self, today_str: &str) -> anyhow::Result<Vec<String>> {
+        let sql = r#"
+            SELECT DISTINCT p.id
+            FROM problems p
+            INNER JOIN cards c ON p.id = c.problem_id
+            INNER JOIN time_sessions ts ON c.id = ts.card_id
+            WHERE DATE(ts.date) = ?1
+            AND ts.duration > 0
+        "#;
+        
+        let mut stmt = self.connection.prepare(sql)?;
+        let problem_ids = stmt.query_map([today_str], |row| {
+            Ok(row.get::<_, String>("id")?)
+        })?
+        .collect::<Result<Vec<String>, _>>()?;
+        
+        Ok(problem_ids)
+    }
+
+    /// Get the total worked duration for problems that have had study sessions today (in seconds)
+    pub fn get_worked_today_total_duration(&self, today_str: &str) -> anyhow::Result<i32> {
+        let sql = r#"
+            SELECT COALESCE(SUM(ts.duration), 0) as total_duration
+            FROM problems p
+            INNER JOIN cards c ON p.id = c.problem_id
+            INNER JOIN time_sessions ts ON c.id = ts.card_id
+            WHERE DATE(ts.date) = ?1
+            AND ts.duration > 0
+        "#;
+        
+        let total_duration: i32 = self.connection.query_row(sql, [today_str], |row| {
+            Ok(row.get::<_, i32>("total_duration")?)
+        })?;
+        
+        Ok(total_duration)
+    }
+
+    /// Get comprehensive daily work statistics
+    pub fn get_daily_work_stats(&self, today_str: &str) -> anyhow::Result<DailyWorkStats> {
+        let sql = r#"
+            SELECT 
+                COUNT(DISTINCT p.id) as problems_worked,
+                COALESCE(SUM(ts.duration), 0) as total_study_time_today
+            FROM problems p
+            INNER JOIN cards c ON p.id = c.problem_id
+            INNER JOIN time_sessions ts ON c.id = ts.card_id
+            WHERE DATE(ts.date) = ?1
+            AND ts.duration > 0
+        "#;
+        
+        let result = self.connection.query_row(sql, [today_str], |row| {
+            Ok((
+                row.get::<_, i32>("problems_worked")?,
+                row.get::<_, i32>("total_study_time_today")?,
+            ))
+        })?;
+        
+        Ok(DailyWorkStats {
+            problems_worked: result.0,
+            total_study_time_today: result.1,
+            date: today_str.to_string(),
+        })
+    }
+
+    /// Get comprehensive dashboard statistics
+    pub fn get_dashboard_stats(&self, today_str: &str) -> anyhow::Result<DashboardStats> {
+        // Query for total problems count
+        let total_problems: i32 = self.connection.query_row(
+            "SELECT COUNT(*) FROM problems",
+            [],
+            |row| Ok(row.get(0)?)
+        )?;
+        
+        // Query for total study time across all problems
+        let total_study_time: i32 = self.connection.query_row(
+            "SELECT COALESCE(SUM(total_duration), 0) FROM cards",
+            [],
+            |row| Ok(row.get(0)?)
+        )?;
+        
+        // Query for problems worked today
+        let problems_worked_today: i32 = self.connection.query_row(
+            r#"
+            SELECT COUNT(DISTINCT p.id)
+            FROM problems p
+            INNER JOIN cards c ON p.id = c.problem_id
+            INNER JOIN time_sessions ts ON c.id = ts.card_id
+            WHERE DATE(ts.date) = ?1
+            AND ts.duration > 0
+            "#,
+            [today_str],
+            |row| Ok(row.get(0)?)
+        )?;
+        
+        // For now, set completed_problems to 0 as the current system doesn't track completion status
+        let completed_problems = 0;
+        
+        Ok(DashboardStats {
+            total_problems,
+            total_study_time,
+            problems_worked_today,
+            completed_problems,
+        })
+    }
 }

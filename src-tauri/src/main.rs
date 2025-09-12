@@ -119,6 +119,9 @@ async fn main() {
             commands::database::add_problem_relation,
             commands::database::remove_problem_relation,
             commands::database::get_related_problems,
+            // Stats-related database commands
+            commands::database::get_problems_worked_today_list,
+            commands::database::get_worked_today_total_duration,
             // Timer commands
             commands::timer::start_timer_session,
             commands::timer::stop_timer_session,
@@ -167,7 +170,11 @@ async fn main() {
             // Debug commands continued
             commands::debug::check_microphone_permission,
             commands::debug::write_file,
-            commands::debug::append_to_file
+            commands::debug::append_to_file,
+            // Stats commands
+            commands::stats::get_problems_worked_today,
+            commands::stats::get_daily_work_stats,
+            commands::stats::get_dashboard_stats
         ]);
     
     log_to_file("DSA Learning App: Command handlers registered");
