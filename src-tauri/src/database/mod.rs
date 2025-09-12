@@ -900,6 +900,21 @@ impl DatabaseManager {
         self.get_problem_by_id(&req.id)
     }
 
+    // Helper function to update problem's updated_at timestamp when card activities occur
+    pub fn update_problem_timestamp(&mut self, problem_id: &str) -> anyhow::Result<()> {
+        let now = Utc::now();
+        let rows_affected = self.connection.execute(
+            "UPDATE problems SET updated_at = ? WHERE id = ?",
+            params![&now.to_rfc3339(), problem_id],
+        )?;
+        
+        if rows_affected == 0 {
+            return Err(anyhow::anyhow!("Problem with id '{}' not found for timestamp update", problem_id));
+        }
+        
+        Ok(())
+    }
+
     // Card operations
     pub fn create_card(&mut self, req: CreateCardRequest) -> anyhow::Result<Card> {
         let id = Uuid::new_v4().to_string();
@@ -948,6 +963,9 @@ impl DatabaseManager {
                 )?;
             }
         }
+        
+        // Update the problem's updated_at timestamp since a new card was created
+        self.update_problem_timestamp(&req.problem_id)?;
         
         Ok(Card {
             id,
@@ -1028,12 +1046,15 @@ impl DatabaseManager {
         let now = Utc::now();
         let now_str = now.to_rfc3339();
         
+        let mut fields_updated = false;
+        
         // Build query to update only provided fields
         if let Some(ref code) = req.code {
             self.connection.execute(
                 "UPDATE cards SET code = ?1, last_modified = ?2 WHERE id = ?3",
                 params![code, &now_str, &req.id],
             )?;
+            fields_updated = true;
         }
         
         if let Some(ref notes) = req.notes {
@@ -1041,6 +1062,7 @@ impl DatabaseManager {
                 "UPDATE cards SET notes = ?1, last_modified = ?2 WHERE id = ?3",
                 params![notes, &now_str, &req.id],
             )?;
+            fields_updated = true;
         }
         
         if let Some(ref language) = req.language {
@@ -1048,6 +1070,7 @@ impl DatabaseManager {
                 "UPDATE cards SET language = ?1, last_modified = ?2 WHERE id = ?3",
                 params![language, &now_str, &req.id],
             )?;
+            fields_updated = true;
         }
         
         if let Some(ref status) = req.status {
@@ -1055,6 +1078,20 @@ impl DatabaseManager {
                 "UPDATE cards SET status = ?1, last_modified = ?2 WHERE id = ?3",
                 params![status, &now_str, &req.id],
             )?;
+            fields_updated = true;
+        }
+        
+        // If any fields were updated, also update the problem's timestamp
+        if fields_updated {
+            // Get the problem_id from the card
+            let problem_id: String = self.connection.query_row(
+                "SELECT problem_id FROM cards WHERE id = ?1",
+                [&req.id],
+                |row| row.get(0),
+            )?;
+            
+            // Update the problem's updated_at timestamp
+            self.update_problem_timestamp(&problem_id)?;
         }
         
         // Return the updated card
@@ -1114,6 +1151,9 @@ impl DatabaseManager {
 
         // Commit the transaction
         tx.commit()?;
+        
+        // Update the problem's updated_at timestamp since a card was deleted
+        self.update_problem_timestamp(&card.problem_id)?;
 
         println!("Successfully deleted card '{}' and associated data", card_id);
         Ok(())
@@ -1131,6 +1171,16 @@ impl DatabaseManager {
              VALUES (?1, ?2, ?3, ?4, 1)",
             params![&id, card_id, &now.to_rfc3339(), &date],
         )?;
+        
+        // Get the problem_id from the card and update problem timestamp
+        let problem_id: String = self.connection.query_row(
+            "SELECT problem_id FROM cards WHERE id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )?;
+        
+        // Update the problem's updated_at timestamp since a timer was started
+        self.update_problem_timestamp(&problem_id)?;
         
         Ok(TimeSession {
             id,
@@ -1176,6 +1226,16 @@ impl DatabaseManager {
             "UPDATE cards SET total_duration = total_duration + ?1, last_modified = ?2 WHERE id = ?3",
             params![duration, &now.to_rfc3339(), &card_id],
         )?;
+        
+        // Get the problem_id from the card and update problem timestamp
+        let problem_id: String = self.connection.query_row(
+            "SELECT problem_id FROM cards WHERE id = ?1",
+            [&card_id],
+            |row| row.get(0),
+        )?;
+        
+        // Update the problem's updated_at timestamp since a timer session ended
+        self.update_problem_timestamp(&problem_id)?;
         
         Ok(())
     }
@@ -1327,6 +1387,16 @@ impl DatabaseManager {
                 &now.to_rfc3339(),
             ],
         )?;
+        
+        // Get the problem_id from the card and update problem timestamp
+        let problem_id: String = self.connection.query_row(
+            "SELECT problem_id FROM cards WHERE id = ?1",
+            [card_id],
+            |row| row.get(0),
+        )?;
+        
+        // Update the problem's updated_at timestamp since a recording was saved
+        self.update_problem_timestamp(&problem_id)?;
         
         Ok(Recording {
             id,
