@@ -54,6 +54,14 @@ export default function ProblemCard() {
   // Store original regular card when entering solution mode
   const originalCardRef = useRef<Card | null>(null);
 
+  // Cache for regular card content to prevent overwriting when switching from answer mode
+  const regularCardCacheRef = useRef<{
+    code: string;
+    notes: string;
+    language: string;
+    cardId: string;
+  } | null>(null);
+
   // Track when we're intentionally switching modes to prevent race conditions
   const isSwitchingModesRef = useRef<boolean>(false);
   
@@ -116,18 +124,15 @@ export default function ProblemCard() {
           // Log successful timeout completion
         }, 0);
       } else if (!isActive && currentCard) {
-        // Exiting solution mode - restore regular card content
-        console.debug('Restoring regular card content to editor', {
+        // Exiting solution mode - restoration now handled by handleSolutionToggle cache mechanism
+        console.debug('Solution mode exited - restoration handled by cache mechanism', {
           cardId: currentCard.id,
-          codeLength: currentCard.code?.length || 0,
-          notesLength: currentCard.notes?.length || 0,
-          language: currentCard.language
+          note: 'Content restoration is handled by handleSolutionToggle cache to prevent overwriting'
         });
-        
-        // Update editor state with regular card content
-        debugSetCode(currentCard.code || '');
-        debugSetNotes(currentCard.notes || '');
-        setLanguage(currentCard.language || 'javascript');
+
+        // IMPORTANT: Do not restore content here as it would override the cache restoration
+        // The handleSolutionToggle function handles content restoration using regularCardCacheRef
+        // to prevent answer card content from overwriting regular card content
       }
     },
     onError: (error) => {
@@ -877,6 +882,17 @@ export default function ProblemCard() {
         return;
       }
 
+      // Skip sync if we just restored from cache to prevent database override
+      if (regularCardCacheRef.current && regularCardCacheRef.current.cardId === currentCard.id) {
+        console.debug('ProblemCard: Skipping editor sync - cache restoration in progress', {
+          operationId,
+          cardId: currentCard.id,
+          cacheCardId: regularCardCacheRef.current.cardId,
+          note: 'Preventing database override of cached content'
+        });
+        return;
+      }
+
       // Only sync editor state with current card when NOT in solution mode
       // When in solution mode, the onSolutionToggle callback handles editor state
       // Also check if the current card is NOT a solution card to prevent wrong content loading
@@ -1014,10 +1030,19 @@ export default function ProblemCard() {
 
   const createNewCard = async () => {
     if (!problemId) return;
-    
+
+    // SAVE BEFORE CREATING NEW CARD: Prevent content loss
+    if (currentCard) {
+      try {
+        await saveCard();
+      } catch (error) {
+        console.warn('Failed to save before creating new card, continuing anyway:', error);
+      }
+    }
+
     try {
       console.log('ProblemCard: Creating new card', { problemId });
-      
+
       const newCard = await invoke<Card>('create_card', {
         request: {
           problem_id: problemId,
@@ -1025,12 +1050,12 @@ export default function ProblemCard() {
           parent_card_id: null
         }
       });
-      
+
       console.log('ProblemCard: New card created successfully', {
         cardId: newCard.id,
         problemId: newCard.problem_id
       });
-      
+
       setCards(prev => [...prev, newCard]);
       setCurrentCard(newCard);
       navigate(`/problem/${problemId}/card/${newCard.id}`);
@@ -1039,13 +1064,20 @@ export default function ProblemCard() {
     }
   };
 
-  const navigateToCard = (direction: 'prev' | 'next') => {
+  const navigateToCard = async (direction: 'prev' | 'next') => {
     if (!currentCard) return;
-    
+
+    // SAVE BEFORE NAVIGATION: Prevent content loss when switching cards
+    try {
+      await saveCard();
+    } catch (error) {
+      console.warn('Failed to save before navigation, continuing anyway:', error);
+    }
+
     // Get all cards for this problem (now that getSiblingCards returns all cards)
     const allProblemCards = getSiblingCards(currentCard, cards);
     const currentIndex = allProblemCards.findIndex(c => c.id === currentCard.id);
-    
+
     if (direction === 'prev') {
       if (currentIndex > 0) {
         // Navigate to previous card
@@ -1139,45 +1171,38 @@ export default function ProblemCard() {
         // Set transition flag to prevent useEffect race conditions
         isSwitchingModesRef.current = true;
 
-        // First, save any unsaved editor changes to the current card
+        // Cache the current regular card content before switching to answer mode
         if (currentCard) {
-          console.debug('Enhanced handleSolutionToggle: Saving current editor state to card before switch', {
+          // Store current editor content in cache to prevent overwriting
+          regularCardCacheRef.current = {
+            code: currentEditorState.code || '',
+            notes: currentEditorState.notes || '',
+            language: currentEditorState.language || 'javascript',
+            cardId: currentCard.id
+          };
+
+          console.debug('Enhanced handleSolutionToggle: Cached regular card content', {
             cardId: currentCard.id,
-            editorCode: currentEditorState.code?.substring(0, 50) || '(empty)',
-            editorNotes: currentEditorState.notes?.substring(0, 50) || '(empty)',
-            editorLanguage: currentEditorState.language
+            cachedCode: regularCardCacheRef.current.code?.substring(0, 50) || '(empty)',
+            cachedNotes: regularCardCacheRef.current.notes?.substring(0, 50) || '(empty)',
+            cachedLanguage: regularCardCacheRef.current.language
           });
 
-          // Save editor state to current card first
+          // Save the current editor content to the database
           try {
             await saveCard();
-
-            // Now store the updated card content for restoration
-            originalCardRef.current = {
-              ...currentCard,
-              // Use the editor state which we just saved to the card
-              code: currentEditorState.code || '',
-              notes: currentEditorState.notes || '',
-              language: currentEditorState.language || 'javascript'
-            };
-
-            console.debug('Enhanced handleSolutionToggle: Stored card for restoration after save', {
-              cardId: currentCard.id,
-              cardNumber: currentCard.card_number,
-              storedCode: originalCardRef.current.code?.substring(0, 50) || '(empty)',
-              storedNotes: originalCardRef.current.notes?.substring(0, 50) || '(empty)',
-              storedLanguage: originalCardRef.current.language
-            });
+            console.debug('Enhanced handleSolutionToggle: Saved current card before switching to answer mode');
           } catch (saveError) {
-            console.error('Enhanced handleSolutionToggle: Failed to save current card before switch:', saveError);
-            // Fallback to using current card content without editor changes
-            originalCardRef.current = {
-              ...currentCard,
-              code: currentCard.code || '',
-              notes: currentCard.notes || '',
-              language: currentCard.language || 'javascript'
-            };
+            console.warn('Enhanced handleSolutionToggle: Failed to save current card before switch, continuing with cache:', saveError);
           }
+
+          // Store reference for state restoration
+          originalCardRef.current = {
+            ...currentCard,
+            code: regularCardCacheRef.current.code,
+            notes: regularCardCacheRef.current.notes,
+            language: regularCardCacheRef.current.language
+          };
         }
 
         // Toggle to solution card
@@ -1209,10 +1234,10 @@ export default function ProblemCard() {
           setNotes(solutionEditorState.notes);
           setLanguage(solutionEditorState.language);
 
-          // Clear transition flag after state updates
+          // Clear transition flag after state updates with longer delay to prevent race conditions
           setTimeout(() => {
             isSwitchingModesRef.current = false;
-          }, 100);
+          }, 500);
 
           console.debug('Enhanced handleSolutionToggle: Successfully switched to answer mode');
 
@@ -1244,23 +1269,37 @@ export default function ProblemCard() {
           );
         }
 
+        // SAVE BEFORE SWITCHING BACK: Prevent answer card content from overwriting regular card
+        if (currentCard) {
+          try {
+            await saveCard();
+            console.debug('Enhanced handleSolutionToggle: Saved answer card before switching back to regular mode');
+          } catch (error) {
+            console.warn('Failed to save answer card before switching back, continuing anyway:', error);
+          }
+        }
+
         // Set transition flag to prevent useEffect race conditions
         isSwitchingModesRef.current = true;
 
         // Exit solution mode
         solutionCard.actions.exitSolution();
 
-        // Restore original regular card
+        // Restore regular card content from cache to prevent overwriting
+        const cachedContent = regularCardCacheRef.current;
         const originalCard = originalCardRef.current;
-        if (originalCard) {
+
+        if (cachedContent && originalCard && cachedContent.cardId === originalCard.id) {
+          // Use cached content to restore exact content before switching to answer mode
           const regularEditorState: EditorState = {
-            code: originalCard.code || '',
-            notes: originalCard.notes || '',
-            language: originalCard.language || 'javascript'
+            code: cachedContent.code,
+            notes: cachedContent.notes,
+            language: cachedContent.language
           };
 
-          console.debug('Enhanced handleSolutionToggle: Restoring regular card content', {
+          console.debug('Enhanced handleSolutionToggle: Restoring regular card content from cache', {
             originalCardId: originalCard.id,
+            cacheCardId: cachedContent.cardId,
             codeLength: regularEditorState.code.length,
             notesLength: regularEditorState.notes.length,
             language: regularEditorState.language,
@@ -1268,22 +1307,24 @@ export default function ProblemCard() {
             notesPreview: regularEditorState.notes.substring(0, 50) || '(empty)'
           });
 
-          // Update current card and complete transition
-          setCurrentCard(originalCard);
-          stateMachine.actions.completeTransition(regularEditorState);
-
-          // Directly update editor state to ensure regular content is restored
+          // CRITICAL: Update editor state FIRST to prevent answer content from overwriting regular card
           setCode(regularEditorState.code);
           setNotes(regularEditorState.notes);
           setLanguage(regularEditorState.language);
 
-          // Clear stored reference
+          // THEN update current card and complete transition
+          setCurrentCard(originalCard);
+          stateMachine.actions.completeTransition(regularEditorState);
+
+          // Clear stored references
           originalCardRef.current = null;
 
-          // Clear transition flag after state updates
+          // Clear transition flag and cache after longer delay to prevent race conditions
           setTimeout(() => {
             isSwitchingModesRef.current = false;
-          }, 100);
+            // Clear cache after transition is complete to ensure it protects during race conditions
+            regularCardCacheRef.current = null;
+          }, 1000); // Extended delay to ensure all useEffect cycles complete
 
           console.debug('Enhanced handleSolutionToggle: Successfully switched to regular mode');
         } else if (currentCard) {
@@ -1301,10 +1342,10 @@ export default function ProblemCard() {
 
           stateMachine.actions.completeTransition(fallbackEditorState);
 
-          // Clear transition flag after state updates
+          // Clear transition flag after state updates with longer delay to prevent race conditions
           setTimeout(() => {
             isSwitchingModesRef.current = false;
-          }, 100);
+          }, 500);
 
           console.debug('Enhanced handleSolutionToggle: Used fallback to current card');
         } else {
