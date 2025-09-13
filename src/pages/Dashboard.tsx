@@ -200,6 +200,60 @@ export default function Dashboard() {
     }
   };
 
+  // Heat map intensity calculation functions
+  const getStudyTimeIntensity = (studyTime: number, allStudyTimes: number[]): number => {
+    if (allStudyTimes.length === 0) return 0;
+    
+    const maxTime = Math.max(...allStudyTimes);
+    const minTime = Math.min(...allStudyTimes);
+    const range = maxTime - minTime;
+    
+    // If all values are the same, return middle intensity
+    if (range === 0) return 2;
+    
+    // Normalize to 0-1 range, then map to 0-4 intensity levels
+    const normalized = (studyTime - minTime) / range;
+    return Math.floor(normalized * 4);
+  };
+
+  const getRecencyIntensity = (lastUpdated: string | undefined, allDates: (string | undefined)[]): number => {
+    if (!lastUpdated) return 0;
+    
+    const validDates = allDates.filter(date => date) as string[];
+    if (validDates.length === 0) return 0;
+    
+    const now = Date.now();
+    const dateTime = new Date(lastUpdated).getTime();
+    const age = now - dateTime;
+    
+    // Calculate max age from all valid dates
+    const maxAge = Math.max(...validDates.map(d => now - new Date(d).getTime()));
+    
+    // More recent dates get higher intensity (invert the age calculation)
+    const normalized = maxAge === 0 ? 1 : Math.max(0, 1 - (age / maxAge));
+    return Math.floor(normalized * 4);
+  };
+
+  // Get heat map classes based on intensity level
+  const getHeatMapClasses = (intensity: number): string => {
+    if (intensity === 0) return '';
+    
+    const baseClasses = 'transition-all duration-300';
+    
+    switch (intensity) {
+      case 1:
+        return `${baseClasses} border-l-4 border-l-blue-200 dark:border-l-blue-800 bg-blue-50/30 dark:bg-blue-950/10`;
+      case 2:
+        return `${baseClasses} border-l-4 border-l-blue-300 dark:border-l-blue-700 bg-blue-100/40 dark:bg-blue-900/15`;
+      case 3:
+        return `${baseClasses} border-l-4 border-l-blue-400 dark:border-l-blue-600 bg-blue-200/50 dark:bg-blue-800/20`;
+      case 4:
+        return `${baseClasses} border-l-4 border-l-blue-500 dark:border-l-blue-500 bg-blue-300/60 dark:bg-blue-700/25`;
+      default:
+        return baseClasses;
+    }
+  };
+
   // Handle sorting change
   const handleSortChange = (newSortBy: SortOption, newSortDirection?: SortDirection) => {
     const direction = newSortDirection || (newSortBy === sortBy ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc');
@@ -1011,18 +1065,34 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pb-8">
-              {filteredProblems.map((problem) => {
-                const isSelected = selectedProblemIds.has(problem.id);
-                return (
+              {(() => {
+                // Calculate data arrays for heat map intensity calculations
+                const allStudyTimes = filteredProblems.map(p => p.totalStudyTime || 0);
+                const allLastUpdated = filteredProblems.map(p => p.lastUpdatedAt);
+                
+                return filteredProblems.map((problem) => {
+                  const isSelected = selectedProblemIds.has(problem.id);
+                  
+                  // Calculate heat map intensity based on current sort
+                  let heatMapClasses = '';
+                  if (sortBy === 'studyTime') {
+                    const intensity = getStudyTimeIntensity(problem.totalStudyTime || 0, allStudyTimes);
+                    heatMapClasses = getHeatMapClasses(intensity);
+                  } else if (sortBy === 'lastUpdatedAt') {
+                    const intensity = getRecencyIntensity(problem.lastUpdatedAt, allLastUpdated);
+                    heatMapClasses = getHeatMapClasses(intensity);
+                  }
+                  
+                  return (
                 <div
                   key={problem.id}
                   onClick={(e) => handleCardClick(e, problem.id)}
                   onContextMenu={(e) => handleRightClick(e, problem.id)}
-                  className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border transition-colors group cursor-pointer select-none relative ${
+                  className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border group cursor-pointer select-none relative ${
                     isSelected
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                       : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                  }`}
+                  } ${heatMapClasses}`}
                 >
                   {/* Selection checkbox */}
                   <div className="absolute top-3 left-3 z-10">
@@ -1099,7 +1169,8 @@ export default function Dashboard() {
                   </div>
                 </div>
                 );
-              })}
+                });
+              })()}
             </div>
           )}
         </div>
