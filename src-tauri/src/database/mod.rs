@@ -1917,10 +1917,10 @@ impl DatabaseManager {
         
         let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(exclude_id) = exclude_id {
             (
-                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                         FROM problems 
-                         WHERE LOWER(title) LIKE ?1 AND id != ?2 
-                         ORDER BY title 
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                         FROM problems
+                         WHERE LOWER(title) LIKE ?1 AND id != ?2
+                         ORDER BY title
                          LIMIT ?3", related_column_sql),
                 vec![
                     Box::new(search_pattern),
@@ -1930,10 +1930,10 @@ impl DatabaseManager {
             )
         } else {
             (
-                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                         FROM problems 
-                         WHERE LOWER(title) LIKE ?1 
-                         ORDER BY title 
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                         FROM problems
+                         WHERE LOWER(title) LIKE ?1
+                         ORDER BY title
                          LIMIT ?2", related_column_sql),
                 vec![
                     Box::new(search_pattern),
@@ -2104,10 +2104,10 @@ impl DatabaseManager {
         let has_related_column = self.has_related_problem_ids_column();
         let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
         
-        let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                          FROM problems 
-                          WHERE LOWER(topic) LIKE ?1 
-                          ORDER BY title 
+        let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                          FROM problems
+                          WHERE LOWER(topic) LIKE ?1
+                          ORDER BY title
                           LIMIT 50", related_column_sql);
         
         let mut stmt = self.connection.prepare(&sql)?;
@@ -2145,12 +2145,12 @@ impl DatabaseManager {
         let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
         
         // Search in problem_tags table (normalized tags)
-        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at 
+        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at
                           FROM problems p
                           INNER JOIN problem_tags pt ON p.id = pt.problem_id
                           INNER JOIN tags t ON pt.tag_id = t.id
                           WHERE LOWER(t.name) LIKE ?1
-                          ORDER BY p.title 
+                          ORDER BY p.title
                           LIMIT 50", related_column_sql);
         
         println!("DEBUG: Executing SQL: {}", sql);
