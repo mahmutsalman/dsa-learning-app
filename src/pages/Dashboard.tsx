@@ -68,6 +68,9 @@ export default function Dashboard() {
     minimumHeight: 500,
     maximumHeight: 1200,
   });
+
+  // Calculate number of problems with study time > 0
+  const studiedProblemsCount = filteredProblems.filter(p => p.totalStudyTime && p.totalStudyTime > 0).length;
   
   // Context menu and tag modal state
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -933,6 +936,11 @@ export default function Dashboard() {
             >
               <ClockIcon className="h-4 w-4 mr-1" />
               Study Time
+              {sortBy === 'studyTime' && studiedProblemsCount > 0 && (
+                <span className="ml-1.5 px-1.5 py-0.5 bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 text-xs rounded-full font-semibold">
+                  {studiedProblemsCount} studied
+                </span>
+              )}
               {sortBy === 'studyTime' && (
                 sortDirection === 'asc' 
                   ? <ChevronUpIcon className="ml-1 h-4 w-4" />
