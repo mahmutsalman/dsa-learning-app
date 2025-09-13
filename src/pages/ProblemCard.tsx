@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 // Icons are now used in WorkspaceHeader component
@@ -25,6 +25,14 @@ import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
+// Enhanced state management hooks
+import { useCardModeStateMachine, EditorState, CardMode } from '../hooks/useCardModeStateMachine';
+// import { useEnhancedForceSave } from '../hooks/useEnhancedForceSave'; // Available for future use
+// import { useDebouncedEditorSync } from '../hooks/useDebouncedEditorSync'; // Available for future use
+// import { useUnifiedAutoSave } from '../hooks/useUnifiedAutoSave';
+import { useStateValidationGuards } from '../hooks/useStateValidationGuards';
+import { answerCardLogger } from '../utils/answerCardLogger';
+import { comprehensiveLogger } from '../utils/comprehensiveLogger';
 
 export default function ProblemCard() {
   // Track component renders for performance monitoring
@@ -45,6 +53,9 @@ export default function ProblemCard() {
   
   // Store original regular card when entering solution mode
   const originalCardRef = useRef<Card | null>(null);
+
+  // Track when we're intentionally switching modes to prevent race conditions
+  const isSwitchingModesRef = useRef<boolean>(false);
   
   // Enhanced workspace feature flag
   const [useEnhancedWorkspace] = useState(true);
@@ -164,7 +175,7 @@ export default function ProblemCard() {
     }
   };
 
-  // Editor state
+  // Editor state (will be enhanced with state management below)
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
@@ -306,23 +317,57 @@ export default function ProblemCard() {
     if (solutionCard.state.isLoading) {
       return;
     }
-    
+
     // Only save if the code has actually changed from what we last saved
     if (code === lastSavedValuesRef.current.code) {
       return;
     }
-    
-    // Save to solution card if in solution mode, otherwise save to regular card
-    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
-      // Save to solution card
-      if (code !== solutionCard.state.solutionCard.code) {
-        await solutionCard.actions.updateCode(code, language);
+
+    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
+    if (currentCard && code !== currentCard.code) {
+      try {
+        // Log for answer cards (when currentCard is the answer card)
+        if (currentCard.is_solution) {
+          const startTime = Date.now();
+          await comprehensiveLogger.logFrontendOperation(
+            'ANSWER_CARD_AUTO_SAVE_CODE',
+            'STARTING',
+            {
+              cardId: currentCard.id,
+              codeLength: code.length,
+              language,
+              oldCode: lastSavedValuesRef.current.code,
+              problemId: problemId || 'unknown'
+            }
+          );
+
+          // Use the same saveCard function - it works for all cards!
+          await saveCard();
+
+          const executionTime = Date.now() - startTime;
+          await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'code', code, true, undefined, executionTime);
+
+          await answerCardLogger.logAutoSaveTriggered(
+            problemId || 'unknown',
+            problem?.title || 'Unknown Problem',
+            currentCard.id,
+            'code',
+            code
+          );
+        } else {
+          // Regular card - just save normally
+          await saveCard();
+        }
+
         lastSavedValuesRef.current.code = code;
+      } catch (error) {
+        if (currentCard.is_solution) {
+          const executionTime = Date.now();
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'code', code, false, errorMessage, executionTime);
+        }
+        console.error('Auto-save failed:', error);
       }
-    } else if (currentCard && code !== currentCard.code) {
-      // Save to regular card
-      await saveCard();
-      lastSavedValuesRef.current.code = code;
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
@@ -331,23 +376,56 @@ export default function ProblemCard() {
     if (solutionCard.state.isLoading) {
       return;
     }
-    
+
     // Only save if the notes have actually changed from what we last saved
     if (notes === lastSavedValuesRef.current.notes) {
       return;
     }
-    
-    // Save to solution card if in solution mode, otherwise save to regular card
-    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
-      // Save to solution card
-      if (notes !== solutionCard.state.solutionCard.notes) {
-        await solutionCard.actions.updateNotes(notes);
+
+    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
+    if (currentCard && notes !== currentCard.notes) {
+      try {
+        // Log for answer cards (when currentCard is the answer card)
+        if (currentCard.is_solution) {
+          const startTime = Date.now();
+          await comprehensiveLogger.logFrontendOperation(
+            'ANSWER_CARD_AUTO_SAVE_NOTES',
+            'STARTING',
+            {
+              cardId: currentCard.id,
+              notesLength: notes.length,
+              oldNotes: lastSavedValuesRef.current.notes,
+              problemId: problemId || 'unknown'
+            }
+          );
+
+          // Use the same saveCard function - it works for all cards!
+          await saveCard();
+
+          const executionTime = Date.now() - startTime;
+          await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'notes', notes, true, undefined, executionTime);
+
+          await answerCardLogger.logAutoSaveTriggered(
+            problemId || 'unknown',
+            problem?.title || 'Unknown Problem',
+            currentCard.id,
+            'notes',
+            notes
+          );
+        } else {
+          // Regular card - just save normally
+          await saveCard();
+        }
+
         lastSavedValuesRef.current.notes = notes;
+      } catch (error) {
+        if (currentCard.is_solution) {
+          const executionTime = Date.now();
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'notes', notes, false, errorMessage, executionTime);
+        }
+        console.error('Auto-save failed:', error);
       }
-    } else if (currentCard && notes !== currentCard.notes) {
-      // Save to regular card
-      await saveCard();
-      lastSavedValuesRef.current.notes = notes;
     }
   }, { delay: 3000, enabled: !!currentCard && !solutionCard.state.isLoading });
 
@@ -356,27 +434,26 @@ export default function ProblemCard() {
     if (solutionCard.state.isLoading) {
       return;
     }
-    
+
     // Only save if the language has actually changed from what we last saved
     if (language === lastSavedValuesRef.current.language) {
       return;
     }
-    
-    // Save to solution card if in solution mode, otherwise save to regular card
-    if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
-      // Save to solution card (language changes are handled via updateCode)
-      if (language !== solutionCard.state.solutionCard.language) {
-        await solutionCard.actions.updateCode(code, language);
+
+    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
+    if (currentCard && language !== currentCard.language) {
+      try {
+        // Use the same saveCard function - it works for all cards!
+        await saveCard();
         lastSavedValuesRef.current.language = language;
+      } catch (error) {
+        console.error('Language auto-save failed:', error);
       }
-    } else if (currentCard && language !== currentCard.language) {
-      // Save to regular card
-      await saveCard();
-      lastSavedValuesRef.current.language = language;
     }
   }, { delay: 2000, enabled: !!currentCard && !solutionCard.state.isLoading }); // Increased delay to prevent excessive saves
 
-  // Force save function to ensure data is saved before card switching
+  // Force save function to ensure data is saved before card switching (legacy - replaced by unifiedAutoSave)
+  /*
   const forceSave = useCallback(async () => {
     try {
       // Cancel all pending auto-saves first to prevent conflicts
@@ -407,15 +484,61 @@ export default function ProblemCard() {
       // Don't throw - allow the switch to continue even if save fails
     }
   }, [solutionCard, currentCard, code, notes, language, saveCard, codeAutoSave, notesAutoSave, languageAutoSave]);
+  */
 
-  // Manual save function
+  // Manual save function - SIMPLIFIED
   const handleManualSave = useCallback(async () => {
+    if (!currentCard) return;
+
     try {
-      await saveCard();
+      // Log for answer cards
+      if (currentCard.is_solution) {
+        const startTime = Date.now();
+
+        await comprehensiveLogger.logFrontendOperation(
+          'ANSWER_CARD_MANUAL_SAVE',
+          'STARTING',
+          {
+            cardId: currentCard.id,
+            codeLength: code.length,
+            notesLength: notes.length,
+            language,
+            problemId: problemId || 'unknown'
+          }
+        );
+
+        // Use the same saveCard function - it works for all cards!
+        await saveCard();
+
+        const executionTime = Date.now() - startTime;
+        await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'code', code, true, undefined, executionTime);
+        await comprehensiveLogger.logAnswerCardAutoSaveComplete(currentCard.id, 'notes', notes, true, undefined, Math.floor(executionTime/2));
+
+        await answerCardLogger.logAnswerCardSave(
+          problemId || 'unknown',
+          problem?.title || 'Unknown Problem',
+          currentCard.id,
+          code,
+          notes
+        );
+      } else {
+        // Regular card - just save normally
+        await saveCard();
+      }
     } catch (err) {
-      // Error handling is done in the saveCard function
+      if (currentCard.is_solution) {
+        await answerCardLogger.logError(
+          'Manual Save Failed (Answer Card)',
+          err instanceof Error ? err : new Error(String(err)),
+          {
+            problemId: problemId || 'unknown',
+            cardId: currentCard.id
+          }
+        );
+      }
+      console.error('Manual save failed:', err);
     }
-  }, [saveCard]);
+  }, [saveCard, currentCard, code, notes, language, problemId, problem?.title]);
 
   // Problem description update handler
   const handleDescriptionUpdate = useCallback(async (problemId: string, newDescription: string): Promise<boolean> => {
@@ -525,6 +648,205 @@ export default function ProblemCard() {
     }
   }, [cardId, cards, problemId, loading, navigate]);
 
+  // Enhanced state management with race condition prevention
+  const currentMode: CardMode = useMemo(() =>
+    solutionCard.state.isActive ? 'ANSWER' : 'REGULAR',
+    [solutionCard.state.isActive]
+  );
+
+  // Initial state for state machine (stable values)
+  const initialEditorState: EditorState = useMemo(() => ({
+    code: '',
+    notes: '',
+    language: 'javascript'
+  }), []);
+
+  // State machine for safe mode transitions
+  const stateMachine = useCardModeStateMachine(currentMode, initialEditorState);
+
+  // Enhanced force save with validation
+  // const { forceSave: enhancedForceSave } = useEnhancedForceSave(); // Available for future use
+
+  // State validation guards for error prevention and recovery
+  const validationGuards = useStateValidationGuards({
+    enableLogging: true,
+    strictMode: false
+  });
+
+  // Debounced editor sync to prevent race conditions (available for future use)
+  /*
+  const debouncedSync = useDebouncedEditorSync(
+    currentCard,
+    stateMachine.state.currentMode,
+    stateMachine.state.isTransitioning,
+    (editorState: EditorState) => {
+      // Sync the legacy state with the new editor state
+      setCode(editorState.code);
+      setNotes(editorState.notes);
+      setLanguage(editorState.language);
+    },
+    {
+      debounceMs: 150,
+      enableLogging: true
+    }
+  );
+  */
+
+  // Current editor state for auto-save
+  const currentEditorState: EditorState = useMemo(() => ({
+    code,
+    notes,
+    language
+  }), [code, notes, language]);
+
+  // DISABLED: Unified auto-save coordinator (removed complex auto-save mechanism)
+  /*
+  const unifiedAutoSave = useUnifiedAutoSave(
+    stateMachine.state.currentMode,
+    stateMachine.state.isTransitioning,
+    currentCard,
+    solutionCard.state.solutionCard,
+    currentEditorState,
+    {
+      saveRegularCard: async (card: Card, state: EditorState) => {
+        const updatedCard = await invoke<Card | null>('update_card', {
+          cardId: card.id,
+          code: state.code !== card.code ? state.code : null,
+          notes: state.notes !== card.notes ? state.notes : null,
+          language: state.language !== card.language ? state.language : null,
+        });
+        if (updatedCard) {
+          setCurrentCard(updatedCard);
+          setCards(prev => prev.map(c => c.id === updatedCard.id ? updatedCard : c));
+        }
+      },
+      saveSolutionCard: async (_card: any, state: EditorState) => {
+        await solutionCard.actions.saveCodeImmediately(state.code, state.language);
+        await solutionCard.actions.saveNotesImmediately(state.notes);
+      }
+    },
+    {
+      regularCardDelay: 2500,
+      solutionCardDelay: 2500,
+      enableLogging: true
+    }
+  );
+  */
+
+  // Continuous state validation and recovery (DISABLED - causing infinite loop)
+  /*
+  useEffect(() => {
+    const currentEditorState: EditorState = { code, notes, language };
+
+    // Validate current state consistency
+    const validation = validationGuards.validateStateConsistency(
+      stateMachine.state.currentMode,
+      stateMachine.state.transitionState,
+      currentCard,
+      solutionCard.state.solutionCard,
+      currentEditorState
+    );
+
+    if (validation.canProceed) {
+      // Capture valid state for potential recovery
+      validationGuards.captureValidState(
+        stateMachine.state.currentMode,
+        stateMachine.state.transitionState,
+        currentCard,
+        solutionCard.state.solutionCard,
+        currentEditorState
+      );
+    } else if (!validation.isValid) {
+      // Critical error detected - attempt recovery
+      console.error('State validation failed:', validation);
+
+      const recoveryPlan = validationGuards.createRecoveryPlan(
+        validation,
+        validationGuards.recoverToLastValidState()
+      );
+
+      if (recoveryPlan.action === 'recover' && recoveryPlan.data) {
+        console.warn('Attempting state recovery:', recoveryPlan.reason);
+
+        const recoveryState = recoveryPlan.data;
+        setCode(recoveryState.editorState.code);
+        setNotes(recoveryState.editorState.notes);
+        setLanguage(recoveryState.editorState.language);
+
+        if (recoveryState.regularCard) {
+          setCurrentCard(recoveryState.regularCard);
+        }
+      } else if (recoveryPlan.action === 'reset') {
+        console.error('Critical state error - reset required:', recoveryPlan.reason);
+        // In a real application, this might trigger a user notification
+        setError('State consistency error detected. Please refresh the page if issues persist.');
+      }
+    }
+  }, [
+    code,
+    notes,
+    language,
+    stateMachine.state.currentMode,
+    stateMachine.state.transitionState,
+    currentCard?.id,
+    solutionCard.state.solutionCard?.id,
+    validationGuards
+  ]);
+  */
+
+  // Throttled state validation (safe implementation)
+  const validationThrottleRef = useRef<number>();
+  const isRecoveringRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // Skip validation during recovery to prevent loops
+    if (isRecoveringRef.current) {
+      return;
+    }
+
+    // Clear existing throttle
+    if (validationThrottleRef.current) {
+      clearTimeout(validationThrottleRef.current);
+    }
+
+    // Throttle validation to prevent rapid execution
+    validationThrottleRef.current = window.setTimeout(() => {
+      try {
+        const validation = validationGuards.validateStateConsistency(
+          currentMode,
+          stateMachine.state.transitionState,
+          currentCard,
+          solutionCard.state.solutionCard,
+          currentEditorState
+        );
+
+        if (validation.canProceed) {
+          // Capture valid state for potential recovery
+          validationGuards.captureValidState(
+            currentMode,
+            stateMachine.state.transitionState,
+            currentCard,
+            solutionCard.state.solutionCard,
+            currentEditorState
+          );
+        } else if (!validation.isValid && !isRecoveringRef.current) {
+          console.warn('State validation failed (throttled):', validation);
+          // Don't attempt automatic recovery to prevent loops
+          // Just log the issue for debugging
+        }
+      } catch (error) {
+        console.error('Validation error:', error);
+      }
+    }, 1000); // 1 second throttle
+
+    // Cleanup on unmount
+    return () => {
+      if (validationThrottleRef.current) {
+        clearTimeout(validationThrottleRef.current);
+      }
+    };
+  }, [currentMode, currentCard?.id, solutionCard.state.solutionCard?.id]);
+
   // Sync editor state when current card changes
   useEffect(() => {
     const operationId = `useEffect-currentCard-${Date.now()}`;
@@ -544,10 +866,21 @@ export default function ProblemCard() {
     });
     
     if (currentCard) {
-      
+
+      // Skip sync if we're intentionally switching modes to prevent race conditions
+      if (isSwitchingModesRef.current) {
+        console.debug('ProblemCard: Skipping editor sync - mode switch in progress', {
+          operationId,
+          cardId: currentCard.id,
+          isSwitchingModes: true
+        });
+        return;
+      }
+
       // Only sync editor state with current card when NOT in solution mode
       // When in solution mode, the onSolutionToggle callback handles editor state
-      if (!solutionCard.state.isActive) {
+      // Also check if the current card is NOT a solution card to prevent wrong content loading
+      if (!solutionCard.state.isActive && !currentCard.is_solution) {
         // Log race condition avoidance - normal card sync path
         
         console.debug('ProblemCard: Syncing editor with regular card', {
@@ -735,19 +1068,20 @@ export default function ProblemCard() {
     }
   };
 
-  // Solution card toggle handler with comprehensive error handling and performance monitoring
+  // Enhanced solution card toggle handler with state machine and validation
   const handleSolutionToggle = useCallback(async (event: React.KeyboardEvent | React.MouseEvent) => {
-    // Start sequence tracking for content loading operations
-    
-    // Prevent rapid toggles - check if solution card is already processing
-    if (solutionCard.state.isLoading) {
-        
-        
-        // Complete sequence tracking
-        return;
-      }
-    
-    // Log the initial state before any actions
+    console.debug('Enhanced handleSolutionToggle: Starting', {
+      isShiftAction: isShiftAction(event),
+      currentMode: stateMachine.state.currentMode,
+      isTransitioning: stateMachine.state.isTransitioning,
+      solutionCardActive: solutionCard.state.isActive
+    });
+
+    // Prevent rapid toggles during transitions
+    if (stateMachine.state.isTransitioning || solutionCard.state.isLoading) {
+      console.warn('Enhanced handleSolutionToggle: Transition in progress, ignoring request');
+      return;
+    }
 
     if (!isShiftAction(event)) {
       // Not shift+click, handle regular navigation
@@ -755,114 +1089,261 @@ export default function ProblemCard() {
       return;
     }
 
-    // This is a shift+click - check current mode and act accordingly
+    // Determine target mode
+    const targetMode: CardMode = stateMachine.state.currentMode === 'REGULAR' ? 'ANSWER' : 'REGULAR';
+    const currentEditorState: EditorState = {
+      code,
+      notes,
+      language
+    };
 
     try {
-      // CRITICAL: Force save current editor state before any mode switches
-      await forceSave();
+      // Validate transition before starting
+      const transitionValidation = validationGuards.validateTransition(
+        stateMachine.state.currentMode,
+        targetMode,
+        currentCard,
+        solutionCard.state.solutionCard
+      );
 
-      if (solutionCard.state.isActive) {
-        // Already in solution mode - exit back to regular cards
-        
-        solutionCard.actions.exitSolution();
-        
-        // Restore original regular card data
-        const originalCard = originalCardRef.current;
-        if (originalCard) {
-          
-          // Use React's batch update approach for more reliable state restoration
-          // First restore the card context, then update editor states synchronously
-          setCurrentCard(originalCard);
-          
-          // Set editor states immediately to avoid timing issues
-          // These will trigger re-renders but ensure consistent state
-          debugSetCode(originalCard.code || '');
-          debugSetNotes(originalCard.notes || '');
-          setLanguage(originalCard.language || 'javascript');
-          
-          // Clear the stored original card to prevent memory leaks
-          originalCardRef.current = null;
-          
-        } else {
-          
-          // Fallback: Try to restore to the current card if available
-          if (currentCard && !solutionCard.state.isActive) {
-            
-            // Don't change the current card, just ensure editor state is consistent
-            debugSetCode(currentCard.code || '');
-            debugSetNotes(currentCard.notes || '');
-            setLanguage(currentCard.language || 'javascript');
+      if (!transitionValidation.canProceed) {
+        console.error('Enhanced handleSolutionToggle: Transition validation failed', transitionValidation);
+        setError(`Cannot switch modes: ${transitionValidation.errors.join(', ')}`);
+        return;
+      }
+
+      if (transitionValidation.warnings.length > 0) {
+        console.warn('Enhanced handleSolutionToggle: Transition warnings', transitionValidation.warnings);
+      }
+
+      // Start transition in state machine
+      const transitionStarted = await stateMachine.actions.startTransition(targetMode, currentEditorState);
+      if (!transitionStarted) {
+        console.warn('Enhanced handleSolutionToggle: Failed to start transition');
+        return;
+      }
+
+      if (targetMode === 'ANSWER') {
+        // Switching to answer mode
+        console.debug('Enhanced handleSolutionToggle: Switching to answer mode');
+
+        // LOG: Switching to answer mode
+        await answerCardLogger.logAnswerModeEnter(
+          problemId || 'unknown',
+          problem?.title || 'Unknown Problem',
+          solutionCard.state.solutionCard?.id || 'unknown',
+          solutionCard.state.solutionCard?.code || '',
+          solutionCard.state.solutionCard?.notes || ''
+        );
+
+        // Set transition flag to prevent useEffect race conditions
+        isSwitchingModesRef.current = true;
+
+        // First, save any unsaved editor changes to the current card
+        if (currentCard) {
+          console.debug('Enhanced handleSolutionToggle: Saving current editor state to card before switch', {
+            cardId: currentCard.id,
+            editorCode: currentEditorState.code?.substring(0, 50) || '(empty)',
+            editorNotes: currentEditorState.notes?.substring(0, 50) || '(empty)',
+            editorLanguage: currentEditorState.language
+          });
+
+          // Save editor state to current card first
+          try {
+            await saveCard();
+
+            // Now store the updated card content for restoration
+            originalCardRef.current = {
+              ...currentCard,
+              // Use the editor state which we just saved to the card
+              code: currentEditorState.code || '',
+              notes: currentEditorState.notes || '',
+              language: currentEditorState.language || 'javascript'
+            };
+
+            console.debug('Enhanced handleSolutionToggle: Stored card for restoration after save', {
+              cardId: currentCard.id,
+              cardNumber: currentCard.card_number,
+              storedCode: originalCardRef.current.code?.substring(0, 50) || '(empty)',
+              storedNotes: originalCardRef.current.notes?.substring(0, 50) || '(empty)',
+              storedLanguage: originalCardRef.current.language
+            });
+          } catch (saveError) {
+            console.error('Enhanced handleSolutionToggle: Failed to save current card before switch:', saveError);
+            // Fallback to using current card content without editor changes
+            originalCardRef.current = {
+              ...currentCard,
+              code: currentCard.code || '',
+              notes: currentCard.notes || '',
+              language: currentCard.language || 'javascript'
+            };
           }
         }
-        
-      } else {
-        // Not in solution mode - enter solution view
-        
-        // Store the current regular card before switching to solution
-        // CRITICAL: Store the current editor state, which was just saved by forceSave()
-        if (currentCard) {
-          originalCardRef.current = { 
-            ...currentCard,
-            // Override with current editor state to preserve the just-saved changes
-            code: code,
-            notes: notes,
-            language: language
-          };
-        }
-        
+
+        // Toggle to solution card
         const toggleResult = await solutionCard.actions.toggle();
-        
-        
+
         if (toggleResult?.isViewingSolution && toggleResult?.card) {
-          // Update editors with solution data
           const solution = solutionCardToCard(toggleResult.card);
-          
-          
-          
-          // Use React's batch update approach for reliable solution state loading
-          // First set the card context, then update editor states synchronously
+          const solutionEditorState: EditorState = {
+            code: solution.code || '',
+            notes: solution.notes || '',
+            language: solution.language || 'javascript'
+          };
+
+          console.debug('Enhanced handleSolutionToggle: Loading solution card content', {
+            solutionCardId: solution.id,
+            codeLength: solutionEditorState.code.length,
+            notesLength: solutionEditorState.notes.length,
+            language: solutionEditorState.language,
+            codePreview: solutionEditorState.code.substring(0, 50) || '(empty)',
+            notesPreview: solutionEditorState.notes.substring(0, 50) || '(empty)'
+          });
+
+          // Update current card and complete transition
           setCurrentCard(solution);
-          
-          // Set editor states immediately to ensure solution data is loaded correctly
-          // This matches the exit solution pattern and ensures consistent behavior
-          debugSetCode(solution.code || '');
-          debugSetNotes(solution.notes || '');
-          setLanguage(solution.language || 'javascript');
-          
+          stateMachine.actions.completeTransition(solutionEditorState);
+
+          // Directly update editor state to ensure solution content is loaded
+          setCode(solutionEditorState.code);
+          setNotes(solutionEditorState.notes);
+          setLanguage(solutionEditorState.language);
+
+          // Clear transition flag after state updates
+          setTimeout(() => {
+            isSwitchingModesRef.current = false;
+          }, 100);
+
+          console.debug('Enhanced handleSolutionToggle: Successfully switched to answer mode');
+
+          // LOG: Successfully entered answer mode with loaded content
+          await answerCardLogger.logAnswerModeReopen(
+            problemId || 'unknown',
+            problem?.title || 'Unknown Problem',
+            solution.id,
+            solution.code || '',
+            solution.notes || ''
+          );
         } else {
+          isSwitchingModesRef.current = false;
+          throw new Error('Failed to get solution card after toggle');
+        }
+
+      } else {
+        // Switching to regular mode
+        console.debug('Enhanced handleSolutionToggle: Switching to regular mode');
+
+        // LOG: Exiting answer mode - capture current answer card content
+        if (solutionCard.state.solutionCard) {
+          await answerCardLogger.logAnswerModeExit(
+            problemId || 'unknown',
+            problem?.title || 'Unknown Problem',
+            solutionCard.state.solutionCard.id,
+            code || '',  // Current editor content for answer card
+            notes || ''  // Current editor content for answer card
+          );
+        }
+
+        // Set transition flag to prevent useEffect race conditions
+        isSwitchingModesRef.current = true;
+
+        // Exit solution mode
+        solutionCard.actions.exitSolution();
+
+        // Restore original regular card
+        const originalCard = originalCardRef.current;
+        if (originalCard) {
+          const regularEditorState: EditorState = {
+            code: originalCard.code || '',
+            notes: originalCard.notes || '',
+            language: originalCard.language || 'javascript'
+          };
+
+          console.debug('Enhanced handleSolutionToggle: Restoring regular card content', {
+            originalCardId: originalCard.id,
+            codeLength: regularEditorState.code.length,
+            notesLength: regularEditorState.notes.length,
+            language: regularEditorState.language,
+            codePreview: regularEditorState.code.substring(0, 50) || '(empty)',
+            notesPreview: regularEditorState.notes.substring(0, 50) || '(empty)'
+          });
+
+          // Update current card and complete transition
+          setCurrentCard(originalCard);
+          stateMachine.actions.completeTransition(regularEditorState);
+
+          // Directly update editor state to ensure regular content is restored
+          setCode(regularEditorState.code);
+          setNotes(regularEditorState.notes);
+          setLanguage(regularEditorState.language);
+
+          // Clear stored reference
+          originalCardRef.current = null;
+
+          // Clear transition flag after state updates
+          setTimeout(() => {
+            isSwitchingModesRef.current = false;
+          }, 100);
+
+          console.debug('Enhanced handleSolutionToggle: Successfully switched to regular mode');
+        } else if (currentCard) {
+          // Fallback to current card
+          const fallbackEditorState: EditorState = {
+            code: currentCard.code || '',
+            notes: currentCard.notes || '',
+            language: currentCard.language || 'javascript'
+          };
+
+          // Directly update editor state
+          setCode(fallbackEditorState.code);
+          setNotes(fallbackEditorState.notes);
+          setLanguage(fallbackEditorState.language);
+
+          stateMachine.actions.completeTransition(fallbackEditorState);
+
+          // Clear transition flag after state updates
+          setTimeout(() => {
+            isSwitchingModesRef.current = false;
+          }, 100);
+
+          console.debug('Enhanced handleSolutionToggle: Used fallback to current card');
+        } else {
+          isSwitchingModesRef.current = false;
+          throw new Error('No card available for restoration');
         }
       }
+
     } catch (error) {
-      // Error handling without performance tracking
-      
-      // Log comprehensive error information
-      
-      
-      console.error('Failed to toggle solution view:', error);
-      
-      // Attempt graceful recovery - ensure editor state is consistent
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('Enhanced handleSolutionToggle: Error during transition:', errorMessage);
+
+      // Clear transition flag on error
+      isSwitchingModesRef.current = false;
+
+      // Handle transition error with rollback
+      stateMachine.actions.handleTransitionError(errorMessage);
+
+      // Attempt graceful recovery
       try {
         if (currentCard) {
-          
-          // Force editor to match current card state
-          debugSetCode(currentCard.code || '');
-          debugSetNotes(currentCard.notes || '');
-          setLanguage(currentCard.language || 'javascript');
-          
-          // Validate recovery
-          setTimeout(async () => {
-          }, 10);
+          const recoveryState: EditorState = {
+            code: currentCard.code || '',
+            notes: currentCard.notes || '',
+            language: currentCard.language || 'javascript'
+          };
+
+          setCode(recoveryState.code);
+          setNotes(recoveryState.notes);
+          setLanguage(recoveryState.language);
+
+          console.debug('Enhanced handleSolutionToggle: Graceful recovery completed');
         }
       } catch (recoveryError) {
+        console.error('Enhanced handleSolutionToggle: Recovery failed:', recoveryError);
       }
-    } finally {
-      // Performance tracking removed
-      
-      
-      // Complete sequence tracking
     }
 
-  }, [solutionCard, currentCard, navigateToCard, problemId, code, notes, language]);
+  }, [stateMachine, solutionCard, currentCard, originalCardRef, navigateToCard, code, notes, language]);
 
   const deleteCard = async () => {
     if (!currentCard || !currentCard.parent_card_id) {
