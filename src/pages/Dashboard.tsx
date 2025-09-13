@@ -205,18 +205,29 @@ export default function Dashboard() {
 
   // Heat map intensity calculation functions
   const getStudyTimeIntensity = (studyTime: number, allStudyTimes: number[]): number => {
-    if (allStudyTimes.length === 0) return 0;
+    // If no study time, return 0 (no styling)
+    if (studyTime === 0 || allStudyTimes.length === 0) return 0;
     
-    const maxTime = Math.max(...allStudyTimes);
-    const minTime = Math.min(...allStudyTimes);
-    const range = maxTime - minTime;
+    // Filter out zero values for ranking
+    const nonZeroTimes = allStudyTimes.filter(t => t > 0);
+    if (nonZeroTimes.length === 0) return 0;
     
-    // If all values are the same, return middle intensity
-    if (range === 0) return 2;
+    // Handle case with only one non-zero value
+    if (nonZeroTimes.length === 1) return 2;
     
-    // Normalize to 0-1 range, then map to 0-4 intensity levels
-    const normalized = (studyTime - minTime) / range;
-    return Math.floor(normalized * 4);
+    // Sort times to get ranking (ascending order)
+    const sortedTimes = [...nonZeroTimes].sort((a, b) => a - b);
+    
+    // Find position of current study time
+    const position = sortedTimes.filter(t => t < studyTime).length;
+    const percentile = position / sortedTimes.length;
+    
+    // Assign intensity based on percentile ranges
+    // Ensures any non-zero time gets at least level 1
+    if (percentile <= 0.25) return 1;      // Bottom 25%
+    else if (percentile <= 0.5) return 2;  // 25-50%
+    else if (percentile <= 0.75) return 3; // 50-75%
+    else return 4;                         // Top 25%
   };
 
   const getRecencyIntensity = (lastUpdated: string | undefined, allDates: (string | undefined)[]): number => {
@@ -225,35 +236,43 @@ export default function Dashboard() {
     const validDates = allDates.filter(date => date) as string[];
     if (validDates.length === 0) return 0;
     
-    const now = Date.now();
-    const dateTime = new Date(lastUpdated).getTime();
-    const age = now - dateTime;
+    // Handle case with only one valid date
+    if (validDates.length === 1) return 2;
     
-    // Calculate max age from all valid dates
-    const maxAge = Math.max(...validDates.map(d => now - new Date(d).getTime()));
+    const currentTime = new Date(lastUpdated).getTime();
     
-    // More recent dates get higher intensity (invert the age calculation)
-    const normalized = maxAge === 0 ? 1 : Math.max(0, 1 - (age / maxAge));
-    return Math.floor(normalized * 4);
+    // Sort dates by age (most recent first)
+    const sortedDates = validDates
+      .map(d => new Date(d).getTime())
+      .sort((a, b) => b - a); // Descending order (newest first)
+    
+    // Find position of current date in sorted array
+    const position = sortedDates.findIndex(d => d <= currentTime);
+    const percentile = position / sortedDates.length;
+    
+    // Assign intensity based on percentile ranges
+    // More recent dates get higher intensity
+    if (percentile <= 0.25) return 4;      // Top 25% most recent
+    else if (percentile <= 0.5) return 3;  // 25-50% recent
+    else if (percentile <= 0.75) return 2; // 50-75% older
+    else return 1;                         // Bottom 25% oldest
   };
 
-  // Get heat map classes based on intensity level
+  // Get heat map classes based on intensity level - with improved dark mode
   const getHeatMapClasses = (intensity: number): string => {
     if (intensity === 0) return '';
     
-    const baseClasses = 'transition-all duration-300';
-    
     switch (intensity) {
       case 1:
-        return `${baseClasses} border-l-4 border-l-blue-200 dark:border-l-blue-800 bg-blue-50/30 dark:bg-blue-950/10`;
+        return 'border-l-4 border-l-blue-300 dark:border-l-blue-400 bg-blue-50 dark:bg-blue-900/30';
       case 2:
-        return `${baseClasses} border-l-4 border-l-blue-300 dark:border-l-blue-700 bg-blue-100/40 dark:bg-blue-900/15`;
+        return 'border-l-4 border-l-blue-400 dark:border-l-blue-300 bg-blue-100 dark:bg-blue-800/40';
       case 3:
-        return `${baseClasses} border-l-4 border-l-blue-400 dark:border-l-blue-600 bg-blue-200/50 dark:bg-blue-800/20`;
+        return 'border-l-4 border-l-blue-500 dark:border-l-blue-200 bg-blue-200 dark:bg-blue-700/50';
       case 4:
-        return `${baseClasses} border-l-4 border-l-blue-500 dark:border-l-blue-500 bg-blue-300/60 dark:bg-blue-700/25`;
+        return 'border-l-4 border-l-blue-600 dark:border-l-blue-100 bg-blue-300 dark:bg-blue-600/60';
       default:
-        return baseClasses;
+        return '';
     }
   };
 
@@ -1096,11 +1115,13 @@ export default function Dashboard() {
                   key={problem.id}
                   onClick={(e) => handleCardClick(e, problem.id)}
                   onContextMenu={(e) => handleRightClick(e, problem.id)}
-                  className={`bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border group cursor-pointer select-none relative ${
+                  className={`${
+                    heatMapClasses || 'bg-white dark:bg-gray-800'
+                  } rounded-lg p-6 shadow-sm border group cursor-pointer select-none relative ${
                     isSelected
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                       : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                  } ${heatMapClasses}`}
+                  }`}
                 >
                   {/* Selection checkbox */}
                   <div className="absolute top-3 left-3 z-10">

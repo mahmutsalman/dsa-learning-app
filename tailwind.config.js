@@ -4,6 +4,29 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  safelist: [
+    // Heat map background classes - light mode
+    'bg-blue-50',
+    'bg-blue-100', 
+    'bg-blue-200',
+    'bg-blue-300',
+    // Heat map background classes - dark mode
+    'dark:bg-blue-900/30',
+    'dark:bg-blue-800/40',
+    'dark:bg-blue-700/50',
+    'dark:bg-blue-600/60',
+    // Heat map border classes - light mode
+    'border-l-4',
+    'border-l-blue-300',
+    'border-l-blue-400',
+    'border-l-blue-500',
+    'border-l-blue-600',
+    // Heat map border classes - dark mode
+    'dark:border-l-blue-400',
+    'dark:border-l-blue-300',
+    'dark:border-l-blue-200',
+    'dark:border-l-blue-100'
+  ],
   darkMode: 'class',
   theme: {
     extend: {
