@@ -3193,4 +3193,17 @@ impl DatabaseManager {
         
         Ok(breakdowns)
     }
+
+    pub fn get_problem_count_for_tag(&self, tag_id: &str) -> anyhow::Result<i32> {
+        let sql = "SELECT COUNT(DISTINCT p.id) 
+                   FROM problems p
+                   INNER JOIN problem_tags pt ON p.id = pt.problem_id
+                   WHERE pt.tag_id = ?1";
+        
+        let count = self.connection.query_row(sql, [tag_id], |row| {
+            Ok(row.get::<_, i32>(0)?)
+        })?;
+        
+        Ok(count)
+    }
 }

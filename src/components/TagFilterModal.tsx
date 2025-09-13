@@ -109,13 +109,13 @@ export default function TagFilterModal({
       const tagsWithCount = await Promise.all(
         allTags.map(async (tag) => {
           try {
-            // Search for problems with this specific tag
-            const problemsWithTag = await invoke<any[]>('search_problems_by_tags', { 
-              query: tag.name 
+            // Get exact problem count for this specific tag
+            const problemCount = await invoke<number>('get_problem_count_for_tag', { 
+              tagId: tag.id 
             });
             return {
               ...tag,
-              problemCount: problemsWithTag.length
+              problemCount
             } as TagWithCount;
           } catch (error) {
             console.warn(`Failed to count problems for tag ${tag.name}:`, error);

@@ -112,6 +112,7 @@ async fn main() {
             commands::database::search_problems_by_name,
             commands::database::search_problems_by_topic,
             commands::database::search_problems_by_tags,
+            commands::database::get_problem_count_for_tag,
             commands::database::filter_problems_by_tags,
             commands::database::get_search_suggestions,
             // Problem connection commands

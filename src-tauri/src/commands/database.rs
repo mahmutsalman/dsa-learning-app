@@ -442,6 +442,15 @@ pub async fn search_problems_by_tags(
 }
 
 #[tauri::command]
+pub async fn get_problem_count_for_tag(
+    state: State<'_, AppState>,
+    tag_id: String,
+) -> Result<i32, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_problem_count_for_tag(&tag_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn filter_problems_by_tags(
     state: State<'_, AppState>,
     tag_ids: Vec<String>,
