@@ -103,6 +103,7 @@ pub struct Card {
     pub created_at: DateTime<Utc>,
     pub last_modified: DateTime<Utc>,
     pub parent_card_id: Option<String>,
+    pub is_solution: Option<bool>, // For backward compatibility and solution card detection
 }
 
 // Request/Response models

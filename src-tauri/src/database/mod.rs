@@ -977,12 +977,13 @@ impl DatabaseManager {
             created_at: now,
             last_modified: now,
             parent_card_id: req.parent_card_id,
+            is_solution: Some(false), // Regular cards are not solution cards
         })
     }
     
     pub fn get_cards_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<Card>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id 
+            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE problem_id = ?1 ORDER BY card_number"
         )?;
         
@@ -999,6 +1000,7 @@ impl DatabaseManager {
                 created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
                 last_modified: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
                 parent_card_id: row.get(10)?,
+                is_solution: Some(row.get::<_, i32>(11)? == 1), // Convert SQLite integer to boolean
             })
         })?;
         
@@ -1012,7 +1014,7 @@ impl DatabaseManager {
     
     pub fn get_card_by_id(&self, card_id: &str) -> anyhow::Result<Option<Card>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id 
+            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE id = ?1"
         )?;
         
@@ -1029,6 +1031,7 @@ impl DatabaseManager {
                 created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
                 last_modified: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
                 parent_card_id: row.get(10)?,
+                is_solution: Some(row.get::<_, i32>(11)? == 1), // Convert SQLite integer to boolean
             })
         })?;
         
@@ -1914,10 +1917,10 @@ impl DatabaseManager {
         
         let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(exclude_id) = exclude_id {
             (
-                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                         FROM problems 
-                         WHERE LOWER(title) LIKE ?1 AND id != ?2 
-                         ORDER BY title 
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                         FROM problems
+                         WHERE LOWER(title) LIKE ?1 AND id != ?2
+                         ORDER BY title
                          LIMIT ?3", related_column_sql),
                 vec![
                     Box::new(search_pattern),
@@ -1927,10 +1930,10 @@ impl DatabaseManager {
             )
         } else {
             (
-                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                         FROM problems 
-                         WHERE LOWER(title) LIKE ?1 
-                         ORDER BY title 
+                format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                         FROM problems
+                         WHERE LOWER(title) LIKE ?1
+                         ORDER BY title
                          LIMIT ?2", related_column_sql),
                 vec![
                     Box::new(search_pattern),
@@ -2101,10 +2104,10 @@ impl DatabaseManager {
         let has_related_column = self.has_related_problem_ids_column();
         let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
         
-        let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at 
-                          FROM problems 
-                          WHERE LOWER(topic) LIKE ?1 
-                          ORDER BY title 
+        let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
+                          FROM problems
+                          WHERE LOWER(topic) LIKE ?1
+                          ORDER BY title
                           LIMIT 50", related_column_sql);
         
         let mut stmt = self.connection.prepare(&sql)?;
@@ -2142,12 +2145,12 @@ impl DatabaseManager {
         let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
         
         // Search in problem_tags table (normalized tags)
-        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at 
+        let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at
                           FROM problems p
                           INNER JOIN problem_tags pt ON p.id = pt.problem_id
                           INNER JOIN tags t ON pt.tag_id = t.id
                           WHERE LOWER(t.name) LIKE ?1
-                          ORDER BY p.title 
+                          ORDER BY p.title
                           LIMIT 50", related_column_sql);
         
         println!("DEBUG: Executing SQL: {}", sql);
@@ -2326,13 +2329,78 @@ impl DatabaseManager {
     /// Update solution card code
     pub fn update_solution_card_code(&self, card_id: &str, code: &str, language: &str) -> anyhow::Result<()> {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
-        self.connection.execute(
-            "UPDATE cards 
+
+        // ENHANCED LOGGING: Log the operation details
+        println!("🔵 [DB_DEBUG] update_solution_card_code called:");
+        println!("🔵 [DB_DEBUG]   card_id: {}", card_id);
+        println!("🔵 [DB_DEBUG]   code length: {}", code.len());
+        println!("🔵 [DB_DEBUG]   code preview: {}", &code[..std::cmp::min(50, code.len())]);
+        println!("🔵 [DB_DEBUG]   language: {}", language);
+        println!("🔵 [DB_DEBUG]   timestamp: {}", now);
+
+        // Check if the card exists and is a solution card BEFORE update
+        let before_query = "SELECT id, code, language, is_solution FROM cards WHERE id = ?";
+        let mut stmt = self.connection.prepare(before_query)?;
+        let before_result = stmt.query_row([card_id], |row| {
+            Ok((
+                row.get::<_, String>("id")?,
+                row.get::<_, String>("code")?,
+                row.get::<_, String>("language")?,
+                row.get::<_, Option<bool>>("is_solution")?,
+            ))
+        }).optional()?;
+
+        match before_result {
+            Some((id, old_code, old_lang, is_sol)) => {
+                println!("🔵 [DB_DEBUG] BEFORE UPDATE - Card found:");
+                println!("🔵 [DB_DEBUG]   id: {}", id);
+                println!("🔵 [DB_DEBUG]   old_code: '{}'", old_code);
+                println!("🔵 [DB_DEBUG]   old_language: {}", old_lang);
+                println!("🔵 [DB_DEBUG]   is_solution: {:?}", is_sol);
+            }
+            None => {
+                println!("🔴 [DB_DEBUG] ERROR: Card with id '{}' not found!", card_id);
+                return Err(anyhow::anyhow!("Card with id '{}' not found", card_id));
+            }
+        }
+
+        // Execute the update
+        let rows_affected = self.connection.execute(
+            "UPDATE cards
              SET code = ?, language = ?, last_modified = ?
              WHERE id = ? AND is_solution = 1",
             params![code, language, now, card_id]
         )?;
+
+        println!("🔵 [DB_DEBUG] UPDATE executed, rows affected: {}", rows_affected);
+
+        if rows_affected == 0 {
+            println!("🔴 [DB_DEBUG] WARNING: No rows were updated! Either card doesn't exist or is_solution != 1");
+        }
+
+        // Verify the update by checking the card again
+        let after_query = "SELECT code, language, is_solution FROM cards WHERE id = ?";
+        let mut after_stmt = self.connection.prepare(after_query)?;
+        let after_result = after_stmt.query_row([card_id], |row| {
+            Ok((
+                row.get::<_, String>("code")?,
+                row.get::<_, String>("language")?,
+                row.get::<_, Option<bool>>("is_solution")?,
+            ))
+        }).optional()?;
+
+        match after_result {
+            Some((new_code, new_lang, is_sol)) => {
+                println!("🔵 [DB_DEBUG] AFTER UPDATE - Card state:");
+                println!("🔵 [DB_DEBUG]   new_code: '{}'", new_code);
+                println!("🔵 [DB_DEBUG]   new_language: {}", new_lang);
+                println!("🔵 [DB_DEBUG]   is_solution: {:?}", is_sol);
+                println!("🔵 [DB_DEBUG]   update_successful: {}", new_code == code);
+            }
+            None => {
+                println!("🔴 [DB_DEBUG] ERROR: Card disappeared after update!");
+            }
+        }
 
         Ok(())
     }
@@ -2340,13 +2408,27 @@ impl DatabaseManager {
     /// Update solution card notes
     pub fn update_solution_card_notes(&self, card_id: &str, notes: &str) -> anyhow::Result<()> {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        
-        self.connection.execute(
-            "UPDATE cards 
+
+        // ENHANCED LOGGING: Log the operation details
+        println!("🟢 [DB_DEBUG] update_solution_card_notes called:");
+        println!("🟢 [DB_DEBUG]   card_id: {}", card_id);
+        println!("🟢 [DB_DEBUG]   notes length: {}", notes.len());
+        println!("🟢 [DB_DEBUG]   notes preview: {}", &notes[..std::cmp::min(50, notes.len())]);
+        println!("🟢 [DB_DEBUG]   timestamp: {}", now);
+
+        // Execute the update
+        let rows_affected = self.connection.execute(
+            "UPDATE cards
              SET notes = ?, last_modified = ?
              WHERE id = ? AND is_solution = 1",
             params![notes, now, card_id]
         )?;
+
+        println!("🟢 [DB_DEBUG] UPDATE executed, rows affected: {}", rows_affected);
+
+        if rows_affected == 0 {
+            println!("🔴 [DB_DEBUG] WARNING: No rows were updated! Either card doesn't exist or is_solution != 1");
+        }
 
         Ok(())
     }
@@ -3195,15 +3277,51 @@ impl DatabaseManager {
     }
 
     pub fn get_problem_count_for_tag(&self, tag_id: &str) -> anyhow::Result<i32> {
-        let sql = "SELECT COUNT(DISTINCT p.id) 
+        let sql = "SELECT COUNT(DISTINCT p.id)
                    FROM problems p
                    INNER JOIN problem_tags pt ON p.id = pt.problem_id
                    WHERE pt.tag_id = ?1";
-        
+
         let count = self.connection.query_row(sql, [tag_id], |row| {
             Ok(row.get::<_, i32>(0)?)
         })?;
-        
+
         Ok(count)
+    }
+
+    /// Execute a raw SQL query for debugging purposes
+    /// Returns results as JSON-like structure
+    pub fn execute_query(&self, query: &str) -> anyhow::Result<Vec<std::collections::HashMap<String, serde_json::Value>>> {
+        let mut stmt = self.connection.prepare(query)?;
+        let column_count = stmt.column_count();
+        let column_names: Vec<String> = (0..column_count)
+            .map(|i| stmt.column_name(i).unwrap_or("unknown").to_string())
+            .collect();
+
+        let rows = stmt.query_map(params![], |row| {
+            let mut map = std::collections::HashMap::new();
+            for (i, column_name) in column_names.iter().enumerate() {
+                let value: Result<String, _> = row.get(i);
+                match value {
+                    Ok(s) => { map.insert(column_name.clone(), serde_json::Value::String(s)); }
+                    Err(_) => {
+                        // Try as integer
+                        let int_value: Result<i64, _> = row.get(i);
+                        match int_value {
+                            Ok(n) => { map.insert(column_name.clone(), serde_json::Value::Number(n.into())); }
+                            Err(_) => { map.insert(column_name.clone(), serde_json::Value::Null); }
+                        }
+                    }
+                }
+            }
+            Ok(map)
+        })?;
+
+        let mut results = Vec::new();
+        for row_result in rows {
+            results.push(row_result?);
+        }
+
+        Ok(results)
     }
 }
