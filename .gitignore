@@ -164,6 +164,10 @@ coverage/
 .nyc_output
 test-results/
 
+# Debug and testing documentation
+ANSWER_CARD_FIX_TESTING_PLAN.md
+ANSWER_CARD_RACE_CONDITION_FIX.md
+
 # =============================================================================
 # Operating System Files
 # =============================================================================

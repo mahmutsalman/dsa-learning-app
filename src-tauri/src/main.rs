@@ -172,6 +172,7 @@ async fn main() {
             commands::debug::check_microphone_permission,
             commands::debug::write_file,
             commands::debug::append_to_file,
+            commands::debug::execute_sql_query,
             // Stats commands
             commands::stats::get_problems_worked_today,
             commands::stats::get_daily_work_stats,
