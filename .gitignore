@@ -168,6 +168,11 @@ test-results/
 ANSWER_CARD_FIX_TESTING_PLAN.md
 ANSWER_CARD_RACE_CONDITION_FIX.md
 
+# Backup files from debugging
+src/pages/ProblemCard.backup.tsx
+*.backup.tsx
+*.backup.ts
+
 # =============================================================================
 # Operating System Files
 # =============================================================================
