@@ -188,14 +188,18 @@ export default function ProblemCard() {
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
+  // Track which card the latest edits belong to
+  const lastEditedCardIdRef = useRef<string | null>(null);
 
   // Throttled debug wrapper for setNotes - prevents excessive logging during typing
   const debugSetNotes = useCallback((newNotes: string) => {
+    lastEditedCardIdRef.current = currentCard?.id || null;
     setNotes(newNotes);
   }, [notes, code, language, currentCard]);
 
   // Throttled debug wrapper for setCode - prevents excessive logging during typing
   const debugSetCode = useCallback((newCode: string) => {
+    lastEditedCardIdRef.current = currentCard?.id || null;
     setCode(newCode);
   }, [code, notes, language, currentCard]);
   
@@ -287,6 +291,14 @@ export default function ProblemCard() {
   // Save functions
   const saveCard = useCallback(async () => {
     if (!currentCard) return;
+    // Prevent saving edits to a different card than the one they belong to
+    if (lastEditedCardIdRef.current && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('saveCard: Skipping save due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
+      return;
+    }
     
     // Check if anything actually needs to be saved
     const hasCodeChange = code !== currentCard.code;
@@ -377,6 +389,14 @@ export default function ProblemCard() {
     if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
       return;
     }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('codeAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
+      return;
+    }
 
     // Only save if the code has actually changed from what we last saved
     if (code === lastSavedValuesRef.current.code) {
@@ -437,6 +457,14 @@ export default function ProblemCard() {
     if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
       return;
     }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('notesAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
+      return;
+    }
 
     // Only save if the notes have actually changed from what we last saved
     if (notes === lastSavedValuesRef.current.notes) {
@@ -494,6 +522,14 @@ export default function ProblemCard() {
   const languageAutoSave = useAutoSave(language, async () => {
     // Don't auto-save during solution mode transitions or when loading
     if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
+      return;
+    }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('languageAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
       return;
     }
 
@@ -993,7 +1029,8 @@ export default function ProblemCard() {
       // Also check if the current card is NOT a solution card to prevent wrong content loading
       if (!solutionCard.state.isActive && !currentCard.is_solution) {
         // Log race condition avoidance - normal card sync path
-        
+        // Ensure subsequent saves map to this card
+        lastEditedCardIdRef.current = currentCard.id;
         console.debug('ProblemCard: Syncing editor with regular card', {
           operationId,
           cardId: currentCard.id,
