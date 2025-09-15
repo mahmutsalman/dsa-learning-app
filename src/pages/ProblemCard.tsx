@@ -298,6 +298,32 @@ export default function ProblemCard() {
     }
     
     try {
+      // Avoid overwriting regular cards while viewing solution card
+      if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+        const solId = solutionCard.state.solutionCard.id;
+        console.debug('saveCard: Routing to solution card save', {
+          solId,
+          hasCodeChange,
+          hasNotesChange,
+          hasLanguageChange
+        });
+
+        if (hasCodeChange || hasLanguageChange) {
+          await solutionCard.actions.saveCodeImmediately(code, language);
+        }
+        if (hasNotesChange) {
+          await solutionCard.actions.saveNotesImmediately(notes);
+        }
+
+        // Update last saved snapshot
+        lastSavedValuesRef.current = {
+          code: code || '',
+          notes: notes || '',
+          language: language || 'javascript'
+        };
+
+        return; // Do not update regular card state while in solution mode
+      }
       const updatedCard = await invoke<Card | null>('update_card', {
         cardId: currentCard.id,
         code: hasCodeChange ? code : null,
@@ -348,7 +374,7 @@ export default function ProblemCard() {
   // Auto-save hooks with solution mode coordination and improved change detection
   const codeAutoSave = useAutoSave(code, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
       return;
     }
 
@@ -357,11 +383,12 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && code !== currentCard.code) {
       try {
-        // Log for answer cards (when currentCard is the answer card)
-        if (currentCard.is_solution) {
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          // Route to solution API while viewing solution
+          await solutionCard.actions.updateCode(code, language);
+        } else if (currentCard.is_solution) {
           const startTime = Date.now();
           await comprehensiveLogger.logFrontendOperation(
             'ANSWER_CARD_AUTO_SAVE_CODE',
@@ -407,7 +434,7 @@ export default function ProblemCard() {
 
   const notesAutoSave = useAutoSave(notes, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
       return;
     }
 
@@ -416,11 +443,12 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && notes !== currentCard.notes) {
       try {
-        // Log for answer cards (when currentCard is the answer card)
-        if (currentCard.is_solution) {
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          // Route to solution API while viewing solution
+          await solutionCard.actions.updateNotes(notes);
+        } else if (currentCard.is_solution) {
           const startTime = Date.now();
           await comprehensiveLogger.logFrontendOperation(
             'ANSWER_CARD_AUTO_SAVE_NOTES',
@@ -465,7 +493,7 @@ export default function ProblemCard() {
 
   const languageAutoSave = useAutoSave(language, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
       return;
     }
 
@@ -474,11 +502,13 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && language !== currentCard.language) {
       try {
-        // Use the same saveCard function - it works for all cards!
-        await saveCard();
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          await solutionCard.actions.updateCode(code, language);
+        } else {
+          await saveCard();
+        }
         lastSavedValuesRef.current.language = language;
       } catch (error) {
         console.error('Language auto-save failed:', error);
@@ -525,8 +555,11 @@ export default function ProblemCard() {
     if (!currentCard) return;
 
     try {
-      // Log for answer cards
-      if (currentCard.is_solution) {
+      // Route manual save appropriately
+      if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+        await solutionCard.actions.saveCodeImmediately(code, language);
+        await solutionCard.actions.saveNotesImmediately(notes);
+      } else if (currentCard.is_solution) {
         const startTime = Date.now();
 
         await comprehensiveLogger.logFrontendOperation(
