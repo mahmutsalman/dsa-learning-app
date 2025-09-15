@@ -995,7 +995,8 @@ export default function ProblemCard() {
       // Skip sync only for the restoration target during mode switch; allow others
       if (isSwitchingModesRef.current) {
         const restoringCardId = originalCardRef.current?.id;
-        if (!restoringCardId || currentCard.id === restoringCardId) {
+        // Only skip when we are restoring the original card explicitly.
+        if (restoringCardId && currentCard.id === restoringCardId) {
           console.debug('ProblemCard: Skipping editor sync - mode switch in progress (restoring target)', {
             operationId,
             cardId: currentCard.id,
@@ -1004,11 +1005,11 @@ export default function ProblemCard() {
           });
           return;
         }
-        // Different card selected during transition — proceed with sync to avoid stale content
-        console.debug('ProblemCard: Proceeding with editor sync during mode switch for different card', {
+        // Otherwise, proceed with sync to avoid stale content on other cards
+        console.debug('ProblemCard: Proceeding with editor sync during mode switch for different/unknown target', {
           operationId,
           cardId: currentCard.id,
-          restoringCardId,
+          restoringCardId: restoringCardId || 'undefined',
           isSwitchingModes: true
         });
       }
