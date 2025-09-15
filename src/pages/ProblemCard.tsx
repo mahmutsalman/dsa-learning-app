@@ -188,14 +188,18 @@ export default function ProblemCard() {
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
+  // Track which card the latest edits belong to
+  const lastEditedCardIdRef = useRef<string | null>(null);
 
   // Throttled debug wrapper for setNotes - prevents excessive logging during typing
   const debugSetNotes = useCallback((newNotes: string) => {
+    lastEditedCardIdRef.current = currentCard?.id || null;
     setNotes(newNotes);
   }, [notes, code, language, currentCard]);
 
   // Throttled debug wrapper for setCode - prevents excessive logging during typing
   const debugSetCode = useCallback((newCode: string) => {
+    lastEditedCardIdRef.current = currentCard?.id || null;
     setCode(newCode);
   }, [code, notes, language, currentCard]);
   
@@ -287,6 +291,14 @@ export default function ProblemCard() {
   // Save functions
   const saveCard = useCallback(async () => {
     if (!currentCard) return;
+    // Prevent saving edits to a different card than the one they belong to
+    if (lastEditedCardIdRef.current && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('saveCard: Skipping save due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
+      return;
+    }
     
     // Check if anything actually needs to be saved
     const hasCodeChange = code !== currentCard.code;
@@ -298,6 +310,32 @@ export default function ProblemCard() {
     }
     
     try {
+      // Avoid overwriting regular cards while viewing solution card
+      if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+        const solId = solutionCard.state.solutionCard.id;
+        console.debug('saveCard: Routing to solution card save', {
+          solId,
+          hasCodeChange,
+          hasNotesChange,
+          hasLanguageChange
+        });
+
+        if (hasCodeChange || hasLanguageChange) {
+          await solutionCard.actions.saveCodeImmediately(code, language);
+        }
+        if (hasNotesChange) {
+          await solutionCard.actions.saveNotesImmediately(notes);
+        }
+
+        // Update last saved snapshot
+        lastSavedValuesRef.current = {
+          code: code || '',
+          notes: notes || '',
+          language: language || 'javascript'
+        };
+
+        return; // Do not update regular card state while in solution mode
+      }
       const updatedCard = await invoke<Card | null>('update_card', {
         cardId: currentCard.id,
         code: hasCodeChange ? code : null,
@@ -348,7 +386,15 @@ export default function ProblemCard() {
   // Auto-save hooks with solution mode coordination and improved change detection
   const codeAutoSave = useAutoSave(code, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
+      return;
+    }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('codeAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
       return;
     }
 
@@ -357,11 +403,12 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && code !== currentCard.code) {
       try {
-        // Log for answer cards (when currentCard is the answer card)
-        if (currentCard.is_solution) {
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          // Route to solution API while viewing solution
+          await solutionCard.actions.updateCode(code, language);
+        } else if (currentCard.is_solution) {
           const startTime = Date.now();
           await comprehensiveLogger.logFrontendOperation(
             'ANSWER_CARD_AUTO_SAVE_CODE',
@@ -407,7 +454,15 @@ export default function ProblemCard() {
 
   const notesAutoSave = useAutoSave(notes, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
+      return;
+    }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('notesAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
       return;
     }
 
@@ -416,11 +471,12 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && notes !== currentCard.notes) {
       try {
-        // Log for answer cards (when currentCard is the answer card)
-        if (currentCard.is_solution) {
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          // Route to solution API while viewing solution
+          await solutionCard.actions.updateNotes(notes);
+        } else if (currentCard.is_solution) {
           const startTime = Date.now();
           await comprehensiveLogger.logFrontendOperation(
             'ANSWER_CARD_AUTO_SAVE_NOTES',
@@ -465,7 +521,15 @@ export default function ProblemCard() {
 
   const languageAutoSave = useAutoSave(language, async () => {
     // Don't auto-save during solution mode transitions or when loading
-    if (solutionCard.state.isLoading) {
+    if (solutionCard.state.isLoading || isSwitchingModesRef.current) {
+      return;
+    }
+    // Prevent cross-card autosave if edits belong to a different card
+    if (lastEditedCardIdRef.current && currentCard && lastEditedCardIdRef.current !== currentCard.id) {
+      console.warn('languageAutoSave: Skipping due to edited card mismatch', {
+        editedFor: lastEditedCardIdRef.current,
+        currentCardId: currentCard.id
+      });
       return;
     }
 
@@ -474,11 +538,13 @@ export default function ProblemCard() {
       return;
     }
 
-    // SIMPLIFIED: Use the same saveCard mechanism for both regular and answer cards
     if (currentCard && language !== currentCard.language) {
       try {
-        // Use the same saveCard function - it works for all cards!
-        await saveCard();
+        if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+          await solutionCard.actions.updateCode(code, language);
+        } else {
+          await saveCard();
+        }
         lastSavedValuesRef.current.language = language;
       } catch (error) {
         console.error('Language auto-save failed:', error);
@@ -525,8 +591,11 @@ export default function ProblemCard() {
     if (!currentCard) return;
 
     try {
-      // Log for answer cards
-      if (currentCard.is_solution) {
+      // Route manual save appropriately
+      if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
+        await solutionCard.actions.saveCodeImmediately(code, language);
+        await solutionCard.actions.saveNotesImmediately(notes);
+      } else if (currentCard.is_solution) {
         const startTime = Date.now();
 
         await comprehensiveLogger.logFrontendOperation(
@@ -641,6 +710,7 @@ export default function ProblemCard() {
     }
     
     if (cardId && cards.length > 0) {
+      // Prefer regular cards for initial selection; avoid selecting solution card by URL
       const card = cards.find(c => c.id === cardId);
       console.debug('ProblemCard: Found card by ID', {
         found: !!card,
@@ -650,27 +720,48 @@ export default function ProblemCard() {
       });
       
       if (card) {
-        setCurrentCard(card);
+        if ((card as any).is_solution) {
+          // If URL points to solution card, redirect to first regular card
+          const regularCards = cards.filter(c => !(c as any).is_solution);
+          const fallback = regularCards[0] || cards[0];
+          console.warn('ProblemCard: URL points to solution card; redirecting to first regular card', {
+            requestedCardId: cardId,
+            redirectCardId: fallback?.id
+          });
+          if (fallback) {
+            setCurrentCard(fallback);
+            navigate(`/problem/${problemId}/card/${fallback.id}`, { replace: true });
+          } else {
+            setCurrentCard(card);
+          }
+        } else {
+          setCurrentCard(card);
+        }
       } else {
         console.warn('ProblemCard: Requested cardId not found, using first card', {
           requestedCardId: cardId,
           availableCardIds: cards.map(c => c.id),
           usingCard: cards[0].id
         });
-        setCurrentCard(cards[0]);
+        // Ensure we don't select a solution card as default
+        const regularCards = cards.filter(c => !(c as any).is_solution);
+        setCurrentCard(regularCards[0] || cards[0]);
       }
     } else if (cards.length > 0) {
-      console.debug('ProblemCard: Using first card', {
-        firstCard: cards[0].id,
-        hasNotes: !!cards[0].notes,
-        notesContent: cards[0].notes
+      // Default to first regular card; avoid selecting solution card by default
+      const regularCards = cards.filter(c => !(c as any).is_solution);
+      const first = regularCards[0] || cards[0];
+      console.debug('ProblemCard: Using first regular card', {
+        firstCard: first.id,
+        hasNotes: !!first.notes,
+        notesContent: first.notes
       });
-      setCurrentCard(cards[0]);
+      setCurrentCard(first);
       
       // Auto-navigate to proper URL with card ID for consistency
       if (!cardId) {
         console.log('ProblemCard: Navigating to first card URL for consistency');
-        navigate(`/problem/${problemId}/card/${cards[0].id}`, { replace: true });
+        navigate(`/problem/${problemId}/card/${first.id}`, { replace: true });
       }
     } else {
       console.warn('ProblemCard: No cards available and no fallback possible', {
@@ -901,14 +992,26 @@ export default function ProblemCard() {
     
     if (currentCard) {
 
-      // Skip sync if we're intentionally switching modes to prevent race conditions
+      // Skip sync only for the restoration target during mode switch; allow others
       if (isSwitchingModesRef.current) {
-        console.debug('ProblemCard: Skipping editor sync - mode switch in progress', {
+        const restoringCardId = originalCardRef.current?.id;
+        // Only skip when we are restoring the original card explicitly.
+        if (restoringCardId && currentCard.id === restoringCardId) {
+          console.debug('ProblemCard: Skipping editor sync - mode switch in progress (restoring target)', {
+            operationId,
+            cardId: currentCard.id,
+            restoringCardId,
+            isSwitchingModes: true
+          });
+          return;
+        }
+        // Otherwise, proceed with sync to avoid stale content on other cards
+        console.debug('ProblemCard: Proceeding with editor sync during mode switch for different/unknown target', {
           operationId,
           cardId: currentCard.id,
+          restoringCardId: restoringCardId || 'undefined',
           isSwitchingModes: true
         });
-        return;
       }
 
       // Skip sync if we just restored from cache to prevent database override
@@ -927,7 +1030,8 @@ export default function ProblemCard() {
       // Also check if the current card is NOT a solution card to prevent wrong content loading
       if (!solutionCard.state.isActive && !currentCard.is_solution) {
         // Log race condition avoidance - normal card sync path
-        
+        // Ensure subsequent saves map to this card
+        lastEditedCardIdRef.current = currentCard.id;
         console.debug('ProblemCard: Syncing editor with regular card', {
           operationId,
           cardId: currentCard.id,
@@ -1258,8 +1362,8 @@ export default function ProblemCard() {
             notesPreview: solutionEditorState.notes.substring(0, 50) || '(empty)'
           });
 
-          // Update current card and complete transition
-          setCurrentCard(solution);
+          // Do NOT switch currentCard to solution card to avoid UI desync
+          // Complete transition while keeping currentCard pointing to the regular card
           stateMachine.actions.completeTransition(solutionEditorState);
 
           // Directly update editor state to ensure solution content is loaded
@@ -1568,6 +1672,7 @@ export default function ProblemCard() {
                 onBackToPreviousProblem={handleBackToPreviousProblem}
                 isViewingSolution={solutionCard.state.isActive}
                 onSolutionToggle={handleSolutionToggle}
+                isTransitioning={stateMachine.state.isTransitioning}
               />
             }
             problemPanel={
@@ -1733,6 +1838,7 @@ export default function ProblemCard() {
               onBackToPreviousProblem={handleBackToPreviousProblem}
               isViewingSolution={solutionCard.state.isActive}
               onSolutionToggle={handleSolutionToggle}
+              isTransitioning={stateMachine.state.isTransitioning}
             />
           }
           problemPanel={

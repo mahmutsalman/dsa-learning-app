@@ -207,7 +207,8 @@ export function WorkspaceHeader({
   onBackToPreviousProblem,
   isViewingSolution = false,
   onSolutionToggle,
-}: WorkspaceHeaderProps) {
+  isTransitioning = false,
+}: WorkspaceHeaderProps & { isTransitioning?: boolean }) {
   const navigate = useNavigate();
   const timerButtonRef = useRef<HTMLButtonElement>(null);
   const headerContainerRef = useRef<HTMLDivElement>(null);
@@ -432,6 +433,14 @@ export function WorkspaceHeader({
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.236 4.53L7.73 10.36a.75.75 0 00-1.06 1.061l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
                   </svg>
                   Solution Mode
+                </span>
+              )}
+
+              {/* Transition Indicator */}
+              {isTransitioning && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+                  <div className="animate-spin rounded-full h-3 w-3 border border-current border-t-transparent mr-1" />
+                  Switching…
                 </span>
               )}
             </div>
