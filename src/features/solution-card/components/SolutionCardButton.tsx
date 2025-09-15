@@ -44,7 +44,7 @@ export const SolutionCardButton: React.FC<SolutionCardButtonProps> = ({
       onKeyDown={handleKeyDown}
       className={buttonClasses}
       disabled={disabled}
-      title={isActive ? "Exit solution view (Shift+Click)" : "View solution (Shift+Click) or Navigate to next card"}
+      title={isActive ? "Exit solution view" : "View solution (Shift+Click) or Navigate to next card"}
       aria-label={isActive ? "Exit solution view" : "Navigate to next card or view solution"}
     >
       <div className="flex items-center">
@@ -66,7 +66,7 @@ export const SolutionCardButton: React.FC<SolutionCardButtonProps> = ({
       
       {/* Enhanced hint tooltip */}
       <span className={`${styles.solutionHint} ${isActive ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-2 py-1 rounded' : ''}`}>
-        {isActive ? 'Shift+Click to exit solution' : 'Shift+Click for solution'}
+        {isActive ? 'Click to exit solution' : 'Shift+Click for solution'}
       </span>
     </button>
   );

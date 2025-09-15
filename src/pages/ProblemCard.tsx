@@ -1115,8 +1115,12 @@ export default function ProblemCard() {
       return;
     }
 
-    if (!isShiftAction(event)) {
-      // Not shift+click, handle regular navigation
+    // In solution mode: regular click exits, shift+click also exits
+    // Not in solution mode: regular click navigates, shift+click enters solution
+    const isInSolutionMode = solutionCard.state.isActive;
+
+    if (!isShiftAction(event) && !isInSolutionMode) {
+      // Not shift+click and not in solution mode, handle regular navigation
       navigateToCard('next');
       return;
     }

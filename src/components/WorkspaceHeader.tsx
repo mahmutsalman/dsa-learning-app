@@ -601,7 +601,7 @@ export function WorkspaceHeader({
                 <button
                   ref={timerButtonRef}
                   onClick={onToggleTimer}
-                  disabled={timer.isLoading}
+                  disabled={timer.isLoading || isViewingSolution}
                   className="header-scale-button header-timer-button with-icon bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                   style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
                   title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
@@ -758,11 +758,12 @@ export function WorkspaceHeader({
                 {/* Main Recording Button */}
                 <button
                   onClick={onToggleRecording}
+                  disabled={isViewingSolution}
                   className={`header-scale-button header-timer-button with-icon transition-colors ${
                     recordingState.isRecording
                       ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                       : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
-                  }`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={recordingState.isRecording ? "Stop recording" : "Start recording"}
                   aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
                   aria-pressed={recordingState.isRecording}
