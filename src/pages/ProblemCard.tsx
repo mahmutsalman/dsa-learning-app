@@ -1291,8 +1291,8 @@ export default function ProblemCard() {
             notesPreview: solutionEditorState.notes.substring(0, 50) || '(empty)'
           });
 
-          // Update current card and complete transition
-          setCurrentCard(solution);
+          // Do NOT switch currentCard to solution card to avoid UI desync
+          // Complete transition while keeping currentCard pointing to the regular card
           stateMachine.actions.completeTransition(solutionEditorState);
 
           // Directly update editor state to ensure solution content is loaded
