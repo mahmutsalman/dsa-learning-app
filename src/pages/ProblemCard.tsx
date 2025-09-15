@@ -3,6 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 // Icons are now used in WorkspaceHeader component
 import { Problem, Card } from '../types';
+import { useCardImages } from '../hooks/useCardImages';
+import { CardImageGallery } from '../components/CardImageGallery';
+import { CardImageButton } from '../components/CardImageButton';
+import { CardImageModal } from '../components/CardImageModal';
 import { ResizableMonacoEditor } from '../components/ResizableMonacoEditor';
 import { EnhancedMonacoEditor } from '../components/EnhancedMonacoEditor';
 import { QuillEditor } from '../components/QuillEditor';
@@ -197,6 +201,31 @@ export default function ProblemCard() {
   
   
   const [isDark, setIsDark] = useState<boolean>(false);
+
+  // Card Images state and handlers
+  const {
+    images: cardImages,
+    imageDataUrls: cardImageDataUrls,
+    saveImage: saveCardImage,
+    deleteImage: deleteCardImage,
+    updatePositions: updateCardImagePositions,
+  } = useCardImages(currentCard?.id ?? null);
+
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [currentModalImageId, setCurrentModalImageId] = useState<string | null>(null);
+
+  const openImageModal = useCallback((imageId: string) => {
+    setCurrentModalImageId(imageId);
+    setIsImageModalOpen(true);
+  }, []);
+
+  const closeImageModal = useCallback(() => {
+    setIsImageModalOpen(false);
+  }, []);
+
+  const handleGalleryImageClick = useCallback((imageId: string, _imageUrl: string) => {
+    openImageModal(imageId);
+  }, [openImageModal]);
 
   // Ref for the main content container to help calculate dynamic constraints
   const contentContainerRef = useRef<HTMLDivElement>(null);
@@ -1573,6 +1602,17 @@ export default function ProblemCard() {
                     </div>
                   )}
                 </div>
+                {/* Card Image Gallery between editors */}
+                {currentCard && cardImages.length > 0 && (
+                  <CardImageGallery
+                    images={cardImages}
+                    imageDataUrls={cardImageDataUrls}
+                    onImageClick={handleGalleryImageClick}
+                    onImageDelete={deleteCardImage}
+                    onImageReorder={updateCardImagePositions}
+                    className="border-t border-gray-200 dark:border-gray-700"
+                  />
+                )}
               </div>
             }
             notesEditor={
@@ -1582,7 +1622,15 @@ export default function ProblemCard() {
                   : 'bg-white dark:bg-gray-800'
               }`}>
                 {/* Notes container - takes remaining height */}
-                <div className="flex-1 min-h-0">
+                <div className="relative flex-1 min-h-0">
+                  {/* Paste Image Button in notes header area (top-right) */}
+                  <div className="absolute right-3 top-3 z-10">
+                    <CardImageButton
+                      onImagePaste={async (data) => { await saveCardImage(data); }}
+                      imageCount={cardImages.length}
+                      disabled={!currentCard}
+                    />
+                  </div>
                   {currentCard ? (
                     <QuillEditor
                       value={notes}
@@ -1633,6 +1681,16 @@ export default function ProblemCard() {
             onClose={() => setRecordingHistory({ isOpen: false })}
           />
           
+          {/* Card Image Modal */}
+          <CardImageModal
+            isOpen={isImageModalOpen}
+            images={cardImages}
+            imageDataUrls={cardImageDataUrls}
+            currentImageId={currentModalImageId}
+            onClose={closeImageModal}
+            onNavigate={(id) => setCurrentModalImageId(id)}
+          />
+
           {/* Global Audio Player - REMOVED FOR REBUILD */}
         </div>
       </EnhancedWorkspaceProvider>
@@ -1712,6 +1770,18 @@ export default function ProblemCard() {
                   </div>
                 </div>
               )}
+
+              {/* Card Image Gallery between editors */}
+              {currentCard && cardImages.length > 0 && (
+                <CardImageGallery
+                  images={cardImages}
+                  imageDataUrls={cardImageDataUrls}
+                  onImageClick={handleGalleryImageClick}
+                  onImageDelete={deleteCardImage}
+                  onImageReorder={updateCardImagePositions}
+                  className="border-t border-gray-200 dark:border-gray-700"
+                />
+              )}
             </div>
           }
           notesEditor={
@@ -1720,6 +1790,14 @@ export default function ProblemCard() {
                 ? 'bg-red-50/30 dark:bg-red-950/10 border-l-4 border-red-300 dark:border-red-700'
                 : 'bg-white dark:bg-gray-800'
             }`}>
+              {/* Paste Image Button in notes header area (top-right) */}
+              <div className="absolute right-3 top-3 z-10">
+                <CardImageButton
+                  onImagePaste={async (data) => { await saveCardImage(data); }}
+                  imageCount={cardImages.length}
+                  disabled={!currentCard}
+                />
+              </div>
               {currentCard ? (
                 <QuillEditor
                   value={notes}
@@ -1764,6 +1842,16 @@ export default function ProblemCard() {
         cardId={currentCard?.id}
         isOpen={recordingHistory.isOpen}
         onClose={() => setRecordingHistory({ isOpen: false })}
+      />
+
+      {/* Card Image Modal */}
+      <CardImageModal
+        isOpen={isImageModalOpen}
+        images={cardImages}
+        imageDataUrls={cardImageDataUrls}
+        currentImageId={currentModalImageId}
+        onClose={closeImageModal}
+        onNavigate={(id) => setCurrentModalImageId(id)}
       />
       
       {/* Global Audio Player - REMOVED FOR REBUILD */}

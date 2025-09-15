@@ -86,6 +86,15 @@ export interface ProblemImage {
   created_at: string;
 }
 
+export interface CardImage {
+  id: string;
+  card_id: string;
+  image_path: string;
+  caption?: string;
+  position: number;
+  created_at: string;
+}
+
 // Frontend-specific types
 export interface ProblemWithCards extends Problem {
   cards: Card[];
