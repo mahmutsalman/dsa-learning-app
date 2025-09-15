@@ -674,6 +674,7 @@ export default function ProblemCard() {
     }
     
     if (cardId && cards.length > 0) {
+      // Prefer regular cards for initial selection; avoid selecting solution card by URL
       const card = cards.find(c => c.id === cardId);
       console.debug('ProblemCard: Found card by ID', {
         found: !!card,
@@ -683,27 +684,48 @@ export default function ProblemCard() {
       });
       
       if (card) {
-        setCurrentCard(card);
+        if ((card as any).is_solution) {
+          // If URL points to solution card, redirect to first regular card
+          const regularCards = cards.filter(c => !(c as any).is_solution);
+          const fallback = regularCards[0] || cards[0];
+          console.warn('ProblemCard: URL points to solution card; redirecting to first regular card', {
+            requestedCardId: cardId,
+            redirectCardId: fallback?.id
+          });
+          if (fallback) {
+            setCurrentCard(fallback);
+            navigate(`/problem/${problemId}/card/${fallback.id}`, { replace: true });
+          } else {
+            setCurrentCard(card);
+          }
+        } else {
+          setCurrentCard(card);
+        }
       } else {
         console.warn('ProblemCard: Requested cardId not found, using first card', {
           requestedCardId: cardId,
           availableCardIds: cards.map(c => c.id),
           usingCard: cards[0].id
         });
-        setCurrentCard(cards[0]);
+        // Ensure we don't select a solution card as default
+        const regularCards = cards.filter(c => !(c as any).is_solution);
+        setCurrentCard(regularCards[0] || cards[0]);
       }
     } else if (cards.length > 0) {
-      console.debug('ProblemCard: Using first card', {
-        firstCard: cards[0].id,
-        hasNotes: !!cards[0].notes,
-        notesContent: cards[0].notes
+      // Default to first regular card; avoid selecting solution card by default
+      const regularCards = cards.filter(c => !(c as any).is_solution);
+      const first = regularCards[0] || cards[0];
+      console.debug('ProblemCard: Using first regular card', {
+        firstCard: first.id,
+        hasNotes: !!first.notes,
+        notesContent: first.notes
       });
-      setCurrentCard(cards[0]);
+      setCurrentCard(first);
       
       // Auto-navigate to proper URL with card ID for consistency
       if (!cardId) {
         console.log('ProblemCard: Navigating to first card URL for consistency');
-        navigate(`/problem/${problemId}/card/${cards[0].id}`, { replace: true });
+        navigate(`/problem/${problemId}/card/${first.id}`, { replace: true });
       }
     } else {
       console.warn('ProblemCard: No cards available and no fallback possible', {
