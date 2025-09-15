@@ -956,14 +956,25 @@ export default function ProblemCard() {
     
     if (currentCard) {
 
-      // Skip sync if we're intentionally switching modes to prevent race conditions
+      // Skip sync only for the restoration target during mode switch; allow others
       if (isSwitchingModesRef.current) {
-        console.debug('ProblemCard: Skipping editor sync - mode switch in progress', {
+        const restoringCardId = originalCardRef.current?.id;
+        if (!restoringCardId || currentCard.id === restoringCardId) {
+          console.debug('ProblemCard: Skipping editor sync - mode switch in progress (restoring target)', {
+            operationId,
+            cardId: currentCard.id,
+            restoringCardId,
+            isSwitchingModes: true
+          });
+          return;
+        }
+        // Different card selected during transition — proceed with sync to avoid stale content
+        console.debug('ProblemCard: Proceeding with editor sync during mode switch for different card', {
           operationId,
           cardId: currentCard.id,
+          restoringCardId,
           isSwitchingModes: true
         });
-        return;
       }
 
       // Skip sync if we just restored from cache to prevent database override
