@@ -1672,6 +1672,7 @@ export default function ProblemCard() {
                 onBackToPreviousProblem={handleBackToPreviousProblem}
                 isViewingSolution={solutionCard.state.isActive}
                 onSolutionToggle={handleSolutionToggle}
+                isTransitioning={stateMachine.state.isTransitioning}
               />
             }
             problemPanel={
@@ -1837,6 +1838,7 @@ export default function ProblemCard() {
               onBackToPreviousProblem={handleBackToPreviousProblem}
               isViewingSolution={solutionCard.state.isActive}
               onSolutionToggle={handleSolutionToggle}
+              isTransitioning={stateMachine.state.isTransitioning}
             />
           }
           problemPanel={
