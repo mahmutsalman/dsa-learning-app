@@ -138,6 +138,13 @@ async fn main() {
             commands::images::update_image_positions,
             commands::images::get_image_path,
             commands::images::get_image_data_url,
+            // Card image commands
+            commands::card_images::save_card_image,
+            commands::card_images::get_card_images,
+            commands::card_images::delete_card_image,
+            commands::card_images::update_card_image_positions,
+            commands::card_images::get_card_image_path,
+            commands::card_images::get_card_image_data_url,
             // Audio commands
             commands::audio::start_recording,
             commands::audio::stop_recording,

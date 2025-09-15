@@ -110,6 +110,17 @@ CREATE TABLE IF NOT EXISTS problem_images (
     FOREIGN KEY (problem_id) REFERENCES problems(id) ON DELETE CASCADE
 );
 
+-- Card images table
+CREATE TABLE IF NOT EXISTS card_images (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL,
+    image_path TEXT NOT NULL, -- Relative path like 'images/cards/card_123/uuid.png'
+    caption TEXT,
+    position INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (card_id) REFERENCES cards(id) ON DELETE CASCADE
+);
+
 -- Work sessions table for detailed time tracking and visualization
 CREATE TABLE IF NOT EXISTS work_sessions (
     id TEXT PRIMARY KEY,
@@ -140,6 +151,8 @@ CREATE INDEX IF NOT EXISTS idx_cards_status ON cards(status);
 CREATE INDEX IF NOT EXISTS idx_cards_created_at ON cards(created_at);
 CREATE INDEX IF NOT EXISTS idx_problem_images_problem_id ON problem_images(problem_id);
 CREATE INDEX IF NOT EXISTS idx_problem_images_position ON problem_images(position);
+CREATE INDEX IF NOT EXISTS idx_card_images_card_id ON card_images(card_id);
+CREATE INDEX IF NOT EXISTS idx_card_images_position ON card_images(position);
 
 -- Work sessions indexes for fast time tracking queries
 CREATE INDEX IF NOT EXISTS idx_work_sessions_session_date ON work_sessions(session_date);

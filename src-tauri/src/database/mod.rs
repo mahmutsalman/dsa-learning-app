@@ -1707,14 +1707,125 @@ impl DatabaseManager {
     
     pub fn update_image_positions(&mut self, updates: Vec<(String, i32)>) -> anyhow::Result<()> {
         let tx = self.connection.unchecked_transaction()?;
-        
+
         for (image_id, position) in updates {
             tx.execute(
                 "UPDATE problem_images SET position = ?1 WHERE id = ?2",
                 params![position, &image_id]
             )?;
         }
-        
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    // Card image-related operations
+    pub fn save_card_image(&mut self, card_id: &str, image_path: &str, caption: Option<String>, position: Option<i32>) -> anyhow::Result<CardImage> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        // Get the next position if not provided
+        let position = match position {
+            Some(pos) => pos,
+            None => {
+                let max_position: Option<i32> = self.connection.query_row(
+                    "SELECT MAX(position) FROM card_images WHERE card_id = ?1",
+                    [card_id],
+                    |row| row.get(0),
+                ).optional()?.flatten();
+                max_position.unwrap_or(-1) + 1
+            }
+        };
+
+        self.connection.execute(
+            "INSERT INTO card_images (id, card_id, image_path, caption, position, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                &id,
+                card_id,
+                image_path,
+                &caption,
+                position,
+                now.to_rfc3339()
+            ]
+        )?;
+
+        Ok(CardImage {
+            id,
+            card_id: card_id.to_string(),
+            image_path: image_path.to_string(),
+            caption,
+            position,
+            created_at: now,
+        })
+    }
+
+    pub fn get_card_images(&self, card_id: &str) -> anyhow::Result<Vec<CardImage>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, card_id, image_path, caption, position, created_at
+             FROM card_images WHERE card_id = ?1 ORDER BY position"
+        )?;
+
+        let image_iter = stmt.query_map([card_id], |row| {
+            let created_at_str: String = row.get(5)?;
+
+            Ok(CardImage {
+                id: row.get(0)?,
+                card_id: row.get(1)?,
+                image_path: row.get(2)?,
+                caption: row.get(3)?,
+                position: row.get(4)?,
+                created_at: created_at_str.parse().unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+
+        let mut images = Vec::new();
+        for image in image_iter {
+            images.push(image?);
+        }
+
+        Ok(images)
+    }
+
+    pub fn delete_card_image(&mut self, image_id: &str) -> anyhow::Result<String> {
+        println!("🗃️ Database: Attempting to delete card image with id: {}", image_id);
+
+        // First get the image path so we can delete the file
+        let image_path: String = self.connection.query_row(
+            "SELECT image_path FROM card_images WHERE id = ?1",
+            [image_id],
+            |row| row.get(0),
+        ).map_err(|e| {
+            println!("❌ Database: Failed to find image with id {}: {}", image_id, e);
+            anyhow::anyhow!("Image not found: {}", e)
+        })?;
+
+        println!("✅ Database: Found image path: {}", image_path);
+
+        // Delete the database record
+        let rows_affected = self.connection.execute(
+            "DELETE FROM card_images WHERE id = ?1",
+            [image_id]
+        )?;
+
+        if rows_affected == 0 {
+            println!("❌ Database: No rows were affected - image not found");
+            return Err(anyhow::anyhow!("Image not found"));
+        }
+
+        println!("✅ Database: Card image deleted successfully from database");
+        Ok(image_path)
+    }
+
+    pub fn update_card_image_positions(&mut self, updates: Vec<(String, i32)>) -> anyhow::Result<()> {
+        let tx = self.connection.unchecked_transaction()?;
+
+        for (image_id, position) in updates {
+            tx.execute(
+                "UPDATE card_images SET position = ?1 WHERE id = ?2",
+                params![position, &image_id]
+            )?;
+        }
+
         tx.commit()?;
         Ok(())
     }

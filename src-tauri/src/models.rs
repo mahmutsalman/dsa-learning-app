@@ -187,6 +187,17 @@ pub struct ProblemImage {
     pub created_at: DateTime<Utc>,
 }
 
+// Card images model
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CardImage {
+    pub id: String,
+    pub card_id: String,
+    pub image_path: String,
+    pub caption: Option<String>,
+    pub position: i32,
+    pub created_at: DateTime<Utc>,
+}
+
 // Solution card model - special type of card for storing problem solutions
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SolutionCard {
@@ -214,6 +225,20 @@ pub struct SaveImageRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct DeleteImageRequest {
+    pub image_id: String,
+}
+
+// Request models for card image operations
+#[derive(Debug, Deserialize)]
+pub struct SaveCardImageRequest {
+    pub card_id: String,
+    pub image_data: String, // Base64 encoded image data
+    pub caption: Option<String>,
+    pub position: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteCardImageRequest {
     pub image_id: String,
 }
 
