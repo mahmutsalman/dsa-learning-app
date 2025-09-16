@@ -1,10 +1,17 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useWorkSessionStats } from '../hooks/useWorkSessionStats';
 import YesterdayCard from '../components/Analytics/YesterdayCard';
 import Last7DaysCard from '../components/Analytics/Last7DaysCard';
 import Last30DaysCard from '../components/Analytics/Last30DaysCard';
+import ProblemTotalsList from '../components/Analytics/ProblemTotalsList';
+import { WorkSessionService, ProblemTotalWork } from '../services/WorkSessionService';
 
 export default function Analytics() {
+  const [expanded, setExpanded] = useState<'7' | '30' | null>(null);
+  const [listLoading, setListLoading] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+  const [sevenDayItems, setSevenDayItems] = useState<ProblemTotalWork[] | null>(null);
+  const [thirtyDayItems, setThirtyDayItems] = useState<ProblemTotalWork[] | null>(null);
   const {
     yesterdayStats,
     last7DaysStats,
@@ -31,14 +38,39 @@ export default function Analytics() {
     // Future: Navigate to detailed yesterday view
   };
 
-  const handleLast7DaysClick = () => {
-    console.log('Last 7 days card clicked');
-    // Future: Navigate to detailed 7-day view
+  const handleLast7DaysClick = async () => {
+    // Toggle expansion
+    const next = expanded === '7' ? null : '7';
+    setExpanded(next);
+    if (next === '7' && !sevenDayItems) {
+      try {
+        setListLoading(true);
+        setListError(null);
+        const items = await WorkSessionService.getProblemTotalsForLast7Days();
+        setSevenDayItems(items);
+      } catch (e) {
+        setListError(e instanceof Error ? e.message : 'Failed to load 7-day breakdown');
+      } finally {
+        setListLoading(false);
+      }
+    }
   };
 
-  const handleLast30DaysClick = () => {
-    console.log('Last 30 days card clicked');
-    // Future: Navigate to detailed 30-day view
+  const handleLast30DaysClick = async () => {
+    const next = expanded === '30' ? null : '30';
+    setExpanded(next);
+    if (next === '30' && !thirtyDayItems) {
+      try {
+        setListLoading(true);
+        setListError(null);
+        const items = await WorkSessionService.getProblemTotalsForLast30Days();
+        setThirtyDayItems(items);
+      } catch (e) {
+        setListError(e instanceof Error ? e.message : 'Failed to load 30-day breakdown');
+      } finally {
+        setListLoading(false);
+      }
+    }
   };
 
   // Handle refresh actions
@@ -116,6 +148,30 @@ export default function Analytics() {
           onClick={handleLast30DaysClick}
         />
       </div>
+
+      {/* Expandable Lists Section */}
+      {(expanded === '7' || expanded === '30') && (
+        <div className="space-y-4">
+          {listLoading && (
+            <div className="text-sm text-gray-600 dark:text-gray-400">Loading breakdown…</div>
+          )}
+          {listError && (
+            <div className="text-sm text-red-600">{listError}</div>
+          )}
+          {!listLoading && !listError && expanded === '7' && (
+            <ProblemTotalsList
+              title="Problems worked in the last 7 days"
+              items={sevenDayItems || []}
+            />
+          )}
+          {!listLoading && !listError && expanded === '30' && (
+            <ProblemTotalsList
+              title="Problems worked in the last 30 days"
+              items={thirtyDayItems || []}
+            />
+          )}
+        </div>
+      )}
 
       {/* Additional Info Section */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
