@@ -1,4 +1,5 @@
 import { formatDuration, formatDurationCompact } from '../../utils/timeUtils';
+import { format } from 'date-fns';
 import { ProblemTotalWork } from '../../services/WorkSessionService';
 
 interface ProblemTotalsListProps {
@@ -6,9 +7,10 @@ interface ProblemTotalsListProps {
   title: string;
   emptyText?: string;
   onItemClick?: (problemId: string) => void;
+  sortBy?: 'duration' | 'recent';
 }
 
-export default function ProblemTotalsList({ items, title, emptyText = 'No work recorded in this period.', onItemClick }: ProblemTotalsListProps) {
+export default function ProblemTotalsList({ items, title, emptyText = 'No work recorded in this period.', onItemClick, sortBy = 'duration' }: ProblemTotalsListProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col max-h-[60vh] min-h-0">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -30,6 +32,11 @@ export default function ProblemTotalsList({ items, title, emptyText = 'No work r
                   <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                     {it.session_count} session{it.session_count !== 1 ? 's' : ''}
                   </p>
+                  {sortBy === 'recent' && it.last_activity_ts && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                      Last studied: {format(new Date(it.last_activity_ts), 'EEEE p')}
+                    </p>
+                  )}
                   {it.tags && it.tags.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1 overflow-hidden">
                       {it.tags.slice(0, 6).map(tag => (
