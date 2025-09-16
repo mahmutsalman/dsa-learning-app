@@ -15,6 +15,7 @@ export default function GlobalAudioPlayer({
   updatePlayerState,
   setPlaybackRate,
   setAudioElementRef,
+  setUIMode,
 }: GlobalAudioPlayerProps) {
 
   const audioPlayerRef = useRef<AudioPlayer>(null);
@@ -174,7 +175,7 @@ export default function GlobalAudioPlayer({
                 <AudioPlayer
                   ref={audioPlayerRef}
                   src={currentRecording.audioUrl}
-                  onPlay={() => updatePlayerState({ isPlaying: true })}
+                  onPlay={() => { updatePlayerState({ isPlaying: true }); setUIMode('header'); }}
                   onPause={() => updatePlayerState({ isPlaying: false })}
                   onEnded={() => updatePlayerState({ isPlaying: false })}
                   customAdditionalControls={[]}
