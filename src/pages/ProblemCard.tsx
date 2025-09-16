@@ -188,6 +188,20 @@ export default function ProblemCard() {
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [language, setLanguage] = useState<string>('javascript');
+
+  // Helpers to normalize Quill HTML for consistent change detection and saves
+  const normalizeHtml = useCallback((html: string | undefined | null): string => {
+    const raw = (html || '').trim();
+    if (!raw) return '';
+    // Treat common Quill empty markers as empty
+    const empties = ['<p><br></p>', '<p></p>', '<div><br></div>'];
+    if (empties.includes(raw)) return '';
+    // Collapse whitespace-only content
+    if (/^<p>\s*(<br>)?\s*<\/p>$/.test(raw)) return '';
+    return raw;
+  }, []);
+
+  // Reserved for future validations if needed
   // Track which card the latest edits belong to
   const lastEditedCardIdRef = useRef<string | null>(null);
 
@@ -291,18 +305,9 @@ export default function ProblemCard() {
   // Save functions
   const saveCard = useCallback(async () => {
     if (!currentCard) return;
-    // Prevent saving edits to a different card than the one they belong to
-    if (lastEditedCardIdRef.current && lastEditedCardIdRef.current !== currentCard.id) {
-      console.warn('saveCard: Skipping save due to edited card mismatch', {
-        editedFor: lastEditedCardIdRef.current,
-        currentCardId: currentCard.id
-      });
-      return;
-    }
-    
-    // Check if anything actually needs to be saved
-    const hasCodeChange = code !== currentCard.code;
-    const hasNotesChange = notes !== currentCard.notes;
+    // Check if anything actually needs to be saved (normalize notes for reliable detection)
+    const hasCodeChange = (code ?? '') !== (currentCard.code ?? '');
+    const hasNotesChange = normalizeHtml(notes) !== normalizeHtml(currentCard.notes || '');
     const hasLanguageChange = language !== currentCard.language;
     
     if (!hasCodeChange && !hasNotesChange && !hasLanguageChange) {
@@ -339,7 +344,7 @@ export default function ProblemCard() {
       const updatedCard = await invoke<Card | null>('update_card', {
         cardId: currentCard.id,
         code: hasCodeChange ? code : null,
-        notes: hasNotesChange ? notes : null,
+        notes: hasNotesChange ? normalizeHtml(notes) : null,
         language: hasLanguageChange ? language : null,
       });
       
@@ -467,11 +472,11 @@ export default function ProblemCard() {
     }
 
     // Only save if the notes have actually changed from what we last saved
-    if (notes === lastSavedValuesRef.current.notes) {
+    if (normalizeHtml(notes) === normalizeHtml(lastSavedValuesRef.current.notes)) {
       return;
     }
 
-    if (currentCard && notes !== currentCard.notes) {
+    if (currentCard && normalizeHtml(notes) !== normalizeHtml(currentCard.notes || '')) {
       try {
         if (solutionCard.state.isActive && solutionCard.state.solutionCard) {
           // Route to solution API while viewing solution
