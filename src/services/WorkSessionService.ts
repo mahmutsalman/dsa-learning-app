@@ -13,6 +13,8 @@ export interface ProblemTotalWork {
   total_duration_seconds: number;
   session_count: number;
   tags?: Tag[];
+  // Unix ms timestamp of the most recent session in the range
+  last_activity_ts?: number;
 }
 
 export interface WorkSessionsDateRangeRequest {
@@ -176,6 +178,8 @@ export class WorkSessionService {
         problem_title: string;
         duration_seconds: number;
         session_date: string;
+        start_timestamp?: string;
+        end_timestamp?: string | null;
       }>>('get_work_sessions_date_range', {
         request: { start_date: startDateStr, end_date: endDateStr }
       });
@@ -183,16 +187,24 @@ export class WorkSessionService {
       const map = new Map<string, ProblemTotalWork>();
       for (const s of sessions) {
         const key = s.problem_id;
+        // derive a last-activity timestamp from start/end
+        const startMs = s.start_timestamp ? Date.parse(s.start_timestamp) : 0;
+        const endMs = s.end_timestamp ? Date.parse(s.end_timestamp) : 0;
+        const sessionTs = Math.max(startMs, endMs);
         const prev = map.get(key);
         if (prev) {
           prev.total_duration_seconds += s.duration_seconds || 0;
           prev.session_count += 1;
+          if (sessionTs && (!prev.last_activity_ts || sessionTs > prev.last_activity_ts)) {
+            prev.last_activity_ts = sessionTs;
+          }
         } else {
           map.set(key, {
             problem_id: s.problem_id,
             problem_title: s.problem_title,
             total_duration_seconds: s.duration_seconds || 0,
             session_count: 1,
+            last_activity_ts: sessionTs || undefined,
           });
         }
       }
@@ -210,7 +222,7 @@ export class WorkSessionService {
       });
       await Promise.allSettled(tagPromises);
 
-      // Order by total duration desc
+      // Default order by total duration desc; caller may re-sort for recency
       return items.sort((a, b) => b.total_duration_seconds - a.total_duration_seconds);
     });
   }

@@ -10,6 +10,7 @@ import { WorkSessionService, ProblemTotalWork } from '../services/WorkSessionSer
 export default function Analytics() {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<'7' | '30' | null>(null);
+  const [sortBy, setSortBy] = useState<'duration' | 'recent'>('duration');
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [sevenDayItems, setSevenDayItems] = useState<ProblemTotalWork[] | null>(null);
@@ -117,6 +118,7 @@ export default function Analytics() {
       const state = {
         expanded: nextExpanded,
         scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+        sortBy,
         ts: Date.now(),
       };
       sessionStorage.setItem('analyticsState', JSON.stringify(state));
@@ -128,9 +130,12 @@ export default function Analytics() {
     try {
       const raw = sessionStorage.getItem('analyticsState');
       if (raw) {
-        const st = JSON.parse(raw) as { expanded?: '7' | '30' | null; scrollY?: number };
+        const st = JSON.parse(raw) as { expanded?: '7' | '30' | null; scrollY?: number; sortBy?: 'duration' | 'recent' };
         if (st.expanded === '7' || st.expanded === '30' || st.expanded === null) {
           setExpanded(st.expanded ?? null);
+        }
+        if (st.sortBy === 'duration' || st.sortBy === 'recent') {
+          setSortBy(st.sortBy);
         }
         const y = typeof st.scrollY === 'number' ? st.scrollY : 0;
         setTimeout(() => { try { window.scrollTo(0, y); } catch {} }, 50);
@@ -164,6 +169,16 @@ export default function Analytics() {
     } catch (e) {
       console.error('Failed to open problem from analytics:', e);
     }
+  };
+
+  // Sorting helpers for lists
+  const sortItems = (items: ProblemTotalWork[] | null): ProblemTotalWork[] => {
+    if (!items) return [];
+    if (sortBy === 'recent') {
+      return [...items].sort((a, b) => (b.last_activity_ts || 0) - (a.last_activity_ts || 0));
+    }
+    // duration
+    return [...items].sort((a, b) => (b.total_duration_seconds) - (a.total_duration_seconds));
   };
 
   return (
@@ -239,6 +254,18 @@ export default function Analytics() {
       {/* Expandable Lists Section */}
       {(expanded === '7' || expanded === '30') && (
         <div className="space-y-4">
+          {/* List controls */}
+          <div className="flex items-center justify-end gap-3">
+            <label className="text-xs text-gray-500 dark:text-gray-400">Sort by</label>
+            <select
+              value={sortBy}
+              onChange={(e) => { const val = e.target.value as 'duration' | 'recent'; setSortBy(val); saveAnalyticsState(expanded); }}
+              className="text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 px-2 py-1"
+            >
+              <option value="duration">Duration</option>
+              <option value="recent">Recent</option>
+            </select>
+          </div>
           {listLoading && (
             <div className="text-sm text-gray-600 dark:text-gray-400">Loading breakdown…</div>
           )}
@@ -248,14 +275,14 @@ export default function Analytics() {
           {!listLoading && !listError && expanded === '7' && (
             <ProblemTotalsList
               title="Problems worked in the last 7 days"
-              items={sevenDayItems || []}
+              items={sortItems(sevenDayItems)}
               onItemClick={openProblemFromAnalytics}
             />
           )}
           {!listLoading && !listError && expanded === '30' && (
             <ProblemTotalsList
               title="Problems worked in the last 30 days"
-              items={thirtyDayItems || []}
+              items={sortItems(thirtyDayItems)}
               onItemClick={openProblemFromAnalytics}
             />
           )}
