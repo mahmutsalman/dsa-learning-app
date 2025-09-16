@@ -5,9 +5,10 @@ interface ProblemTotalsListProps {
   items: ProblemTotalWork[];
   title: string;
   emptyText?: string;
+  onItemClick?: (problemId: string) => void;
 }
 
-export default function ProblemTotalsList({ items, title, emptyText = 'No work recorded in this period.' }: ProblemTotalsListProps) {
+export default function ProblemTotalsList({ items, title, emptyText = 'No work recorded in this period.', onItemClick }: ProblemTotalsListProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col max-h-[60vh] min-h-0">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
@@ -18,7 +19,11 @@ export default function ProblemTotalsList({ items, title, emptyText = 'No work r
       ) : (
         <ul className="divide-y divide-gray-200 dark:divide-gray-700 overflow-y-auto flex-1 min-h-0 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
           {items.map((it) => (
-            <li key={it.problem_id} className="px-4 py-3 flex items-center justify-between gap-4">
+            <li
+              key={it.problem_id}
+              className={`px-4 py-3 flex items-center justify-between gap-4 ${onItemClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50' : ''}`}
+              onClick={() => onItemClick?.(it.problem_id)}
+            >
               <div className="min-w-0 pr-3 flex-1">
                 <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{it.problem_title}</p>
                 <div className="mt-1 flex items-center gap-2">

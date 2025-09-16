@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWorkSessionStats } from '../hooks/useWorkSessionStats';
 import YesterdayCard from '../components/Analytics/YesterdayCard';
 import Last7DaysCard from '../components/Analytics/Last7DaysCard';
@@ -7,6 +8,7 @@ import ProblemTotalsList from '../components/Analytics/ProblemTotalsList';
 import { WorkSessionService, ProblemTotalWork } from '../services/WorkSessionService';
 
 export default function Analytics() {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState<'7' | '30' | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -77,6 +79,32 @@ export default function Analytics() {
   const handleRefreshAll = () => {
     console.log('Refreshing all analytics data...');
     refresh();
+  };
+
+  // Navigate to a problem's most recent card and remember we came from analytics
+  const openProblemFromAnalytics = async (problemId: string) => {
+    try {
+      sessionStorage.setItem('fromAnalytics', 'true');
+      const cards = await (window as any).__TAURI_INVOKE__
+        ? await (await import('@tauri-apps/api/core')).invoke<any[]>('get_cards_for_problem', { problemId })
+        : await (await import('@tauri-apps/api/core')).invoke<any[]>('get_cards_for_problem', { problemId });
+
+      if (Array.isArray(cards) && cards.length > 0) {
+        // Pick most recently modified card
+        const sorted = [...cards].sort((a, b) => {
+          const at = new Date(a.last_modified || a.created_at || 0).getTime();
+          const bt = new Date(b.last_modified || b.created_at || 0).getTime();
+          return bt - at;
+        });
+        const target = sorted[0];
+        navigate(`/problem/${problemId}/card/${target.id}`);
+      } else {
+        // No cards - just navigate to the problem (Problem view may create first card)
+        navigate(`/problem/${problemId}`);
+      }
+    } catch (e) {
+      console.error('Failed to open problem from analytics:', e);
+    }
   };
 
   return (
@@ -162,12 +190,14 @@ export default function Analytics() {
             <ProblemTotalsList
               title="Problems worked in the last 7 days"
               items={sevenDayItems || []}
+              onItemClick={openProblemFromAnalytics}
             />
           )}
           {!listLoading && !listError && expanded === '30' && (
             <ProblemTotalsList
               title="Problems worked in the last 30 days"
               items={thirtyDayItems || []}
+              onItemClick={openProblemFromAnalytics}
             />
           )}
         </div>
