@@ -6,6 +6,13 @@ export interface WorkSessionStats {
   total_sessions_count: number;
 }
 
+export interface ProblemTotalWork {
+  problem_id: string;
+  problem_title: string;
+  total_duration_seconds: number;
+  session_count: number;
+}
+
 export interface WorkSessionsDateRangeRequest {
   start_date: string; // YYYY-MM-DD format
   end_date: string;   // YYYY-MM-DD format
@@ -153,6 +160,61 @@ export class WorkSessionService {
         total_sessions_count: summary.total_sessions_count
       };
     });
+  }
+
+  /**
+   * Get aggregated totals by problem within a date range
+   */
+  static async getProblemTotalsForRange(startDateStr: string, endDateStr: string): Promise<ProblemTotalWork[]> {
+    const cacheKey = `problem-totals-${startDateStr}-${endDateStr}`;
+
+    return this.getCachedResult(cacheKey, async () => {
+      const sessions = await invoke<Array<{
+        problem_id: string;
+        problem_title: string;
+        duration_seconds: number;
+        session_date: string;
+      }>>('get_work_sessions_date_range', {
+        request: { start_date: startDateStr, end_date: endDateStr }
+      });
+
+      const map = new Map<string, ProblemTotalWork>();
+      for (const s of sessions) {
+        const key = s.problem_id;
+        const prev = map.get(key);
+        if (prev) {
+          prev.total_duration_seconds += s.duration_seconds || 0;
+          prev.session_count += 1;
+        } else {
+          map.set(key, {
+            problem_id: s.problem_id,
+            problem_title: s.problem_title,
+            total_duration_seconds: s.duration_seconds || 0,
+            session_count: 1,
+          });
+        }
+      }
+      // Order by total duration desc
+      return Array.from(map.values()).sort((a, b) => b.total_duration_seconds - a.total_duration_seconds);
+    });
+  }
+
+  static async getProblemTotalsForLast7Days(): Promise<ProblemTotalWork[]> {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 6);
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    return this.getProblemTotalsForRange(startDateStr, endDateStr);
+  }
+
+  static async getProblemTotalsForLast30Days(): Promise<ProblemTotalWork[]> {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 29);
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    return this.getProblemTotalsForRange(startDateStr, endDateStr);
   }
 
   /**
