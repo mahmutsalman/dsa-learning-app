@@ -5,6 +5,7 @@ import ResizableLayout from "./components/ResizableLayout";
 import { AppLayoutProvider } from "./contexts/AppLayoutContext";
 import { StatsProvider } from "./contexts/StatsContext";
 import { GlobalAudioPlayerProvider } from "./contexts/GlobalAudioPlayerContext";
+import { ToastProvider } from "./contexts/ToastContext";
 import Dashboard from "./pages/Dashboard";
 import ProblemCard from "./pages/ProblemCard";
 import Analytics from "./pages/Analytics";
@@ -97,15 +98,17 @@ function App() {
         <AppLayoutProvider>
           <StatsProvider>
             <GlobalAudioPlayerProvider>
-              <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/problem/:problemId" element={<ProblemCard />} />
-                  <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
-                </Routes>
-              </ResizableLayout>
+              <ToastProvider>
+                <ResizableLayout isDark={isDark} onToggleDarkMode={toggleDarkMode}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/analytics" element={<Analytics />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/problem/:problemId" element={<ProblemCard />} />
+                    <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
+                  </Routes>
+                </ResizableLayout>
+              </ToastProvider>
             </GlobalAudioPlayerProvider>
           </StatsProvider>
         </AppLayoutProvider>
