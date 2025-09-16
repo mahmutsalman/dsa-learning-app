@@ -219,6 +219,13 @@ export function WorkspaceHeader({
   
   const [showTimerDropdown, setShowTimerDropdown] = useState(false);
   const [showRecordingDropdown, setShowRecordingDropdown] = useState(false);
+  const [fromAnalytics, setFromAnalytics] = useState(false);
+
+  // Detect if this ProblemCard was opened from Analytics
+  useEffect(() => {
+    const flag = sessionStorage.getItem('fromAnalytics');
+    setFromAnalytics(flag === 'true');
+  }, []);
 
   // Integrate CSS variables with responsive measurements
   useEffect(() => {
@@ -395,7 +402,23 @@ export function WorkspaceHeader({
       <div className="workspace-header-grid dynamic-scale">
         {/* Navigation Section - Critical */}
         <div className="header-navigation header-critical focus-hide">
-          {previousProblemId && onBackToPreviousProblem ? (
+          {fromAnalytics ? (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('fromAnalytics');
+                  navigate('/analytics');
+                }}
+                className="header-scale-button icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                title="Back to analytics"
+              >
+                <ArrowLeftIcon className="h-5 w-5" />
+              </button>
+              <span className="header-scale-text small header-optional text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                Back to analytics
+              </span>
+            </div>
+          ) : previousProblemId && onBackToPreviousProblem ? (
             <div className="flex items-center gap-1">
               <button
                 onClick={onBackToPreviousProblem}

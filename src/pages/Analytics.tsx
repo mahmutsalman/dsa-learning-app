@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWorkSessionStats } from '../hooks/useWorkSessionStats';
 import YesterdayCard from '../components/Analytics/YesterdayCard';
 import Last7DaysCard from '../components/Analytics/Last7DaysCard';
@@ -7,6 +8,7 @@ import ProblemTotalsList from '../components/Analytics/ProblemTotalsList';
 import { WorkSessionService, ProblemTotalWork } from '../services/WorkSessionService';
 
 export default function Analytics() {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState<'7' | '30' | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
@@ -42,6 +44,7 @@ export default function Analytics() {
     // Toggle expansion
     const next = expanded === '7' ? null : '7';
     setExpanded(next);
+    saveAnalyticsState(next);
     if (next === '7' && !sevenDayItems) {
       try {
         setListLoading(true);
@@ -59,6 +62,7 @@ export default function Analytics() {
   const handleLast30DaysClick = async () => {
     const next = expanded === '30' ? null : '30';
     setExpanded(next);
+    saveAnalyticsState(next);
     if (next === '30' && !thirtyDayItems) {
       try {
         setListLoading(true);
@@ -73,10 +77,93 @@ export default function Analytics() {
     }
   };
 
+  // If restored state sets expanded, auto-load the corresponding list
+  useEffect(() => {
+    const loadForExpanded = async () => {
+      if (expanded === '7' && !sevenDayItems && !listLoading) {
+        try {
+          setListLoading(true);
+          const items = await WorkSessionService.getProblemTotalsForLast7Days();
+          setSevenDayItems(items);
+        } catch (e) {
+          setListError(e instanceof Error ? e.message : 'Failed to load 7-day breakdown');
+        } finally {
+          setListLoading(false);
+        }
+      } else if (expanded === '30' && !thirtyDayItems && !listLoading) {
+        try {
+          setListLoading(true);
+          const items = await WorkSessionService.getProblemTotalsForLast30Days();
+          setThirtyDayItems(items);
+        } catch (e) {
+          setListError(e instanceof Error ? e.message : 'Failed to load 30-day breakdown');
+        } finally {
+          setListLoading(false);
+        }
+      }
+    };
+    loadForExpanded();
+  }, [expanded]);
+
   // Handle refresh actions
   const handleRefreshAll = () => {
     console.log('Refreshing all analytics data...');
     refresh();
+  };
+
+  // Persist/restore simple UI state for Analytics (expanded section + scroll)
+  const saveAnalyticsState = (nextExpanded: '7' | '30' | null = expanded) => {
+    try {
+      const state = {
+        expanded: nextExpanded,
+        scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+        ts: Date.now(),
+      };
+      sessionStorage.setItem('analyticsState', JSON.stringify(state));
+    } catch {}
+  };
+
+  useEffect(() => {
+    // On mount, restore saved state
+    try {
+      const raw = sessionStorage.getItem('analyticsState');
+      if (raw) {
+        const st = JSON.parse(raw) as { expanded?: '7' | '30' | null; scrollY?: number };
+        if (st.expanded === '7' || st.expanded === '30' || st.expanded === null) {
+          setExpanded(st.expanded ?? null);
+        }
+        const y = typeof st.scrollY === 'number' ? st.scrollY : 0;
+        setTimeout(() => { try { window.scrollTo(0, y); } catch {} }, 50);
+      }
+    } catch {}
+  }, []);
+
+  // Navigate to a problem's most recent card and remember we came from analytics
+  const openProblemFromAnalytics = async (problemId: string) => {
+    try {
+      // Persist UI state + origin flag before navigating
+      saveAnalyticsState(expanded);
+      sessionStorage.setItem('fromAnalytics', 'true');
+      const cards = await (window as any).__TAURI_INVOKE__
+        ? await (await import('@tauri-apps/api/core')).invoke<any[]>('get_cards_for_problem', { problemId })
+        : await (await import('@tauri-apps/api/core')).invoke<any[]>('get_cards_for_problem', { problemId });
+
+      if (Array.isArray(cards) && cards.length > 0) {
+        // Pick most recently modified card
+        const sorted = [...cards].sort((a, b) => {
+          const at = new Date(a.last_modified || a.created_at || 0).getTime();
+          const bt = new Date(b.last_modified || b.created_at || 0).getTime();
+          return bt - at;
+        });
+        const target = sorted[0];
+        navigate(`/problem/${problemId}/card/${target.id}`);
+      } else {
+        // No cards - just navigate to the problem (Problem view may create first card)
+        navigate(`/problem/${problemId}`);
+      }
+    } catch (e) {
+      console.error('Failed to open problem from analytics:', e);
+    }
   };
 
   return (
@@ -162,12 +249,14 @@ export default function Analytics() {
             <ProblemTotalsList
               title="Problems worked in the last 7 days"
               items={sevenDayItems || []}
+              onItemClick={openProblemFromAnalytics}
             />
           )}
           {!listLoading && !listError && expanded === '30' && (
             <ProblemTotalsList
               title="Problems worked in the last 30 days"
               items={thirtyDayItems || []}
+              onItemClick={openProblemFromAnalytics}
             />
           )}
         </div>
