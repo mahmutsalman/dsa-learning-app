@@ -1600,6 +1600,31 @@ export default function ProblemCard() {
         return;
       }
 
+      // Audio input check before starting a new recording
+      if (!recording.recordingState.isRecording) {
+        try {
+          const { useAudioInput } = await import('../hooks/useAudioInput');
+          const audio = useAudioInput();
+          // If devices changed, or preferred missing, prompt
+          if (audio.changedSinceLastCheck) {
+            audio.resetChangedFlag();
+            const continueWith = window.confirm('A new audio input was detected. Use the new default device for recording?');
+            if (continueWith) {
+              const next = audio.defaultName || audio.current;
+              if (next) await audio.chooseDevice(next);
+            } else {
+              // keep preferred if set
+              if (audio.preferred) await audio.chooseDevice(audio.preferred);
+            }
+          } else {
+            // Ensure preferred (if any) is selected
+            await audio.ensurePreferredSelected();
+          }
+        } catch (e) {
+          console.warn('Audio input check failed (non-fatal):', e);
+        }
+      }
+
       if (recording.recordingState.isRecording) {
         await recording.stopRecording(currentCard.id);
       } else {

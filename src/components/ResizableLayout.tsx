@@ -4,6 +4,7 @@ import { useAppLayout } from '../contexts/AppLayoutContext';
 import { useStats } from '../contexts/StatsContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import AudioInputWatcher from './AudioInputWatcher';
 
 interface ResizableLayoutProps {
   children: ReactNode;
@@ -98,6 +99,7 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
             showStats={showStats}
             onToggleStatsView={toggleStats}
           />
+          <AudioInputWatcher />
           <main className="flex-1 overflow-hidden bg-white dark:bg-gray-800">
             {children}
           </main>
