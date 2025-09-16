@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { Tag } from '../types';
 
 export interface WorkSessionStats {
   total_duration_seconds: number;
@@ -11,6 +12,7 @@ export interface ProblemTotalWork {
   problem_title: string;
   total_duration_seconds: number;
   session_count: number;
+  tags?: Tag[];
 }
 
 export interface WorkSessionsDateRangeRequest {
@@ -194,8 +196,22 @@ export class WorkSessionService {
           });
         }
       }
+      const items = Array.from(map.values());
+
+      // Enrich with tags in parallel (best-effort)
+      const tagPromises = items.map(async (it) => {
+        try {
+          const tags = await invoke<Tag[]>('get_problem_tags', { problemId: it.problem_id });
+          it.tags = tags || [];
+        } catch (e) {
+          // ignore tag load errors; keep list usable
+          it.tags = [];
+        }
+      });
+      await Promise.allSettled(tagPromises);
+
       // Order by total duration desc
-      return Array.from(map.values()).sort((a, b) => b.total_duration_seconds - a.total_duration_seconds);
+      return items.sort((a, b) => b.total_duration_seconds - a.total_duration_seconds);
     });
   }
 
