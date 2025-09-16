@@ -337,7 +337,7 @@ export default function ProblemCard() {
         return; // Do not update regular card state while in solution mode
       }
       const updatedCard = await invoke<Card | null>('update_card', {
-        card_id: currentCard.id,
+        cardId: currentCard.id,
         code: hasCodeChange ? code : null,
         notes: hasNotesChange ? notes : null,
         language: hasLanguageChange ? language : null,
