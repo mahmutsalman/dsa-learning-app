@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 export interface AudioPlayerState {
   isOpen: boolean;
+  uiMode: 'overlay' | 'header';
   isPlaying: boolean;
   isLoading: boolean;
   currentTime: number;
@@ -28,6 +29,7 @@ export interface UseGlobalAudioPlayerReturn {
   playRecording: (recording: PlayingRecording) => Promise<void>;
   closePlayer: () => void;
   updatePlayerState: (updates: Partial<AudioPlayerState>) => void;
+  setUIMode: (mode: 'overlay' | 'header') => void;
   setCurrentTime: (time: number) => void;
   setVolume: (volume: number) => void;
   setPlaybackRate: (rate: number) => void;
@@ -37,6 +39,7 @@ export interface UseGlobalAudioPlayerReturn {
 export function useGlobalAudioPlayer(): UseGlobalAudioPlayerReturn {
   const [playerState, setPlayerState] = useState<AudioPlayerState>({
     isOpen: false,
+    uiMode: 'header',
     isPlaying: false,
     isLoading: false,
     currentTime: 0,
@@ -98,6 +101,7 @@ export function useGlobalAudioPlayer(): UseGlobalAudioPlayerReturn {
       setCurrentRecording(enhancedRecording);
       updatePlayerState({ 
         isOpen: true, 
+        uiMode: 'header',
         isLoading: false,
         currentTime: 0,
         error: null
@@ -116,6 +120,7 @@ export function useGlobalAudioPlayer(): UseGlobalAudioPlayerReturn {
   const closePlayer = useCallback(() => {
     updatePlayerState({ 
       isOpen: false, 
+      uiMode: 'header',
       isPlaying: false, 
       currentTime: 0,
       error: null 
@@ -134,12 +139,17 @@ export function useGlobalAudioPlayer(): UseGlobalAudioPlayerReturn {
     audioElementRef.current = element;
   }, []);
 
+  const setUIMode = useCallback((mode: 'overlay' | 'header') => {
+    updatePlayerState({ uiMode: mode });
+  }, [updatePlayerState]);
+
   return {
     playerState,
     currentRecording,
     playRecording,
     closePlayer,
     updatePlayerState,
+    setUIMode,
     setCurrentTime,
     setVolume,
     setPlaybackRate,

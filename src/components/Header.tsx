@@ -1,4 +1,5 @@
 import { MoonIcon, SunIcon, Cog6ToothIcon, ChartBarIcon, ChartBarSquareIcon } from '@heroicons/react/24/outline';
+import HeaderMiniAudioPlayer from './HeaderMiniAudioPlayer';
 
 interface HeaderProps {
   isDark: boolean;
@@ -18,6 +19,8 @@ export default function Header({ isDark, onToggleDarkMode, showStats, onToggleSt
         </div>
         
         <div className="flex items-center space-x-4">
+          {/* Header mini audio player (appears when playing) */}
+          <HeaderMiniAudioPlayer />
           {/* Stats view toggle */}
           <button
             onClick={onToggleStatsView}

@@ -24,8 +24,10 @@ export function GlobalAudioPlayerProvider({ children }: GlobalAudioPlayerProvide
   return (
     <GlobalAudioPlayerContext.Provider value={audioPlayerHook}>
       {children}
-      {/* Render the global audio player */}
-      <GlobalAudioPlayer {...audioPlayerHook} />
+      {/* Render overlay only when in overlay mode */}
+      {audioPlayerHook.playerState.isOpen && audioPlayerHook.playerState.uiMode === 'overlay' && (
+        <GlobalAudioPlayer {...audioPlayerHook} />
+      )}
     </GlobalAudioPlayerContext.Provider>
   );
 }
