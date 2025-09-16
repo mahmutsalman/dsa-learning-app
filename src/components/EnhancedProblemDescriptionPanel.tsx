@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { 
   ChevronLeftIcon,
@@ -11,7 +11,7 @@ import {
 import { useEnhancedWorkspaceLayoutOptional } from './workspace/EnhancedWorkspaceContext';
 import { useAppSidebarOptional } from '../contexts/AppLayoutContext';
 import ImageThumbnails from './ImageThumbnails';
-import { Problem } from '../types';
+import { Problem, Tag } from '../types';
 
 export interface EnhancedProblemDescriptionPanelProps {
   problem: Problem | null;
@@ -49,6 +49,35 @@ export default function EnhancedProblemDescriptionPanel({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [imageRefreshKey, setImageRefreshKey] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Tags state
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagsError, setTagsError] = useState<string | null>(null);
+
+  // Load tags when problem changes
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!problem?.id) {
+        setTags([]);
+        return;
+      }
+      try {
+        setTagsLoading(true);
+        setTagsError(null);
+        const result = await invoke<Tag[]>('get_problem_tags', { problemId: problem.id });
+        if (!cancelled) setTags(result || []);
+      } catch (e) {
+        console.error('Failed to load problem tags:', e);
+        if (!cancelled) setTagsError('Failed to load tags');
+      } finally {
+        if (!cancelled) setTagsLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [problem?.id]);
 
   // Edit handlers
   const startEditing = useCallback(() => {
@@ -265,6 +294,31 @@ export default function EnhancedProblemDescriptionPanel({
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2 problem-title-responsive break-words">
               {problem.title}
             </h3>
+            {/* Tags row */}
+            <div className="flex flex-wrap items-center gap-1 min-h-[1rem]">
+              {tagsLoading && (
+                <span className="text-xs text-gray-400">Loading tags…</span>
+              )}
+              {!tagsLoading && tagsError && (
+                <span className="text-xs text-red-500">{tagsError}</span>
+              )}
+              {!tagsLoading && !tagsError && tags.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {tags.map(tag => (
+                    <span
+                      key={tag.id}
+                      className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600"
+                      title={tag.name}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!tagsLoading && !tagsError && tags.length === 0 && (
+                <span className="text-xs text-gray-400">No tags</span>
+              )}
+            </div>
           </div>
 
           {/* Problem Description - View Mode */}
