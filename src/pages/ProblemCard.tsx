@@ -1313,6 +1313,9 @@ export default function ProblemCard() {
         // Set transition flag to prevent useEffect race conditions
         isSwitchingModesRef.current = true;
 
+        // Ensure any image modal is closed when entering solution mode
+        setIsImageModalOpen(false);
+
         // Cache the current regular card content before switching to answer mode
         if (currentCard) {
           // Store current editor content in cache to prevent overwriting
@@ -1712,8 +1715,8 @@ export default function ProblemCard() {
                     </div>
                   )}
                 </div>
-                {/* Card Image Gallery between editors */}
-                {currentCard && cardImages.length > 0 && (
+                {/* Card Image Gallery between editors (hidden in solution mode) */}
+                {currentCard && cardImages.length > 0 && !solutionCard.state.isActive && (
                   <CardImageGallery
                     images={cardImages}
                     imageDataUrls={cardImageDataUrls}
@@ -1734,13 +1737,15 @@ export default function ProblemCard() {
                 {/* Notes container - takes remaining height */}
                 <div className="relative flex-1 min-h-0">
                   {/* Paste Image Button in notes header area (top-right) */}
-                  <div className="absolute right-3 top-3 z-10">
-                    <CardImageButton
-                      onImagePaste={async (data) => { await saveCardImage(data); }}
-                      imageCount={cardImages.length}
-                      disabled={!currentCard}
-                    />
-                  </div>
+                  {!solutionCard.state.isActive && (
+                    <div className="absolute right-3 top-3 z-10">
+                      <CardImageButton
+                        onImagePaste={async (data) => { await saveCardImage(data); }}
+                        imageCount={cardImages.length}
+                        disabled={!currentCard || solutionCard.state.isActive}
+                      />
+                    </div>
+                  )}
                   {currentCard ? (
                     <QuillEditor
                       value={notes}
@@ -1793,7 +1798,7 @@ export default function ProblemCard() {
           
           {/* Card Image Modal */}
           <CardImageModal
-            isOpen={isImageModalOpen}
+            isOpen={isImageModalOpen && !solutionCard.state.isActive}
             images={cardImages}
             imageDataUrls={cardImageDataUrls}
             currentImageId={currentModalImageId}
@@ -1882,8 +1887,8 @@ export default function ProblemCard() {
                 </div>
               )}
 
-              {/* Card Image Gallery between editors */}
-              {currentCard && cardImages.length > 0 && (
+              {/* Card Image Gallery between editors (hidden in solution mode) */}
+              {currentCard && cardImages.length > 0 && !solutionCard.state.isActive && (
                 <CardImageGallery
                   images={cardImages}
                   imageDataUrls={cardImageDataUrls}
@@ -1902,13 +1907,15 @@ export default function ProblemCard() {
                 : 'bg-white dark:bg-gray-800'
             }`}>
               {/* Paste Image Button in notes header area (top-right) */}
-              <div className="absolute right-3 top-3 z-10">
-                <CardImageButton
-                  onImagePaste={async (data) => { await saveCardImage(data); }}
-                  imageCount={cardImages.length}
-                  disabled={!currentCard}
-                />
-              </div>
+              {!solutionCard.state.isActive && (
+                <div className="absolute right-3 top-3 z-10">
+                  <CardImageButton
+                    onImagePaste={async (data) => { await saveCardImage(data); }}
+                    imageCount={cardImages.length}
+                    disabled={!currentCard || solutionCard.state.isActive}
+                  />
+                </div>
+              )}
               {currentCard ? (
                 <QuillEditor
                   value={notes}
@@ -1957,7 +1964,7 @@ export default function ProblemCard() {
 
       {/* Card Image Modal */}
       <CardImageModal
-        isOpen={isImageModalOpen}
+        isOpen={isImageModalOpen && !solutionCard.state.isActive}
         images={cardImages}
         imageDataUrls={cardImageDataUrls}
         currentImageId={currentModalImageId}
