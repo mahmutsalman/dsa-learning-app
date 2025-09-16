@@ -8,6 +8,7 @@ import { GlobalAudioPlayerProvider } from "./contexts/GlobalAudioPlayerContext";
 import Dashboard from "./pages/Dashboard";
 import ProblemCard from "./pages/ProblemCard";
 import Analytics from "./pages/Analytics";
+import Settings from "./pages/Settings";
 
 function App() {
   const [isDark, setIsDark] = useState(false);
@@ -100,6 +101,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/settings" element={<Settings />} />
                   <Route path="/problem/:problemId" element={<ProblemCard />} />
                   <Route path="/problem/:problemId/card/:cardId" element={<ProblemCard />} />
                 </Routes>
