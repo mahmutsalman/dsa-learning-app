@@ -825,10 +825,9 @@ export function WorkspaceHeader({
                 {/* Recording History Dropdown Trigger */}
                 {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
                   <button
-                    onClick={() => setShowRecordingDropdown(!showRecordingDropdown)}
-                    onMouseEnter={() => setShowRecordingDropdown(true)}
+                    onClick={() => { onOpenRecordingHistory(); setShowRecordingDropdown(false); }}
                     className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                    title="Recording options"
+                    title="Open recording history"
                   >
                     <ChevronDownIcon className="h-3 w-3" />
                   </button>
