@@ -277,6 +277,7 @@ export default function Analytics() {
               title="Problems worked in the last 7 days"
               items={sortItems(sevenDayItems)}
               onItemClick={openProblemFromAnalytics}
+              sortBy={sortBy}
             />
           )}
           {!listLoading && !listError && expanded === '30' && (
@@ -284,6 +285,7 @@ export default function Analytics() {
               title="Problems worked in the last 30 days"
               items={sortItems(thirtyDayItems)}
               onItemClick={openProblemFromAnalytics}
+              sortBy={sortBy}
             />
           )}
         </div>
