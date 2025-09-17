@@ -275,8 +275,12 @@ fn start_recording_stream(
     let target_channels = 1u16;
     
     println!("Device config: {:?}", config);
-    println!("Using optimal settings - Sample Rate: {}Hz, Channels: {}, Device Native: {}Hz", 
-             optimal_sample_rate, optimal_channels, device_sample_rate);
+    println!(
+        "Using device settings - Sample Rate: {}Hz, Input Channels: {}, Writing Channels: {}",
+        device_sample_rate,
+        input_channels,
+        target_channels
+    );
     
     // Create WAV file with optimal settings
     let file = fs::File::create(&filepath)
