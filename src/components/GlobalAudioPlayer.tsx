@@ -174,7 +174,7 @@ export default function GlobalAudioPlayer({
               <div className="global-audio-player">
                 <AudioPlayer
                   ref={audioPlayerRef}
-                  src={currentRecording.audioUrl}
+                  src={currentRecording.fileUrl || currentRecording.audioUrl}
                   onPlay={() => { updatePlayerState({ isPlaying: true }); setUIMode('header'); }}
                   onPause={() => updatePlayerState({ isPlaying: false })}
                   onEnded={() => updatePlayerState({ isPlaying: false })}

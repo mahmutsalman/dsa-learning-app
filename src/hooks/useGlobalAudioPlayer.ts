@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 
 export interface AudioPlayerState {
   isOpen: boolean;
@@ -20,7 +20,8 @@ export interface PlayingRecording {
   duration?: number;
   file_size?: number;
   created_at: string;
-  audioUrl?: string; // Base64 data URL
+  audioUrl?: string; // Base64 data URL (fallback)
+  fileUrl?: string;  // Streamable tauri file URL
 }
 
 export interface UseGlobalAudioPlayerReturn {
@@ -83,20 +84,25 @@ export function useGlobalAudioPlayer(): UseGlobalAudioPlayerReturn {
     try {
       updatePlayerState({ isLoading: true, error: null });
       
-      // Get audio data from backend if not already cached
+      // Prefer streaming via file URL
+      let fileUrl = recording.fileUrl;
+      if (!fileUrl) {
+        try {
+          const absPath = await invoke<string>('resolve_recording_absolute_path', { filepath: recording.filepath });
+          fileUrl = convertFileSrc(absPath);
+        } catch (e) {
+          console.warn('Failed to resolve file URL, will fallback to base64:', e);
+        }
+      }
+      
+      // Fallback: base64 data URL (last resort for small files)
       let audioUrl = recording.audioUrl;
-      if (!audioUrl) {
-        console.log('Fetching audio data for:', recording.filepath);
-        audioUrl = await invoke<string>('get_audio_data', { 
-          filepath: recording.filepath 
-        });
+      if (!fileUrl && !audioUrl) {
+        audioUrl = await invoke<string>('get_audio_data', { filepath: recording.filepath });
       }
 
-      // Create enhanced recording object with audio URL
-      const enhancedRecording: PlayingRecording = {
-        ...recording,
-        audioUrl
-      };
+      // Create enhanced recording object
+      const enhancedRecording: PlayingRecording = { ...recording, fileUrl, audioUrl };
 
       setCurrentRecording(enhancedRecording);
       updatePlayerState({ 
