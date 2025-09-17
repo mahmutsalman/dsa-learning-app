@@ -268,32 +268,27 @@ fn start_recording_stream(
     let config = device.default_input_config()
         .map_err(|e| format!("Failed to get default input config: {}", e))?;
     
-    // Use device's native sample rate for optimal quality (no resampling)
+    // Use device's native configuration to avoid silent streams on devices that don't support our overrides
     let device_sample_rate = config.sample_rate().0;
-    
-    // For voice recordings, prefer mono to avoid phase issues and ensure compatibility
-    // Most voice recordings are mono and this prevents stereo-related pitch artifacts
-    let optimal_channels = 1u16; // Mono for voice recordings
-    
-    // Use standard 44.1kHz if device supports it, otherwise use device native rate
-    // 44.1kHz is the CD-quality standard and most compatible with web browsers
-    let optimal_sample_rate = if device_sample_rate >= 44100 && device_sample_rate <= 48000 {
-        44100u32 // Standard CD quality - most compatible with browsers
-    } else {
-        device_sample_rate // Use device native rate if outside normal range
-    };
+    let input_channels = config.channels() as u16;
+    // We'll always write MONO to the WAV for simplicity and compatibility, downmixing if needed
+    let target_channels = 1u16;
     
     println!("Device config: {:?}", config);
-    println!("Using optimal settings - Sample Rate: {}Hz, Channels: {}, Device Native: {}Hz", 
-             optimal_sample_rate, optimal_channels, device_sample_rate);
+    println!(
+        "Using device settings - Sample Rate: {}Hz, Input Channels: {}, Writing Channels: {}",
+        device_sample_rate,
+        input_channels,
+        target_channels
+    );
     
     // Create WAV file with optimal settings
     let file = fs::File::create(&filepath)
         .map_err(|e| format!("Failed to create audio file: {}", e))?;
     
     let spec = WavSpec {
-        channels: optimal_channels,
-        sample_rate: optimal_sample_rate,
+        channels: target_channels,
+        sample_rate: device_sample_rate,
         bits_per_sample: 16, // Standard 16-bit for voice (24-bit can cause compatibility issues)
         sample_format: SampleFormat::Int,
     };
@@ -309,8 +304,8 @@ fn start_recording_stream(
     
     // Create config that matches our target format for proper recording
     let stream_config = cpal::StreamConfig {
-        channels: optimal_channels,
-        sample_rate: cpal::SampleRate(optimal_sample_rate),
+        channels: input_channels,
+        sample_rate: cpal::SampleRate(device_sample_rate),
         buffer_size: cpal::BufferSize::Default,
     };
     
@@ -318,13 +313,7 @@ fn start_recording_stream(
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => {
             let state_clone_f32 = Arc::clone(&state_arc);
-            let resampling_needed = device_sample_rate != optimal_sample_rate;
-            let sample_ratio = if resampling_needed {
-                device_sample_rate as f64 / optimal_sample_rate as f64
-            } else {
-                1.0
-            };
-            
+            let in_ch = input_channels as usize;
             device.build_input_stream(
                 &stream_config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
@@ -333,14 +322,22 @@ fn start_recording_stream(
                         if *state_guard == AudioStreamState::Recording {
                             if let Ok(mut writer_guard) = writer_clone.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
-                                    // Process audio samples for voice recording optimization
-                                    for &sample in data {
-                                        // Clamp and normalize the sample for voice recording
-                                        let normalized_sample = sample.clamp(-0.95, 0.95); // Slight headroom
-                                        
-                                        // Convert to 16-bit integer for standard voice recording
-                                        let sample_i16 = (normalized_sample * i16::MAX as f32) as i16;
-                                        let _ = writer.write_sample(sample_i16);
+                                    if in_ch <= 1 {
+                                        for &sample in data {
+                                            let s = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                                            let _ = writer.write_sample(s);
+                                        }
+                                    } else {
+                                        // Downmix interleaved multi-channel to mono by averaging
+                                        let mut i = 0usize;
+                                        while i + in_ch <= data.len() {
+                                            let mut sum = 0.0f32;
+                                            for c in 0..in_ch { sum += data[i + c]; }
+                                            let avg = (sum / in_ch as f32).clamp(-1.0, 1.0);
+                                            let s = (avg * i16::MAX as f32) as i16;
+                                            let _ = writer.write_sample(s);
+                                            i += in_ch;
+                                        }
                                     }
                                 }
                             }
@@ -355,6 +352,7 @@ fn start_recording_stream(
         cpal::SampleFormat::I16 => {
             let writer_clone_i16 = Arc::clone(&writer_arc);
             let state_clone_i16 = Arc::clone(&state_arc);
+            let in_ch = input_channels as usize;
             device.build_input_stream(
                 &stream_config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
@@ -363,9 +361,19 @@ fn start_recording_stream(
                         if *state_guard == AudioStreamState::Recording {
                             if let Ok(mut writer_guard) = writer_clone_i16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
-                                    for &sample in data {
-                                        // Direct write for i16 samples (already in correct format)
-                                        let _ = writer.write_sample(sample);
+                                    if in_ch <= 1 {
+                                        for &sample in data {
+                                            let _ = writer.write_sample(sample);
+                                        }
+                                    } else {
+                                        let mut i = 0usize;
+                                        while i + in_ch <= data.len() {
+                                            let mut sum = 0i32;
+                                            for c in 0..in_ch { sum += data[i + c] as i32; }
+                                            let avg = (sum / in_ch as i32) as i16;
+                                            let _ = writer.write_sample(avg);
+                                            i += in_ch;
+                                        }
                                     }
                                 }
                             }
@@ -379,6 +387,7 @@ fn start_recording_stream(
         cpal::SampleFormat::U16 => {
             let writer_clone_u16 = Arc::clone(&writer_arc);
             let state_clone_u16 = Arc::clone(&state_arc);
+            let in_ch = input_channels as usize;
             device.build_input_stream(
                 &stream_config,
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
@@ -387,10 +396,22 @@ fn start_recording_stream(
                         if *state_guard == AudioStreamState::Recording {
                             if let Ok(mut writer_guard) = writer_clone_u16.try_lock() {
                                 if let Some(ref mut writer) = *writer_guard {
-                                    for &sample in data {
-                                        // Convert u16 to i16 for standard audio format
-                                        let sample_i16 = (sample as i32 - 32768) as i16; // Convert to signed 16-bit
-                                        let _ = writer.write_sample(sample_i16);
+                                    if in_ch <= 1 {
+                                        for &sample in data {
+                                            let sample_i16 = (sample as i32 - 32768) as i16;
+                                            let _ = writer.write_sample(sample_i16);
+                                        }
+                                    } else {
+                                        let mut i = 0usize;
+                                        while i + in_ch <= data.len() {
+                                            let mut sum = 0i32;
+                                            for c in 0..in_ch {
+                                                sum += (data[i + c] as i32 - 32768);
+                                            }
+                                            let avg = (sum / in_ch as i32) as i16;
+                                            let _ = writer.write_sample(avg);
+                                            i += in_ch;
+                                        }
                                     }
                                 }
                             }
