@@ -71,7 +71,7 @@ export default function HeaderMiniAudioPlayer() {
 
   return (
     <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-2 py-1 space-x-2">
-      <audio ref={audioRef} src={currentRecording.audioUrl} preload="metadata" />
+      <audio ref={audioRef} src={currentRecording.fileUrl || currentRecording.audioUrl} preload="metadata" />
       <SpeakerWaveIcon className="h-4 w-4 text-gray-700 dark:text-gray-200" />
       <span className="max-w-[220px] truncate text-xs text-gray-700 dark:text-gray-200">
         {currentRecording.filename}
@@ -104,4 +104,3 @@ export default function HeaderMiniAudioPlayer() {
     </div>
   );
 }
-

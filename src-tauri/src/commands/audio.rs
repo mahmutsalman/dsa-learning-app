@@ -617,6 +617,13 @@ pub async fn get_audio_data(state: State<'_, AppState>, filepath: String) -> Res
     Ok(data_url)
 }
 
+/// Return absolute filesystem path for a recording given its app-relative path
+#[tauri::command]
+pub async fn resolve_recording_absolute_path(state: State<'_, AppState>, filepath: String) -> Result<String, String> {
+    let absolute_path = state.path_resolver.resolve_relative_path(&filepath);
+    Ok(absolute_path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn get_current_dir() -> Result<String, String> {
     let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
