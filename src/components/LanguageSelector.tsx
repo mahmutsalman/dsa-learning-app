@@ -7,10 +7,10 @@ export interface Language {
 }
 
 export const SUPPORTED_LANGUAGES: Language[] = [
+  { value: 'java', label: 'Java', extension: '.java' },
   { value: 'javascript', label: 'JavaScript', extension: '.js' },
   { value: 'typescript', label: 'TypeScript', extension: '.ts' },
   { value: 'python', label: 'Python', extension: '.py' },
-  { value: 'java', label: 'Java', extension: '.java' },
   { value: 'cpp', label: 'C++', extension: '.cpp' },
   { value: 'c', label: 'C', extension: '.c' },
   { value: 'csharp', label: 'C#', extension: '.cs' },

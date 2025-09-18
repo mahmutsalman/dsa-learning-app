@@ -1,6 +1,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { Card } from '../types';
 import { CardMode, EditorState } from './useCardModeStateMachine';
+import { DEFAULT_LANGUAGE } from '../constants/editor';
 
 export interface EditorSyncOptions {
   debounceMs?: number;
@@ -71,7 +72,7 @@ export const useDebouncedEditorSync = (
     const editorState: EditorState = {
       code: currentCard.code || '',
       notes: currentCard.notes || '',
-      language: currentCard.language || 'javascript'
+      language: currentCard.language || DEFAULT_LANGUAGE
     };
 
     log('Syncing editor state', {

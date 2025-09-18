@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { Card } from '../types';
+import { DEFAULT_LANGUAGE } from '../constants/editor';
 import { SolutionCard } from '../features/solution-card/types';
 import { CardMode, EditorState, TransitionState } from './useCardModeStateMachine';
 
@@ -135,7 +136,7 @@ export const useStateValidationGuards = (options: StateValidationOptions = {
         if (editorState.notes !== (regularCard.notes || '')) {
           warnings.push('Editor notes differ from regular card notes outside of transition');
         }
-        if (editorState.language !== (regularCard.language || 'javascript')) {
+        if (editorState.language !== (regularCard.language || DEFAULT_LANGUAGE)) {
           warnings.push('Editor language differs from regular card language outside of transition');
         }
       }

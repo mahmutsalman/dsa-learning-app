@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { DEFAULT_LANGUAGE } from '../constants/editor';
 
 export type CardMode = 'REGULAR' | 'ANSWER';
 export type TransitionState =
@@ -35,7 +36,7 @@ export interface CardModeStateMachine {
 
 export const useCardModeStateMachine = (
   initialMode: CardMode = 'REGULAR',
-  initialEditorState: EditorState = { code: '', notes: '', language: 'javascript' }
+  initialEditorState: EditorState = { code: '', notes: '', language: DEFAULT_LANGUAGE }
 ): CardModeStateMachine => {
   const [state, setState] = useState<CardModeState>({
     currentMode: initialMode,
@@ -158,7 +159,7 @@ export const useCardModeStateMachine = (
       error: null
     });
 
-    setEditorState({ code: '', notes: '', language: 'javascript' });
+    setEditorState({ code: '', notes: '', language: DEFAULT_LANGUAGE });
     preTransitionStateRef.current = null;
   }, []);
 

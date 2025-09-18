@@ -35,6 +35,7 @@ import { useCardModeStateMachine, EditorState, CardMode } from '../hooks/useCard
 // import { useDebouncedEditorSync } from '../hooks/useDebouncedEditorSync'; // Available for future use
 // import { useUnifiedAutoSave } from '../hooks/useUnifiedAutoSave';
 import { useStateValidationGuards } from '../hooks/useStateValidationGuards';
+import { DEFAULT_LANGUAGE } from '../constants/editor';
 import { answerCardLogger } from '../utils/answerCardLogger';
 import { comprehensiveLogger } from '../utils/comprehensiveLogger';
 
@@ -119,7 +120,7 @@ export default function ProblemCard() {
           // Apply the content changes
           debugSetCode(card.code || '');
           debugSetNotes(card.notes || '');
-          setLanguage(card.language || 'javascript');
+          setLanguage(card.language || DEFAULT_LANGUAGE);
           
           // Performance tracking removed
           
@@ -187,7 +188,7 @@ export default function ProblemCard() {
   // Editor state (will be enhanced with state management below)
   const [code, setCode] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
-  const [language, setLanguage] = useState<string>('javascript');
+  const [language, setLanguage] = useState<string>(DEFAULT_LANGUAGE);
 
   // Helpers to normalize Quill HTML for consistent change detection and saves
   const normalizeHtml = useCallback((html: string | undefined | null): string => {
@@ -336,7 +337,7 @@ export default function ProblemCard() {
         lastSavedValuesRef.current = {
           code: code || '',
           notes: notes || '',
-          language: language || 'javascript'
+          language: language || DEFAULT_LANGUAGE
         };
 
         return; // Do not update regular card state while in solution mode
@@ -364,7 +365,7 @@ export default function ProblemCard() {
         lastSavedValuesRef.current = {
           code: updatedCard.code || '',
           notes: updatedCard.notes || '',
-          language: updatedCard.language || 'javascript'
+          language: updatedCard.language || DEFAULT_LANGUAGE
         };
       }
       
@@ -383,7 +384,7 @@ export default function ProblemCard() {
       lastSavedValuesRef.current = {
         code: currentCard.code || '',
         notes: currentCard.notes || '',
-        language: currentCard.language || 'javascript'
+        language: currentCard.language || DEFAULT_LANGUAGE
       };
     }
   }, [currentCard?.id, currentCard?.code, currentCard?.notes, currentCard?.language]);
@@ -788,7 +789,7 @@ export default function ProblemCard() {
   const initialEditorState: EditorState = useMemo(() => ({
     code: '',
     notes: '',
-    language: 'javascript'
+    language: DEFAULT_LANGUAGE
   }), []);
 
   // State machine for safe mode transitions
@@ -1049,7 +1050,7 @@ export default function ProblemCard() {
         
         debugSetCode(currentCard.code || '');
         debugSetNotes(currentCard.notes || '');
-        setLanguage(currentCard.language || 'javascript');
+        setLanguage(currentCard.language || DEFAULT_LANGUAGE);
         
         // Post-sync validation
         setTimeout(async () => {
@@ -1107,7 +1108,7 @@ export default function ProblemCard() {
           const newCard = await invoke<Card>('create_card', {
             request: {
               problem_id: problemId,
-              language: 'javascript',
+              language: DEFAULT_LANGUAGE,
               parent_card_id: null
             }
           });
@@ -1184,7 +1185,7 @@ export default function ProblemCard() {
       const newCard = await invoke<Card>('create_card', {
         request: {
           problem_id: problemId,
-          language: 'javascript',
+          language: DEFAULT_LANGUAGE,
           parent_card_id: null
         }
       });
@@ -1322,7 +1323,7 @@ export default function ProblemCard() {
           regularCardCacheRef.current = {
             code: currentEditorState.code || '',
             notes: currentEditorState.notes || '',
-            language: currentEditorState.language || 'javascript',
+            language: currentEditorState.language || DEFAULT_LANGUAGE,
             cardId: currentCard.id
           };
 
@@ -1358,7 +1359,7 @@ export default function ProblemCard() {
           const solutionEditorState: EditorState = {
             code: solution.code || '',
             notes: solution.notes || '',
-            language: solution.language || 'javascript'
+            language: solution.language || DEFAULT_LANGUAGE
           };
 
           console.debug('Enhanced handleSolutionToggle: Loading solution card content', {
@@ -1477,7 +1478,7 @@ export default function ProblemCard() {
           const fallbackEditorState: EditorState = {
             code: currentCard.code || '',
             notes: currentCard.notes || '',
-            language: currentCard.language || 'javascript'
+            language: currentCard.language || DEFAULT_LANGUAGE
           };
 
           // Directly update editor state
@@ -1515,7 +1516,7 @@ export default function ProblemCard() {
           const recoveryState: EditorState = {
             code: currentCard.code || '',
             notes: currentCard.notes || '',
-            language: currentCard.language || 'javascript'
+            language: currentCard.language || DEFAULT_LANGUAGE
           };
 
           setCode(recoveryState.code);

@@ -4,6 +4,7 @@
 
 import { SolutionCard } from '../types';
 import { Card, CardStatus } from '../../../types';
+import { DEFAULT_LANGUAGE } from '../../../constants/editor';
 
 /**
  * Check if an event is a shift+click or shift+enter
@@ -49,7 +50,7 @@ export const solutionCardToCard = (solutionCard: SolutionCard): Card => {
     problem_id: solutionCard.problem_id,
     card_number: solutionCard.card_number || 1,
     code: solutionCard.code || '', // Ensure code is never undefined
-    language: solutionCard.language || 'javascript', // Ensure language has default
+    language: solutionCard.language || DEFAULT_LANGUAGE, // Ensure language has default
     notes: solutionCard.notes || '', // Ensure notes is never undefined
     status: solutionCard.status as CardStatus,
     total_duration: solutionCard.total_duration || 0,
