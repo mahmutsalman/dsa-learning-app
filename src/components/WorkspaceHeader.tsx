@@ -804,7 +804,7 @@ export function WorkspaceHeader({
                   <div className="flex-shrink-0 relative">
                     <MicrophoneIcon className={`h-4 w-4 ${recordingsCount > 0 ? 'text-blue-500' : ''}`} />
                     {recordingsCount > 0 && (
-                      <span className="absolute -bottom-0.5 -right-0.5 bg-blue-500 text-white text-[10px] rounded-full px-1 min-w-[14px] h-3 flex items-center justify-center leading-none font-medium">
+                      <span className="absolute top-0 right-0 translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-[9px] rounded-full px-1 min-w-[14px] h-3.5 flex items-center justify-center leading-none font-medium shadow-sm">
                         ({recordingsCount})
                       </span>
                     )}
