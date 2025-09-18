@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { MicrophoneIcon, CalendarDaysIcon, PlayIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useGlobalAudioPlayerContext } from '../contexts/GlobalAudioPlayerContext';
+
+type RecordingHighlightColor = 'green' | 'blue' | 'purple';
 
 interface Recording {
   id: string;
@@ -14,6 +17,7 @@ interface Recording {
   filename: string;
   filepath: string;
   file_size?: number;
+  highlight_color?: RecordingHighlightColor | null;
 }
 
 interface RecordingHistoryProps {
@@ -31,6 +35,39 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
   
   // Use global audio player context
   const { playRecording } = useGlobalAudioPlayerContext();
+
+  const highlightSaveTimers = useRef<Record<string, number>>({});
+  const HIGHLIGHT_SEQUENCE: (RecordingHighlightColor | null)[] = [null, 'green', 'blue', 'purple'];
+  const highlightStyles: Record<'none' | RecordingHighlightColor, string> = {
+    none: '',
+    green: 'border-emerald-400 bg-emerald-50/80 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/35 ring-1 ring-emerald-400/50',
+    blue: 'border-sky-400 bg-sky-50/80 dark:bg-sky-900/30 hover:bg-sky-100 dark:hover:bg-sky-900/35 ring-1 ring-sky-400/50',
+    purple: 'border-purple-400 bg-purple-50/80 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/35 ring-1 ring-purple-400/50',
+  };
+  const highlightIndicatorClasses: Record<'none' | RecordingHighlightColor, string> = {
+    none: 'bg-gray-300 dark:bg-gray-600',
+    green: 'bg-emerald-500',
+    blue: 'bg-sky-500',
+    purple: 'bg-purple-500',
+  };
+  const highlightBadgeClasses: Record<RecordingHighlightColor, string> = {
+    green: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+    blue: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200',
+    purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
+  };
+  const highlightBadgeText: Record<RecordingHighlightColor, string> = {
+    green: 'Important',
+    blue: 'Reference',
+    purple: 'Idea',
+  };
+  const baseRecordingClasses = 'rounded-lg p-4 transition-colors cursor-pointer select-none border border-transparent bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700';
+
+  useEffect(() => {
+    return () => {
+      Object.values(highlightSaveTimers.current).forEach((timerId) => window.clearTimeout(timerId));
+      highlightSaveTimers.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen && cardId) {
@@ -62,7 +99,11 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
     
     try {
       const recordingData = await invoke<Recording[]>('get_card_recordings', { cardId });
-      setRecordings(recordingData);
+      const normalized = recordingData.map((recording) => ({
+        ...recording,
+        highlight_color: recording.highlight_color ?? null,
+      }));
+      setRecordings(normalized);
     } catch (err) {
       console.error('Failed to load recordings:', err);
       setError(err as string);
@@ -109,6 +150,67 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
 
   const getTotalSize = (): number => {
     return recordings.reduce((total, recording) => total + (recording.file_size || 0), 0);
+  };
+
+  const getNextHighlight = (current: RecordingHighlightColor | null | undefined): RecordingHighlightColor | null => {
+    const index = HIGHLIGHT_SEQUENCE.indexOf(current ?? null);
+    const nextIndex = (index + 1) % HIGHLIGHT_SEQUENCE.length;
+    return HIGHLIGHT_SEQUENCE[nextIndex];
+  };
+
+  const updateRecordingHighlightState = (recordingId: string, color: RecordingHighlightColor | null) => {
+    setRecordings((prev) =>
+      prev.map((recording) =>
+        recording.id === recordingId ? { ...recording, highlight_color: color ?? null } : recording
+      )
+    );
+
+    setDeleteConfirm((prev) => {
+      if (!prev.recording || prev.recording.id !== recordingId) return prev;
+      return {
+        ...prev,
+        recording: { ...prev.recording, highlight_color: color ?? null },
+      };
+    });
+  };
+
+  const scheduleHighlightPersistence = (
+    recordingId: string,
+    color: RecordingHighlightColor | null,
+    previousColor: RecordingHighlightColor | null
+  ) => {
+    const timers = highlightSaveTimers.current;
+    if (timers[recordingId] !== undefined) {
+      window.clearTimeout(timers[recordingId]);
+    }
+
+    timers[recordingId] = window.setTimeout(async () => {
+      try {
+        await invoke('set_recording_highlight', {
+          recordingId,
+          color: color ?? null,
+        });
+      } catch (err) {
+        console.error('Failed to update recording highlight color:', err);
+        updateRecordingHighlightState(recordingId, previousColor);
+      } finally {
+        delete timers[recordingId];
+      }
+    }, 400);
+  };
+
+  const cycleRecordingHighlight = (recording: Recording) => {
+    const currentColor = recording.highlight_color ?? null;
+    const nextColor = getNextHighlight(currentColor);
+    updateRecordingHighlightState(recording.id, nextColor);
+    scheduleHighlightPersistence(recording.id, nextColor, currentColor);
+  };
+
+  const handleRecordingKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>, recording: Recording) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      cycleRecordingHighlight(recording);
+    }
   };
 
   const handleDeleteClick = (recording: Recording) => {
@@ -209,72 +311,102 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
 
           {!loading && !error && recordings.length > 0 && (
             <div className="space-y-4">
-              {recordings.map((recording) => (
-                <div
-                  key={recording.id}
-                  className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        <MicrophoneIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {recording.filename}
-                          </h4>
-                          <div className="flex items-center space-x-4 mt-1">
-                            <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
-                              <CalendarDaysIcon className="h-4 w-4" />
-                              <span>{formatDateTime(recording.created_at)}</span>
+              {recordings.map((recording) => {
+                const highlightValue = (recording.highlight_color ?? null) as RecordingHighlightColor | null;
+                const highlightKey: 'none' | RecordingHighlightColor = highlightValue ?? 'none';
+                const containerClasses = `${baseRecordingClasses} ${highlightStyles[highlightKey]}`;
+                const indicatorClasses = highlightIndicatorClasses[highlightKey];
+
+                return (
+                  <div
+                    key={recording.id}
+                    tabIndex={0}
+                    onClick={() => cycleRecordingHighlight(recording)}
+                    onKeyDown={(event) => handleRecordingKeyDown(event, recording)}
+                    className={containerClasses}
+                    title="Click to cycle highlight (green → blue → purple → reset)"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <span
+                            aria-hidden="true"
+                            className={`h-2.5 w-2.5 rounded-full transition-colors ${indicatorClasses}`}
+                          ></span>
+                          <MicrophoneIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                {recording.filename}
+                              </h4>
+                              {highlightValue && (
+                                <span
+                                  className={`ml-3 inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${highlightBadgeClasses[highlightValue]}`}
+                                >
+                                  {highlightBadgeText[highlightValue]}
+                                </span>
+                              )}
                             </div>
-                            {recording.duration && (
-                              <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
-                                <ClockIcon className="h-4 w-4" />
-                                <span>{formatDuration(recording.duration)}</span>
+                            <div className="flex items-center flex-wrap gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              <div className="flex items-center space-x-1">
+                                <CalendarDaysIcon className="h-4 w-4" />
+                                <span>{formatDateTime(recording.created_at)}</span>
                               </div>
-                            )}
-                            {recording.file_size && (
-                              <div className="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
-                                <span>{formatFileSize(recording.file_size)}</span>
-                              </div>
-                            )}
+                              {recording.duration && (
+                                <div className="flex items-center space-x-1">
+                                  <ClockIcon className="h-4 w-4" />
+                                  <span>{formatDuration(recording.duration)}</span>
+                                </div>
+                              )}
+                              {recording.file_size && (
+                                <div className="flex items-center space-x-1">
+                                  <span>{formatFileSize(recording.file_size)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
+
+                        {recording.transcript && (
+                          <div className="ml-8 mt-2">
+                            <p className="text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 border">
+                              {recording.transcript}
+                            </p>
+                          </div>
+                        )}
                       </div>
 
-                      {recording.transcript && (
-                        <div className="ml-8 mt-2">
-                          <p className="text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 rounded p-2 border">
-                            {recording.transcript}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-2 ml-4">
-                      <button
-                        onClick={() => handlePlayRecording(recording)}
-                        className="p-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
-                        title="Play recording"
-                      >
-                        <PlayIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(recording)}
-                        disabled={deleting === recording.id}
-                        className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Delete recording"
-                      >
-                        {deleting === recording.id ? (
-                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></div>
-                        ) : (
-                          <TrashIcon className="h-4 w-4" />
-                        )}
-                      </button>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handlePlayRecording(recording);
+                          }}
+                          className="p-2 text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                          title="Play recording"
+                        >
+                          <PlayIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteClick(recording);
+                          }}
+                          disabled={deleting === recording.id}
+                          className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Delete recording"
+                        >
+                          {deleting === recording.id ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></div>
+                          ) : (
+                            <TrashIcon className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

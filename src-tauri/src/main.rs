@@ -153,6 +153,7 @@ async fn main() {
             commands::audio::get_recording_state,
             commands::audio::get_all_recordings,
             commands::audio::get_card_recordings,
+            commands::audio::set_recording_highlight,
             commands::audio::get_audio_data,
             commands::audio::resolve_recording_absolute_path,
             commands::audio::get_current_dir,

@@ -631,6 +631,17 @@ pub async fn get_card_recordings(state: State<'_, AppState>, card_id: String) ->
 }
 
 #[tauri::command]
+pub async fn set_recording_highlight(
+    state: State<'_, AppState>,
+    recording_id: String,
+    color: Option<String>,
+) -> Result<(), String> {
+    let mut db = state.db.lock().map_err(|e| e.to_string())?;
+    db.set_recording_highlight(&recording_id, color.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn get_audio_data(state: State<'_, AppState>, filepath: String) -> Result<String, String> {
     // Use the proper path resolver to convert relative path to absolute path
     let absolute_path = state.path_resolver.resolve_relative_path(&filepath);

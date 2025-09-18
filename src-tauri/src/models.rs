@@ -267,6 +267,7 @@ pub struct Recording {
     pub filename: String,
     pub filepath: String,
     pub file_size: Option<i64>,
+    pub highlight_color: Option<String>,
 }
 
 // Tag models

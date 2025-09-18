@@ -400,6 +400,12 @@ impl DatabaseManager {
                 FOREIGN KEY (card_id) REFERENCES cards(id),
                 FOREIGN KEY (time_session_id) REFERENCES time_sessions(id)
             )"),
+            ("recording_highlights", "CREATE TABLE IF NOT EXISTS recording_highlights (
+                recording_id TEXT PRIMARY KEY,
+                color TEXT NOT NULL CHECK(color IN ('green', 'blue', 'purple')),
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
+            )"),
             ("connections", "CREATE TABLE IF NOT EXISTS connections (
                 id TEXT PRIMARY KEY,
                 source_card_id TEXT NOT NULL,
@@ -453,6 +459,7 @@ impl DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_time_sessions_card_id ON time_sessions(card_id)",
             "CREATE INDEX IF NOT EXISTS idx_time_sessions_date ON time_sessions(date)",
             "CREATE INDEX IF NOT EXISTS idx_recordings_card_id ON recordings(card_id)",
+            "CREATE INDEX IF NOT EXISTS idx_recording_highlights_color ON recording_highlights(color)",
             "CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id)",
             "CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id)"
         ];
@@ -1425,13 +1432,16 @@ impl DatabaseManager {
             filename: filename.to_string(),
             filepath: filepath.to_string(),
             file_size,
+            highlight_color: None,
         })
     }
     
     pub fn get_recordings(&self) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, card_id, time_session_id, audio_url, duration, transcript, created_at, filename, filepath, file_size 
-             FROM recordings ORDER BY created_at DESC"
+            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color \
+             FROM recordings r \
+             LEFT JOIN recording_highlights rh ON rh.recording_id = r.id \
+             ORDER BY r.created_at DESC"
         )?;
         
         let recording_iter = stmt.query_map([], |row| {
@@ -1446,6 +1456,7 @@ impl DatabaseManager {
                 filename: row.get(7)?,
                 filepath: row.get(8)?,
                 file_size: row.get(9)?,
+                highlight_color: row.get(10)?,
             })
         })?;
         
@@ -1459,8 +1470,11 @@ impl DatabaseManager {
     
     pub fn get_recordings_for_card(&self, card_id: &str) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, card_id, time_session_id, audio_url, duration, transcript, created_at, filename, filepath, file_size 
-             FROM recordings WHERE card_id = ?1 ORDER BY created_at DESC"
+            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color \
+             FROM recordings r \
+             LEFT JOIN recording_highlights rh ON rh.recording_id = r.id \
+             WHERE r.card_id = ?1 \
+             ORDER BY r.created_at DESC"
         )?;
         
         let recording_iter = stmt.query_map([card_id], |row| {
@@ -1477,6 +1491,7 @@ impl DatabaseManager {
                 filename: row.get(7)?,
                 filepath: row.get(8)?,
                 file_size: row.get(9)?,
+                highlight_color: row.get(10)?,
             })
         })?;
         
@@ -1498,8 +1513,44 @@ impl DatabaseManager {
         if rows_affected == 0 {
             return Err(anyhow::anyhow!("Recording with id '{}' not found", recording_id));
         }
-        
+
         println!("Successfully deleted recording '{}'", recording_id);
+        Ok(())
+    }
+
+    pub fn set_recording_highlight(
+        &mut self,
+        recording_id: &str,
+        color: Option<&str>,
+    ) -> anyhow::Result<()> {
+        if let Some(value) = color {
+            match value {
+                "green" | "blue" | "purple" => {}
+                other => {
+                    return Err(anyhow::anyhow!(
+                        "Unsupported recording highlight color '{}'. Expected green, blue, or purple.",
+                        other
+                    ));
+                }
+            }
+        }
+
+        let tx = self.connection.transaction()?;
+
+        if let Some(valid_color) = color {
+            tx.execute(
+                "INSERT INTO recording_highlights (recording_id, color, updated_at) VALUES (?1, ?2, CURRENT_TIMESTAMP)
+                 ON CONFLICT(recording_id) DO UPDATE SET color = excluded.color, updated_at = CURRENT_TIMESTAMP",
+                params![recording_id, valid_color],
+            )?;
+        } else {
+            tx.execute(
+                "DELETE FROM recording_highlights WHERE recording_id = ?1",
+                [recording_id],
+            )?;
+        }
+
+        tx.commit()?;
         Ok(())
     }
 

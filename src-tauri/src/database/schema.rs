@@ -62,6 +62,14 @@ CREATE TABLE IF NOT EXISTS recordings (
     FOREIGN KEY (time_session_id) REFERENCES time_sessions(id)
 );
 
+-- Recording highlight metadata for user-defined color coding
+CREATE TABLE IF NOT EXISTS recording_highlights (
+    recording_id TEXT PRIMARY KEY,
+    color TEXT NOT NULL CHECK(color IN ('green', 'blue', 'purple')),
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recording_id) REFERENCES recordings(id) ON DELETE CASCADE
+);
+
 -- Connections table
 CREATE TABLE IF NOT EXISTS connections (
     id TEXT PRIMARY KEY,
@@ -143,6 +151,7 @@ CREATE INDEX IF NOT EXISTS idx_cards_problem_id ON cards(problem_id);
 CREATE INDEX IF NOT EXISTS idx_time_sessions_card_id ON time_sessions(card_id);
 CREATE INDEX IF NOT EXISTS idx_time_sessions_date ON time_sessions(date);
 CREATE INDEX IF NOT EXISTS idx_recordings_card_id ON recordings(card_id);
+CREATE INDEX IF NOT EXISTS idx_recording_highlights_color ON recording_highlights(color);
 CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id);
 CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id);
 CREATE INDEX IF NOT EXISTS idx_problems_difficulty ON problems(difficulty);
