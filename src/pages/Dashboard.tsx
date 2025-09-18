@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
@@ -22,6 +22,8 @@ const difficultyColors = {
   'Medium': 'bg-difficulty-medium text-yellow-800',
   'Hard': 'bg-difficulty-hard text-red-800'
 };
+
+const DASHBOARD_RETURN_STATE_KEY = 'dashboard:returnState';
 
 interface ProblemWithStudyTime extends Problem {
   totalStudyTime: number; // in seconds
@@ -93,6 +95,63 @@ export default function Dashboard() {
   const [problemToDelete, setProblemToDelete] = useState<ProblemWithStudyTime | null>(null);
   const [deleteStats, setDeleteStats] = useState<ProblemDeleteStats | null>(null);
   const [isLoadingDeleteStats, setIsLoadingDeleteStats] = useState(false);
+
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [highlightedProblemId, setHighlightedProblemId] = useState<string | null>(null);
+  const [pendingReturnState, setPendingReturnState] = useState<{ problemId: string; scrollTop: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const stored = window.sessionStorage.getItem(DASHBOARD_RETURN_STATE_KEY);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as { problemId?: string; scrollTop?: number; timestamp?: number };
+      window.sessionStorage.removeItem(DASHBOARD_RETURN_STATE_KEY);
+
+      if (!parsed?.problemId || typeof parsed.scrollTop !== 'number') return;
+
+      const isFresh = !parsed.timestamp || Date.now() - parsed.timestamp < 5 * 60 * 1000;
+      if (isFresh) {
+        setPendingReturnState({ problemId: parsed.problemId, scrollTop: parsed.scrollTop });
+      }
+    } catch (error) {
+      console.warn('Failed to parse dashboard return state', error);
+      window.sessionStorage.removeItem(DASHBOARD_RETURN_STATE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingReturnState) return;
+    if (loading) return;
+    if (filteredProblems.length === 0) return;
+
+    const hasProblem = filteredProblems.some(problem => problem.id === pendingReturnState.problemId);
+    if (!hasProblem) {
+      setPendingReturnState(null);
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      container.scrollTo({ top: pendingReturnState.scrollTop, behavior: 'auto' });
+      setHighlightedProblemId(pendingReturnState.problemId);
+      setPendingReturnState(null);
+    });
+  }, [pendingReturnState, loading, filteredProblems]);
+
+  useEffect(() => {
+    if (!highlightedProblemId) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedProblemId(null);
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedProblemId]);
 
   // Sort problems based on selected criteria
   const sortProblems = (problemsToSort: ProblemWithStudyTime[], sortOption: SortOption, direction: SortDirection): ProblemWithStudyTime[] => {
@@ -386,7 +445,7 @@ export default function Dashboard() {
   const handleCardClick = (e: React.MouseEvent, problemId: string) => {
     // Only handle left click
     if (e.button !== 0) return;
-    
+
     e.preventDefault();
     
     // Ctrl/Cmd + Click: Toggle individual selection
@@ -403,6 +462,19 @@ export default function Dashboard() {
     if (isSelectionMode) {
       toggleSelection(problemId);
     } else {
+      if (typeof window !== 'undefined') {
+        const scrollTop = scrollContainerRef.current?.scrollTop ?? 0;
+        const payload = JSON.stringify({
+          problemId,
+          scrollTop,
+          timestamp: Date.now(),
+        });
+        try {
+          window.sessionStorage.setItem(DASHBOARD_RETURN_STATE_KEY, payload);
+        } catch (error) {
+          console.warn('Failed to store dashboard return state', error);
+        }
+      }
       navigate(`/problem/${problemId}`);
     }
   };
@@ -1053,7 +1125,7 @@ export default function Dashboard() {
         className="flex-1 px-6 pb-6"
         style={{ maxHeight: `${containerHeight}px` }}
       >
-        <div className="h-full overflow-y-auto">
+        <div ref={scrollContainerRef} className="h-full overflow-y-auto">
           {filteredProblems.length === 0 ? (
             <div className="text-center py-12">
               <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
@@ -1099,6 +1171,7 @@ export default function Dashboard() {
                 
                 return filteredProblems.map((problem) => {
                   const isSelected = selectedProblemIds.has(problem.id);
+                  const isHighlighted = highlightedProblemId === problem.id;
                   
                   // Calculate heat map intensity based on current sort
                   let heatMapClasses = '';
@@ -1110,19 +1183,21 @@ export default function Dashboard() {
                     heatMapClasses = getHeatMapClasses(intensity);
                   }
                   
+                  const cardStateClasses = isSelected
+                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                    : isHighlighted
+                    ? 'border-primary-400 dark:border-primary-500 ring-2 ring-primary-400 dark:ring-primary-500 ring-opacity-70 ring-offset-1 ring-offset-white dark:ring-offset-gray-900'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600';
+
                   return (
-                <div
-                  key={problem.id}
-                  onClick={(e) => handleCardClick(e, problem.id)}
-                  onContextMenu={(e) => handleRightClick(e, problem.id)}
-                  className={`${
-                    heatMapClasses || 'bg-white dark:bg-gray-800'
-                  } rounded-lg p-6 shadow-sm border group cursor-pointer select-none relative ${
-                    isSelected
-                      ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-600'
-                  }`}
-                >
+                    <div
+                      key={problem.id}
+                      onClick={(e) => handleCardClick(e, problem.id)}
+                      onContextMenu={(e) => handleRightClick(e, problem.id)}
+                      className={`${
+                        heatMapClasses || 'bg-white dark:bg-gray-800'
+                      } rounded-lg p-6 shadow-sm border group cursor-pointer select-none relative transition-colors duration-200 ease-out ${cardStateClasses}`}
+                    >
                   {/* Selection checkbox */}
                   <div className="absolute top-3 left-3 z-10">
                     <button
@@ -1197,8 +1272,8 @@ export default function Dashboard() {
                     </span>
                   </div>
                 </div>
-                );
-                });
+              );
+            });
               })()}
             </div>
           )}
