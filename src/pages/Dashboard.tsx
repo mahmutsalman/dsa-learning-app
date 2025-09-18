@@ -1633,7 +1633,19 @@ export default function Dashboard() {
         className="flex-1 px-6 pb-6"
         style={{ maxHeight: `${containerHeight}px` }}
       >
-        <div ref={scrollContainerRef} className="h-full overflow-y-auto">
+        <div
+          ref={scrollContainerRef}
+          className="h-full overflow-y-auto"
+          onWheel={(event) => {
+            const container = scrollContainerRef.current;
+            if (!container) return;
+            const atTop = container.scrollTop <= 0;
+            const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 1;
+            if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+              container.blur();
+            }
+          }}
+        >
           {filteredProblems.length === 0 ? (
             <div className="text-center py-12">
               <AcademicCapIcon className="mx-auto h-12 w-12 text-gray-400" />
