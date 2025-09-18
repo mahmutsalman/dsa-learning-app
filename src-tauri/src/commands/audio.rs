@@ -444,10 +444,39 @@ pub async fn start_recording(state: State<'_, AppState>, card_id: String) -> Res
     let recordings_dir = state.path_resolver.ensure_subdir("recordings")
         .map_err(|e| format!("Failed to create recordings directory: {}", e))?;
     
-    let timestamp = Local::now().format("%Y%m%d_%H%M%S").to_string();
-    // Include card ID in filename to prevent conflicts between cards
-    let card_prefix = &card_id[..8.min(card_id.len())]; // Use first 8 chars of card ID for brevity
-    let filename = format!("recording_{}_{}.wav", card_prefix, timestamp);
+    // ISO-like local timestamp with milliseconds: YYYY-MM-DD_HH-MM-SS.mmm
+    let timestamp = Local::now().format("%Y-%m-%d_%H-%M-%S%.3f").to_string();
+    // Build filename from problem title slug for human-readable context
+    let filename = {
+        // Helper to slugify a title into snake_case
+        fn slugify(title: &str) -> String {
+            let mut s = title.to_lowercase()
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect::<String>();
+            // Collapse multiple underscores
+            while s.contains("__") { s = s.replace("__", "_"); }
+            // Trim leading/trailing underscores
+            s.trim_matches('_').to_string()
+        }
+
+        // Try to fetch problem title from the card
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let card = db.get_card_by_id(&card_id).map_err(|e| e.to_string())?;
+        if let Some(card) = card {
+            if let Some(problem) = db.get_problem_by_id(&card.problem_id).map_err(|e| e.to_string())? {
+                let slug = slugify(&problem.title);
+                let base = if slug.is_empty() { "recording".to_string() } else { slug };
+                // Start with timestamp, then problem slug
+                format!("{}_{}.wav", timestamp, base)
+            } else {
+                format!("{}_recording.wav", timestamp)
+            }
+        } else {
+            // Fallback if card not found
+            format!("{}_recording.wav", timestamp)
+        }
+    };
     let filepath = recordings_dir.join(&filename);
     
     // Store recording session in AppState
