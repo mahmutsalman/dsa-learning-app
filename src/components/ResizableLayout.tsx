@@ -100,7 +100,7 @@ export default function ResizableLayout({ children, isDark, onToggleDarkMode }: 
             onToggleStatsView={toggleStats}
           />
           <AudioInputWatcher />
-          <main className="flex-1 overflow-hidden bg-white dark:bg-gray-800">
+          <main className="flex-1 overflow-y-auto bg-white dark:bg-gray-800">
             {children}
           </main>
         </Panel>
