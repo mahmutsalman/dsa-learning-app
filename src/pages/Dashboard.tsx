@@ -26,6 +26,8 @@ const difficultyColors = {
 
 const DASHBOARD_RETURN_STATE_KEY = 'dashboard:returnState';
 const DAILY_ACTIVE_STORAGE_KEY = 'dashboard:activeDailySet';
+const DAILY_STUDY_SIZE_STORAGE_KEY = 'dashboard:dailyStudySize';
+const DAILY_REVIEW_SIZE_STORAGE_KEY = 'dashboard:dailyReviewSize';
 
 interface ProblemWithStudyTime extends Problem {
   totalStudyTime: number; // in seconds
@@ -37,6 +39,9 @@ interface ProblemWithStudyTime extends Problem {
 const DAILY_STUDY_SET_SIZE = 4;
 const DAILY_REVIEW_SET_SIZE = 5;
 const DAILY_STUDY_MIN_SECONDS = 60;
+
+const STUDY_SIZE_OPTIONS = [4, 8, 12, 16, 20] as const;
+const REVIEW_SIZE_OPTIONS = [5, 10, 15, 20] as const;
 
 const DAILY_STUDY_STORAGE_PREFIX = 'dashboard-daily-study-';
 const DAILY_REVIEW_STORAGE_PREFIX = 'dashboard-daily-review-';
@@ -117,6 +122,21 @@ function arraysEqual(a: string[], b: string[]): boolean {
   return true;
 }
 
+function readStoredSize<T extends readonly number[]>(key: string, fallback: number, options: T): number {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return fallback;
+    const parsed = parseInt(raw, 10);
+    if (options.includes(parsed as T[number])) {
+      return parsed;
+    }
+  } catch (error) {
+    console.warn('Failed to read size preference', key, error);
+  }
+  return fallback;
+}
+
 export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title' | 'studyTime';
 export type SortDirection = 'asc' | 'desc';
 
@@ -184,7 +204,10 @@ export default function Dashboard() {
   const [dailyStudyIds, setDailyStudyIds] = useState<string[]>([]);
   const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([]);
   const [activeDailySet, setActiveDailySet] = useState<'study' | 'review' | null>(null);
+  const [dailyStudySize, setDailyStudySize] = useState(() => readStoredSize(DAILY_STUDY_SIZE_STORAGE_KEY, DAILY_STUDY_SET_SIZE, STUDY_SIZE_OPTIONS));
+  const [dailyReviewSize, setDailyReviewSize] = useState(() => readStoredSize(DAILY_REVIEW_SIZE_STORAGE_KEY, DAILY_REVIEW_SET_SIZE, REVIEW_SIZE_OPTIONS));
   const hasInitializedActiveSetRef = useRef(false);
+  const [dailyMenu, setDailyMenu] = useState<{ type: 'study' | 'review'; x: number; y: number } | null>(null);
 
   const problemMap = useMemo(() => {
     const map = new Map<string, ProblemWithStudyTime>();
@@ -303,6 +326,25 @@ export default function Dashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [highlightedProblemId]);
+
+  useEffect(() => {
+    if (!dailyMenu) return;
+
+    const handleClick = () => setDailyMenu(null);
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDailyMenu(null);
+    };
+
+    document.addEventListener('click', handleClick);
+    document.addEventListener('contextmenu', handleClick);
+    document.addEventListener('keydown', handleKey);
+
+    return () => {
+      document.removeEventListener('click', handleClick);
+      document.removeEventListener('contextmenu', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [dailyMenu]);
 
   // Sort problems based on selected criteria
   const sortProblems = (problemsToSort: ProblemWithStudyTime[], sortOption: SortOption, direction: SortDirection): ProblemWithStudyTime[] => {
@@ -564,17 +606,17 @@ export default function Dashboard() {
       return selectedIds;
     };
 
-    const studyIds = resolveDailyIds(studyStorageKey, isUnstudied, DAILY_STUDY_SET_SIZE);
+    const studyIds = resolveDailyIds(studyStorageKey, isUnstudied, dailyStudySize);
     const reviewIds = resolveDailyIds(
       reviewStorageKey,
       isStudied,
-      DAILY_REVIEW_SET_SIZE,
+      dailyReviewSize,
       new Set(studyIds)
     );
 
     setDailyStudyIds(prev => (arraysEqual(prev, studyIds) ? prev : studyIds));
     setDailyReviewIds(prev => (arraysEqual(prev, reviewIds) ? prev : reviewIds));
-  }, [problems, problemMap]);
+  }, [problems, problemMap, dailyStudySize, dailyReviewSize]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -584,6 +626,16 @@ export default function Dashboard() {
       window.sessionStorage.removeItem(DAILY_ACTIVE_STORAGE_KEY);
     }
   }, [activeDailySet]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(DAILY_STUDY_SIZE_STORAGE_KEY, String(dailyStudySize));
+  }, [dailyStudySize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(DAILY_REVIEW_SIZE_STORAGE_KEY, String(dailyReviewSize));
+  }, [dailyReviewSize]);
 
   // Listen to worked today filter changes and update filtered problems
   useEffect(() => {
@@ -1016,6 +1068,59 @@ export default function Dashboard() {
     scrollProblemsIntoView();
   };
 
+  const handleSizeSelection = (setType: 'study' | 'review', size: number) => {
+    if (setType === 'study') {
+      setDailyStudySize(size);
+    } else {
+      setDailyReviewSize(size);
+    }
+    setDailyMenu(null);
+    scrollProblemsIntoView();
+  };
+
+  const renderSizeMenu = () => {
+    if (!dailyMenu) return null;
+    const options = dailyMenu.type === 'study' ? STUDY_SIZE_OPTIONS : REVIEW_SIZE_OPTIONS;
+    const activeSize = dailyMenu.type === 'study' ? dailyStudySize : dailyReviewSize;
+    const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 0;
+    const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 0;
+    const menuWidth = 160;
+    const menuHeight = options.length * 32 + 16;
+    const left = Math.min(dailyMenu.x, Math.max(0, viewportWidth - menuWidth - 8));
+    const top = Math.min(dailyMenu.y, Math.max(0, viewportHeight - menuHeight - 8));
+
+    return (
+      <div className="fixed inset-0 pointer-events-none z-50">
+        <div
+          className="absolute pointer-events-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg py-2"
+          style={{ left, top, width: menuWidth }}
+        >
+          <div className="px-3 pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+            {dailyMenu.type === 'study' ? 'Daily Study Size' : 'Daily Review Size'}
+          </div>
+          <div className="space-y-1">
+            {options.map((option) => (
+              <button
+                key={option}
+                onClick={() => handleSizeSelection(dailyMenu.type, option)}
+                className={`w-full flex items-center justify-between px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                  activeSize === option ? 'text-primary-600 dark:text-primary-400 font-medium' : 'text-gray-700 dark:text-gray-200'
+                }`}
+              >
+                <span>{option} problems</span>
+                {activeSize === option && (
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderDailySetCard = (setType: 'study' | 'review') => {
     const problemsList = setType === 'study' ? dailyStudyProblems : dailyReviewProblems;
     const hasProblems = problemsList.length > 0;
@@ -1030,6 +1135,7 @@ export default function Dashboard() {
       ? <SparklesIcon className="h-6 w-6" />
       : <ArrowPathIcon className="h-6 w-6" />;
     const countLabel = problemsList.length === 1 ? 'problem' : 'problems';
+    const targetSize = setType === 'study' ? dailyStudySize : dailyReviewSize;
 
     const handleClick = () => {
       if (!hasProblems) return;
@@ -1042,6 +1148,14 @@ export default function Dashboard() {
         event.preventDefault();
         handleDailySetToggle(setType);
       }
+    };
+
+    const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const x = Math.min(event.clientX, window.innerWidth - 20);
+      const y = Math.min(event.clientY, window.innerHeight - 20);
+      setDailyMenu({ type: setType, x, y });
     };
 
     return (
@@ -1058,6 +1172,7 @@ export default function Dashboard() {
         tabIndex={hasProblems ? 0 : undefined}
         onKeyPress={hasProblems ? handleKeyPress : undefined}
         aria-disabled={!hasProblems}
+        onContextMenu={handleContextMenu}
       >
         <div className="flex items-start justify-between">
           <div className={`h-8 w-8 ${accentTextClass} flex-shrink-0`}>{icon}</div>
@@ -1076,6 +1191,9 @@ export default function Dashboard() {
         <div className="mt-4 flex items-baseline space-x-2">
           <span className="text-2xl font-bold text-gray-900 dark:text-white">{problemsList.length}</span>
           <span className="text-sm text-gray-500 dark:text-gray-400">{countLabel}</span>
+        </div>
+        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Target: {targetSize} {targetSize === 1 ? 'problem' : 'problems'} (right-click to change)
         </div>
 
         <div className="mt-4">
@@ -1223,6 +1341,7 @@ export default function Dashboard() {
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-800">
+      {renderSizeMenu()}
       {/* Header */}
       <div className="flex-shrink-0 p-6 pb-4">
         <div className="flex items-center justify-between mb-6">
