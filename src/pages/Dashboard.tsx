@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
-import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon, CalendarDaysIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon, CalendarDaysIcon, SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType, ProblemDeleteStats } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
@@ -24,12 +25,96 @@ const difficultyColors = {
 };
 
 const DASHBOARD_RETURN_STATE_KEY = 'dashboard:returnState';
+const DAILY_ACTIVE_STORAGE_KEY = 'dashboard:activeDailySet';
 
 interface ProblemWithStudyTime extends Problem {
   totalStudyTime: number; // in seconds
   cardCount: number;
   problemTags?: Tag[]; // Optional tags for the problem
   lastUpdatedAt?: string; // Most recent card modification date
+}
+
+const DAILY_STUDY_SET_SIZE = 4;
+const DAILY_REVIEW_SET_SIZE = 5;
+const DAILY_STUDY_MIN_SECONDS = 60;
+
+const DAILY_STUDY_STORAGE_PREFIX = 'dashboard-daily-study-';
+const DAILY_REVIEW_STORAGE_PREFIX = 'dashboard-daily-review-';
+
+function stringToSeed(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = Math.imul(31, hash) + str.charCodeAt(i);
+    hash |= 0; // Force 32-bit integer
+  }
+  return hash >>> 0;
+}
+
+function createSeededRandom(seedString: string): () => number {
+  let seed = stringToSeed(seedString) || 1;
+  return () => {
+    seed += 0x6D2B79F5;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickRandomProblemIds(
+  problems: ProblemWithStudyTime[],
+  count: number,
+  seedKey: string
+): string[] {
+  if (problems.length === 0) return [];
+  if (problems.length <= count) {
+    return problems.map((p) => p.id);
+  }
+
+  const rng = createSeededRandom(seedKey);
+  const pool = [...problems].sort((a, b) => a.id.localeCompare(b.id));
+  const selected: string[] = [];
+
+  while (selected.length < count && pool.length > 0) {
+    const index = Math.floor(rng() * pool.length);
+    const [problem] = pool.splice(index, 1);
+    selected.push(problem.id);
+  }
+
+  return selected;
+}
+
+function readDailySet(storageKey: string): string[] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((id): id is string => typeof id === 'string');
+    }
+  } catch (error) {
+    console.warn('Failed to read daily set from storage', error);
+  }
+  return null;
+}
+
+function saveDailySet(storageKey: string, ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(ids));
+  } catch (error) {
+    console.warn('Failed to store daily set', error);
+  }
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title' | 'studyTime';
@@ -96,9 +181,42 @@ export default function Dashboard() {
   const [deleteStats, setDeleteStats] = useState<ProblemDeleteStats | null>(null);
   const [isLoadingDeleteStats, setIsLoadingDeleteStats] = useState(false);
 
+  const [dailyStudyIds, setDailyStudyIds] = useState<string[]>([]);
+  const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([]);
+  const [activeDailySet, setActiveDailySet] = useState<'study' | 'review' | null>(null);
+  const hasInitializedActiveSetRef = useRef(false);
+
+  const problemMap = useMemo(() => {
+    const map = new Map<string, ProblemWithStudyTime>();
+    problems.forEach(problem => {
+      map.set(problem.id, problem);
+    });
+    return map;
+  }, [problems]);
+
+  const dailyStudyProblems = useMemo(() => (
+    dailyStudyIds
+      .map(id => problemMap.get(id))
+      .filter(Boolean) as ProblemWithStudyTime[]
+  ), [dailyStudyIds, problemMap]);
+
+  const dailyReviewProblems = useMemo(() => (
+    dailyReviewIds
+      .map(id => problemMap.get(id))
+      .filter(Boolean) as ProblemWithStudyTime[]
+  ), [dailyReviewIds, problemMap]);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const problemsSectionRef = useRef<HTMLDivElement>(null);
   const [highlightedProblemId, setHighlightedProblemId] = useState<string | null>(null);
-  const [pendingReturnState, setPendingReturnState] = useState<{ problemId: string; scrollTop: number } | null>(null);
+  const [pendingReturnState, setPendingReturnState] = useState<{ problemId: string; scrollTop: number; dailySet?: 'study' | 'review' | null } | null>(null);
+
+  const scrollProblemsIntoView = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    requestAnimationFrame(() => {
+      problemsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -107,14 +225,17 @@ export default function Dashboard() {
     if (!stored) return;
 
     try {
-      const parsed = JSON.parse(stored) as { problemId?: string; scrollTop?: number; timestamp?: number };
+      const parsed = JSON.parse(stored) as { problemId?: string; scrollTop?: number; timestamp?: number; activeDailySet?: 'study' | 'review' | null };
       window.sessionStorage.removeItem(DASHBOARD_RETURN_STATE_KEY);
 
       if (!parsed?.problemId || typeof parsed.scrollTop !== 'number') return;
 
       const isFresh = !parsed.timestamp || Date.now() - parsed.timestamp < 5 * 60 * 1000;
       if (isFresh) {
-        setPendingReturnState({ problemId: parsed.problemId, scrollTop: parsed.scrollTop });
+        if (parsed.activeDailySet === 'study' || parsed.activeDailySet === 'review' || parsed.activeDailySet === null) {
+          setActiveDailySet(parsed.activeDailySet ?? null);
+        }
+        setPendingReturnState({ problemId: parsed.problemId, scrollTop: parsed.scrollTop, dailySet: parsed.activeDailySet });
       }
     } catch (error) {
       console.warn('Failed to parse dashboard return state', error);
@@ -123,8 +244,31 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (hasInitializedActiveSetRef.current) return;
+    if (typeof window === 'undefined') return;
+
+    const stored = window.sessionStorage.getItem(DAILY_ACTIVE_STORAGE_KEY);
+    if (stored === 'study' || stored === 'review') {
+      const list = stored === 'study' ? dailyStudyIds : dailyReviewIds;
+      if (list.length > 0) {
+        setActiveDailySet(stored);
+      }
+    }
+
+    hasInitializedActiveSetRef.current = true;
+  }, [dailyStudyIds, dailyReviewIds]);
+
+  useEffect(() => {
     if (!pendingReturnState) return;
     if (loading) return;
+    if (pendingReturnState.dailySet && activeDailySet !== pendingReturnState.dailySet) {
+      setActiveDailySet(pendingReturnState.dailySet);
+      return;
+    }
+    if ((pendingReturnState.dailySet === null || pendingReturnState.dailySet === undefined) && activeDailySet) {
+      setActiveDailySet(null);
+      return;
+    }
     if (filteredProblems.length === 0) return;
 
     const hasProblem = filteredProblems.some(problem => problem.id === pendingReturnState.problemId);
@@ -137,11 +281,18 @@ export default function Dashboard() {
     if (!container) return;
 
     requestAnimationFrame(() => {
-      container.scrollTo({ top: pendingReturnState.scrollTop, behavior: 'auto' });
+      if (pendingReturnState.dailySet) {
+        scrollProblemsIntoView();
+        requestAnimationFrame(() => {
+          container.scrollTo({ top: pendingReturnState.scrollTop, behavior: 'auto' });
+        });
+      } else {
+        container.scrollTo({ top: pendingReturnState.scrollTop, behavior: 'auto' });
+      }
       setHighlightedProblemId(pendingReturnState.problemId);
       setPendingReturnState(null);
     });
-  }, [pendingReturnState, loading, filteredProblems]);
+  }, [pendingReturnState, loading, filteredProblems, activeDailySet]);
 
   useEffect(() => {
     if (!highlightedProblemId) return;
@@ -354,12 +505,100 @@ export default function Dashboard() {
     loadProblems();
   }, []);
 
+  useEffect(() => {
+    if (problems.length === 0) {
+      setDailyStudyIds(prev => (prev.length === 0 ? prev : []));
+      setDailyReviewIds(prev => (prev.length === 0 ? prev : []));
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const studyStorageKey = `${DAILY_STUDY_STORAGE_PREFIX}${today}`;
+    const reviewStorageKey = `${DAILY_REVIEW_STORAGE_PREFIX}${today}`;
+
+    const isUnstudied = (problem: ProblemWithStudyTime) => {
+      const total = problem.totalStudyTime || 0;
+      return total < DAILY_STUDY_MIN_SECONDS;
+    };
+
+    const isStudied = (problem: ProblemWithStudyTime) => {
+      const total = problem.totalStudyTime || 0;
+      return total >= DAILY_STUDY_MIN_SECONDS;
+    };
+
+    const resolveDailyIds = (
+      storageKey: string,
+      predicate: (problem: ProblemWithStudyTime) => boolean,
+      limit: number,
+      exclude?: Set<string>
+    ): string[] => {
+      const eligible = problems.filter((problem) => predicate(problem) && !(exclude?.has(problem.id)));
+      const storedIds = readDailySet(storageKey);
+
+      let selectedIds: string[] = [];
+      if (storedIds) {
+        selectedIds = storedIds.filter((id) => {
+          const problem = problemMap.get(id);
+          return !!problem && predicate(problem) && !(exclude?.has(id));
+        });
+      }
+
+      const desiredCount = Math.min(limit, eligible.length);
+
+      if (desiredCount === 0) {
+        saveDailySet(storageKey, []);
+        return [];
+      }
+
+      if (selectedIds.length < desiredCount) {
+        selectedIds = pickRandomProblemIds(eligible, limit, `${storageKey}-${eligible.length}`);
+        saveDailySet(storageKey, selectedIds);
+        return selectedIds;
+      }
+
+      if (selectedIds.length > limit) {
+        selectedIds = selectedIds.slice(0, limit);
+      }
+
+      saveDailySet(storageKey, selectedIds);
+      return selectedIds;
+    };
+
+    const studyIds = resolveDailyIds(studyStorageKey, isUnstudied, DAILY_STUDY_SET_SIZE);
+    const reviewIds = resolveDailyIds(
+      reviewStorageKey,
+      isStudied,
+      DAILY_REVIEW_SET_SIZE,
+      new Set(studyIds)
+    );
+
+    setDailyStudyIds(prev => (arraysEqual(prev, studyIds) ? prev : studyIds));
+    setDailyReviewIds(prev => (arraysEqual(prev, reviewIds) ? prev : reviewIds));
+  }, [problems, problemMap]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeDailySet) {
+      window.sessionStorage.setItem(DAILY_ACTIVE_STORAGE_KEY, activeDailySet);
+    } else {
+      window.sessionStorage.removeItem(DAILY_ACTIVE_STORAGE_KEY);
+    }
+  }, [activeDailySet]);
+
   // Listen to worked today filter changes and update filtered problems
   useEffect(() => {
     if (problems.length > 0) {
       applyAllFilters(problems);
     }
-  }, [workedTodayFilter.isFiltered, workedTodayFilter.problemIds]);
+  }, [workedTodayFilter.isFiltered, workedTodayFilter.problemIds, activeDailySet, dailyStudyIds, dailyReviewIds]);
+
+  useEffect(() => {
+    if (activeDailySet === 'study' && dailyStudyIds.length === 0) {
+      setActiveDailySet(null);
+    } else if (activeDailySet === 'review' && dailyReviewIds.length === 0) {
+      setActiveDailySet(null);
+    }
+  }, [activeDailySet, dailyStudyIds, dailyReviewIds]);
 
   const loadProblems = async () => {
     try {
@@ -467,6 +706,7 @@ export default function Dashboard() {
         const payload = JSON.stringify({
           problemId,
           scrollTop,
+          activeDailySet,
           timestamp: Date.now(),
         });
         try {
@@ -740,6 +980,15 @@ export default function Dashboard() {
       filteredProblems = filteredProblems.filter(p => workedTodayIds.has(p.id));
     }
     
+    // Apply daily study/review sets when active
+    if (activeDailySet === 'study') {
+      const studySet = new Set(dailyStudyIds);
+      filteredProblems = filteredProblems.filter(p => studySet.has(p.id));
+    } else if (activeDailySet === 'review') {
+      const reviewSet = new Set(dailyReviewIds);
+      filteredProblems = filteredProblems.filter(p => reviewSet.has(p.id));
+    }
+
     // Apply sorting
     const sortedResults = sortProblems(filteredProblems, sortBy, sortDirection);
     setFilteredProblems(sortedResults);
@@ -747,7 +996,111 @@ export default function Dashboard() {
 
   // Handle worked today filter toggle
   const handleWorkedTodayToggle = () => {
+    if (activeDailySet) {
+      setActiveDailySet(null);
+    }
     workedTodayFilter.toggleFilter();
+    scrollProblemsIntoView();
+  };
+
+  const handleDailySetToggle = (setType: 'study' | 'review') => {
+    const targetIds = setType === 'study' ? dailyStudyIds : dailyReviewIds;
+    if (targetIds.length === 0) return;
+
+    if (workedTodayFilter.isFiltered) {
+      workedTodayFilter.clearFilter();
+    }
+
+    const next = activeDailySet === setType ? null : setType;
+    setActiveDailySet(next);
+    scrollProblemsIntoView();
+  };
+
+  const renderDailySetCard = (setType: 'study' | 'review') => {
+    const problemsList = setType === 'study' ? dailyStudyProblems : dailyReviewProblems;
+    const hasProblems = problemsList.length > 0;
+    const isActive = activeDailySet === setType;
+    const title = setType === 'study' ? 'Daily Study' : 'Daily Review';
+    const description = setType === 'study'
+      ? 'Spend at least 1 minute with each of these fresh problems.'
+      : 'Previously studied problems to reinforce.';
+    const accentTextClass = setType === 'study' ? 'text-indigo-500' : 'text-amber-500';
+    const accentDotClass = setType === 'study' ? 'bg-indigo-400' : 'bg-amber-400';
+    const icon = setType === 'study'
+      ? <SparklesIcon className="h-6 w-6" />
+      : <ArrowPathIcon className="h-6 w-6" />;
+    const countLabel = problemsList.length === 1 ? 'problem' : 'problems';
+
+    const handleClick = () => {
+      if (!hasProblems) return;
+      handleDailySetToggle(setType);
+    };
+
+    const handleKeyPress = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (!hasProblems) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleDailySetToggle(setType);
+      }
+    };
+
+    return (
+      <div
+        key={setType}
+        className={`
+          bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700
+          transition-all duration-200
+          ${hasProblems ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md' : 'opacity-60'}
+          ${isActive ? 'border-primary-400 dark:border-primary-500 ring-2 ring-primary-400/40 dark:ring-primary-500/50' : ''}
+        `}
+        onClick={hasProblems ? handleClick : undefined}
+        role={hasProblems ? 'button' : undefined}
+        tabIndex={hasProblems ? 0 : undefined}
+        onKeyPress={hasProblems ? handleKeyPress : undefined}
+        aria-disabled={!hasProblems}
+      >
+        <div className="flex items-start justify-between">
+          <div className={`h-8 w-8 ${accentTextClass} flex-shrink-0`}>{icon}</div>
+          {isActive && (
+            <span className="text-xs font-medium text-primary-500 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-2 py-0.5 rounded-full">
+              Active
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{description}</p>
+        </div>
+
+        <div className="mt-4 flex items-baseline space-x-2">
+          <span className="text-2xl font-bold text-gray-900 dark:text-white">{problemsList.length}</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{countLabel}</span>
+        </div>
+
+        <div className="mt-4">
+          {hasProblems ? (
+            <ul className="space-y-1">
+              {problemsList.slice(0, 3).map((problem) => (
+                <li key={problem.id} className="flex items-center text-sm text-gray-700 dark:text-gray-300">
+                  <span className={`inline-block w-2 h-2 rounded-full mr-2 ${accentDotClass}`} aria-hidden="true"></span>
+                  <span className="truncate">{problem.title}</span>
+                </li>
+              ))}
+              {problemsList.length > 3 && (
+                <li className="text-xs text-gray-500 dark:text-gray-400">
+                  +{problemsList.length - 3} more ready to go
+                </li>
+              )}
+            </ul>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Add more problems to build this daily set.
+            </p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Multi-selection handlers
@@ -901,47 +1254,54 @@ export default function Dashboard() {
 
         {/* Stats */}
         {showStats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center">
-                <AcademicCapIcon className="h-8 w-8 text-primary-500" />
-                <div className="ml-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {problems.length}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center">
+                  <AcademicCapIcon className="h-8 w-8 text-primary-500" />
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {problems.length}
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">Total Problems</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center">
+                  <ClockIcon className="h-8 w-8 text-green-500" />
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
+                    </h3>
+                    <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
+                  </div>
+                </div>
+              </div>
+              
+              <TodaysWorkCard onClick={handleWorkedTodayToggle} />
+              
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center">
+                  <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
+                  <div className="ml-4">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
+                    <p className="text-gray-600 dark:text-gray-400">Completed</p>
+                  </div>
                 </div>
               </div>
             </div>
-            
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center">
-                <ClockIcon className="h-8 w-8 text-green-500" />
-                <div className="ml-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {formatTimeDisplay(problems.reduce((sum, p) => sum + p.totalStudyTime, 0))}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">Time Studied</p>
-                </div>
-              </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {renderDailySetCard('study')}
+              {renderDailySetCard('review')}
             </div>
-            
-            <TodaysWorkCard onClick={handleWorkedTodayToggle} />
-            
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center">
-                <AcademicCapIcon className="h-8 w-8 text-yellow-500" />
-                <div className="ml-4">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">0</h3>
-                  <p className="text-gray-600 dark:text-gray-400">Completed</p>
-                </div>
-              </div>
-            </div>
-          </div>
+          </>
         )}
 
         {/* Search Interface */}
-        <div className="mb-6">
+        <div ref={problemsSectionRef} className="mb-6">
           <SearchWithAutocomplete
             onSearch={handleSearch}
             onSuggestionSelect={handleSuggestionSelect}
@@ -1115,6 +1475,35 @@ export default function Dashboard() {
                   No problems worked today
                 </span>
               )}
+            </div>
+          )}
+
+          {activeDailySet && (
+            <div className="flex flex-wrap items-center justify-center gap-2 text-sm mt-2">
+              <span className="text-gray-600 dark:text-gray-400">Showing:</span>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full ${
+                  activeDailySet === 'study'
+                    ? 'bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200'
+                    : 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200'
+                }`}
+              >
+                {activeDailySet === 'study' ? (
+                  <SparklesIcon className="h-3 w-3" />
+                ) : (
+                  <ArrowPathIcon className="h-3 w-3" />
+                )}
+                {activeDailySet === 'study' ? 'Daily study' : 'Daily review'} ({
+                  activeDailySet === 'study' ? dailyStudyIds.length : dailyReviewIds.length
+                })
+                <button
+                  onClick={() => setActiveDailySet(null)}
+                  className="ml-1 hover:bg-black/10 dark:hover:bg-white/10 rounded-full p-0.5"
+                  title="Clear daily set filter"
+                >
+                  <XMarkIcon className="h-3 w-3" />
+                </button>
+              </span>
             </div>
           )}
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkSessionStats } from '../hooks/useWorkSessionStats';
+import TodayCard from '../components/Analytics/TodayCard';
 import YesterdayCard from '../components/Analytics/YesterdayCard';
 import Last7DaysCard from '../components/Analytics/Last7DaysCard';
 import Last30DaysCard from '../components/Analytics/Last30DaysCard';
@@ -16,6 +17,7 @@ export default function Analytics() {
   const [sevenDayItems, setSevenDayItems] = useState<ProblemTotalWork[] | null>(null);
   const [thirtyDayItems, setThirtyDayItems] = useState<ProblemTotalWork[] | null>(null);
   const {
+    todayStats,
     yesterdayStats,
     last7DaysStats,
     last30DaysStats,
@@ -27,13 +29,14 @@ export default function Analytics() {
   // Log analytics data for debugging
   useEffect(() => {
     console.log('Analytics data:', {
+      todayStats,
       yesterdayStats,
       last7DaysStats,
       last30DaysStats,
       loading,
       errors,
     });
-  }, [yesterdayStats, last7DaysStats, last30DaysStats, loading, errors]);
+  }, [todayStats, yesterdayStats, last7DaysStats, last30DaysStats, loading, errors]);
 
   // Handle card click actions (for future drill-down functionality)
   const handleYesterdayClick = () => {
@@ -197,7 +200,7 @@ export default function Analytics() {
         {/* Refresh Button */}
         <button
           onClick={handleRefreshAll}
-          disabled={loading.yesterday || loading.last7Days || loading.last30Days}
+          disabled={loading.today || loading.yesterday || loading.last7Days || loading.last30Days}
           className="
             inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md
             text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 
@@ -207,7 +210,7 @@ export default function Analytics() {
         >
           <svg 
             className={`-ml-1 mr-2 h-4 w-4 ${
-              (loading.yesterday || loading.last7Days || loading.last30Days) ? 'animate-spin' : ''
+              (loading.today || loading.yesterday || loading.last7Days || loading.last30Days) ? 'animate-spin' : ''
             }`} 
             fill="none" 
             stroke="currentColor" 
@@ -225,7 +228,14 @@ export default function Analytics() {
       </div>
 
       {/* Analytics Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Today Card */}
+        <TodayCard
+          stats={todayStats}
+          loading={loading.today}
+          error={errors.today}
+        />
+
         {/* Yesterday Card */}
         <YesterdayCard
           stats={yesterdayStats}
