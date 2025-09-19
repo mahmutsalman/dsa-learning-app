@@ -71,7 +71,7 @@ pub fn create_solution_card(conn: &Connection, problem_id: &str) -> SqliteResult
         "INSERT INTO cards (
             id, problem_id, card_number, code, language, notes, status,
             total_duration, created_at, last_modified, is_solution
-         ) VALUES (?, ?, 0, '', 'javascript', '', 'In Progress', 0, ?, ?, 1)",
+         ) VALUES (?, ?, 0, '', 'java', '', 'In Progress', 0, ?, ?, 1)",
         params![card_id, problem_id, now, now]
     )?;
 
@@ -81,7 +81,7 @@ pub fn create_solution_card(conn: &Connection, problem_id: &str) -> SqliteResult
         problem_id: problem_id.to_string(),
         card_number: 0, // Solution cards have card_number 0
         code: String::new(),
-        language: "javascript".to_string(),
+        language: "java".to_string(),
         notes: String::new(),
         status: "In Progress".to_string(),
         total_duration: 0,

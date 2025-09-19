@@ -81,7 +81,7 @@ FROM cards;
 
 -- Test constraint (should succeed)
 INSERT INTO cards (id, problem_id, card_number, is_solution, code, language, notes) 
-VALUES ('migration_test', 'test_problem', 1, 1, '', 'javascript', 'Test solution card');
+VALUES ('migration_test', 'test_problem', 1, 1, '', 'java', 'Test solution card');
 
 -- Cleanup test data
 DELETE FROM cards WHERE id = 'migration_test';

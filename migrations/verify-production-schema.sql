@@ -81,8 +81,8 @@ INSERT INTO cards (
     'test_solution_' || datetime('now'),
     'test_problem_' || datetime('now'), 
     999,
-    '// Test solution code\nfunction solve() { return true; }',
-    'javascript',
+    '// Test solution code\nclass Solution {\n    boolean solve() { return true; }\n}',
+    'java',
     'Test solution notes',
     'Completed',
     1,  -- This is a solution card

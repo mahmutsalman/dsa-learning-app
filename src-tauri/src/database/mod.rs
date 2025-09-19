@@ -932,7 +932,7 @@ impl DatabaseManager {
             |row| row.get(0),
         ).unwrap_or(1);
         
-        let language = req.language.as_ref().map(|s| s.as_str()).unwrap_or("javascript");
+        let language = req.language.as_ref().map(|s| s.as_str()).unwrap_or("java");
         
         // Fix FOREIGN KEY constraint: use NULL instead of empty string for parent_card_id
         match req.parent_card_id.as_ref() {
@@ -2468,7 +2468,7 @@ impl DatabaseManager {
             "INSERT INTO cards (
                 id, problem_id, card_number, code, language, notes, status,
                 total_duration, created_at, last_modified, is_solution
-             ) VALUES (?, ?, 0, '', 'javascript', '', 'In Progress', 0, ?, ?, 1)",
+             ) VALUES (?, ?, 0, '', 'java', '', 'In Progress', 0, ?, ?, 1)",
             params![card_id, problem_id, now, now]
         )?;
 
@@ -2478,7 +2478,7 @@ impl DatabaseManager {
             problem_id: problem_id.to_string(),
             card_number: 0, // Solution cards have card_number 0
             code: String::new(),
-            language: "javascript".to_string(),
+            language: "java".to_string(),
             notes: String::new(),
             status: "In Progress".to_string(),
             total_duration: 0,

@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS cards (
     problem_id TEXT NOT NULL,
     card_number INTEGER NOT NULL,
     code TEXT,
-    language TEXT DEFAULT 'javascript',
+    language TEXT DEFAULT 'java',
     notes TEXT,
     status TEXT CHECK(status IN ('In Progress', 'Completed', 'Paused')),
     total_duration INTEGER DEFAULT 0, -- in seconds
