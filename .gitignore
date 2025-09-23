@@ -249,6 +249,10 @@ examples/
 .claude/
 CLAUDE.md
 .claude-backup/
+.continue/
+
+# Documentation and diagrams
+docs/analytics-component.puml
 
 # IDE and editor auto-generated files
 *.workspace
