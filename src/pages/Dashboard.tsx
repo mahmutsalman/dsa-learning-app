@@ -47,6 +47,10 @@ const DAILY_STUDY_STORAGE_PREFIX = 'dashboard-daily-study-';
 const DAILY_REVIEW_STORAGE_PREFIX = 'dashboard-daily-review-';
 const DAILY_COMPLETED_STORAGE_PREFIX = 'dashboard-daily-completed-';
 const DAILY_STUDY_FINISHED_PREFIX = 'dashboard-daily-study-finished-';
+const DAILY_REVIEW_FINISHED_PREFIX = 'dashboard-daily-review-finished-';
+const DAILY_REVIEW_COMPLETED_PREFIX = 'dashboard-daily-review-completed-';
+const DAILY_REVIEW_ORIGINAL_PREFIX = 'dashboard-daily-review-original-';
+const DAILY_REVIEW_TIMESTAMPS_PREFIX = 'dashboard-daily-review-timestamps-';
 
 function stringToSeed(str: string): number {
   let hash = 0;
@@ -190,6 +194,99 @@ function getPreviousDate(date: string): string {
   return d.toISOString().split('T')[0];
 }
 
+function markDailyReviewCompleted(date: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_REVIEW_FINISHED_PREFIX}${date}`;
+    window.localStorage.setItem(key, 'true');
+  } catch (error) {
+    console.warn('Failed to mark daily review completed', error);
+  }
+}
+
+function isDailyReviewCompleted(date: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const key = `${DAILY_REVIEW_FINISHED_PREFIX}${date}`;
+    return window.localStorage.getItem(key) === 'true';
+  } catch (error) {
+    console.warn('Failed to check daily review completion', error);
+    return false;
+  }
+}
+
+function readCompletedReviewTodayIds(today: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const key = `${DAILY_REVIEW_COMPLETED_PREFIX}${today}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch (error) {
+    console.warn('Failed to read completed review today problems', error);
+    return [];
+  }
+}
+
+function saveCompletedReviewTodayIds(today: string, ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_REVIEW_COMPLETED_PREFIX}${today}`;
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch (error) {
+    console.warn('Failed to save completed review today problems', error);
+  }
+}
+
+function readOriginalDailyReviewIds(today: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const key = `${DAILY_REVIEW_ORIGINAL_PREFIX}${today}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch (error) {
+    console.warn('Failed to read original daily review problems', error);
+    return [];
+  }
+}
+
+function saveOriginalDailyReviewIds(today: string, ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_REVIEW_ORIGINAL_PREFIX}${today}`;
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch (error) {
+    console.warn('Failed to save original daily review problems', error);
+  }
+}
+
+function readDailyReviewTimestamps(today: string): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const key = `${DAILY_REVIEW_TIMESTAMPS_PREFIX}${today}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch (error) {
+    console.warn('Failed to read daily review timestamps', error);
+    return {};
+  }
+}
+
+function saveDailyReviewTimestamps(today: string, timestamps: Record<string, string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_REVIEW_TIMESTAMPS_PREFIX}${today}`;
+    window.localStorage.setItem(key, JSON.stringify(timestamps));
+  } catch (error) {
+    console.warn('Failed to save daily review timestamps', error);
+  }
+}
+
 function cleanupOldDailyData(): void {
   if (typeof window === 'undefined') return;
   try {
@@ -202,7 +299,11 @@ function cleanupOldDailyData(): void {
       key.startsWith(DAILY_STUDY_STORAGE_PREFIX) ||
       key.startsWith(DAILY_REVIEW_STORAGE_PREFIX) ||
       key.startsWith(DAILY_COMPLETED_STORAGE_PREFIX) ||
-      key.startsWith(DAILY_STUDY_FINISHED_PREFIX)
+      key.startsWith(DAILY_STUDY_FINISHED_PREFIX) ||
+      key.startsWith(DAILY_REVIEW_FINISHED_PREFIX) ||
+      key.startsWith(DAILY_REVIEW_COMPLETED_PREFIX) ||
+      key.startsWith(DAILY_REVIEW_ORIGINAL_PREFIX) ||
+      key.startsWith(DAILY_REVIEW_TIMESTAMPS_PREFIX)
     );
 
     for (const key of dailyKeys) {
@@ -283,6 +384,8 @@ export default function Dashboard() {
   const [dailyStudyIds, setDailyStudyIds] = useState<string[]>([]);
   const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([]);
   const [completedTodayIds, setCompletedTodayIds] = useState<string[]>([]);
+  const [completedReviewTodayIds, setCompletedReviewTodayIds] = useState<string[]>([]);
+  const [originalDailyReviewIds, setOriginalDailyReviewIds] = useState<string[]>([]);
   const [activeDailySet, setActiveDailySet] = useState<'study' | 'review' | null>(null);
   const [dailyStudySize, setDailyStudySize] = useState(() => readStoredSize(DAILY_STUDY_SIZE_STORAGE_KEY, DAILY_STUDY_SET_SIZE, STUDY_SIZE_OPTIONS));
   const [dailyReviewSize, setDailyReviewSize] = useState(() => readStoredSize(DAILY_REVIEW_SIZE_STORAGE_KEY, DAILY_REVIEW_SET_SIZE, REVIEW_SIZE_OPTIONS));
@@ -629,7 +732,11 @@ export default function Dashboard() {
     // Initialize completed today IDs and cleanup old data
     const today = new Date().toISOString().split('T')[0];
     const completedIds = readCompletedTodayIds(today);
+    const completedReviewIds = readCompletedReviewTodayIds(today);
+    const originalReviewIds = readOriginalDailyReviewIds(today);
     setCompletedTodayIds(completedIds);
+    setCompletedReviewTodayIds(completedReviewIds);
+    setOriginalDailyReviewIds(originalReviewIds);
 
     // Cleanup old data periodically
     cleanupOldDailyData();
@@ -656,42 +763,57 @@ export default function Dashboard() {
       return total < DAILY_STUDY_MIN_SECONDS;
     };
 
-    const isStudied = (problem: ProblemWithStudyTime) => {
-      const total = problem.totalStudyTime || 0;
-      return total >= DAILY_STUDY_MIN_SECONDS;
-    };
-
     // Smart daily set resolution with carry-over logic
     const resolveSmartDailyIds = (): { studyIds: string[], reviewIds: string[] } => {
       // Check if today's sets already exist (app reopened same day)
       const existingStudyIds = readDailySet(studyStorageKey);
       const existingReviewIds = readDailySet(reviewStorageKey);
 
-      if (existingStudyIds && existingReviewIds) {
-        // Today's sets already exist - validate them against current problems
+      // Handle Daily Study validation independently
+      let finalStudyIds: string[] = [];
+      if (existingStudyIds) {
+        // Validate existing Daily Study against current problems
         const validStudyIds = existingStudyIds.filter(id => {
           const problem = problemMap.get(id);
           return problem && isUnstudied(problem);
         });
+        finalStudyIds = validStudyIds;
+      }
 
+      // Handle Daily Review validation independently
+      let finalReviewIds: string[] = [];
+      if (existingReviewIds) {
+        // Validate existing Daily Review against current problems
         const validReviewIds = existingReviewIds.filter(id => {
           const problem = problemMap.get(id);
-          return problem && isStudied(problem) && !validStudyIds.includes(id);
+          return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
         });
-
-        return { studyIds: validStudyIds, reviewIds: validReviewIds };
+        finalReviewIds = validReviewIds;
       }
+
+      // If both sets exist and are valid, return them
+      if (finalStudyIds.length > 0 && finalReviewIds.length > 0) {
+        return { studyIds: finalStudyIds, reviewIds: finalReviewIds };
+      }
+
+      // If only Daily Study exists and is valid, continue with carry-over logic for Review
+      if (finalStudyIds.length > 0 && finalReviewIds.length === 0) {
+        // Keep the valid study set, but need to resolve review through carry-over or creation
+      } else if (finalStudyIds.length === 0 && finalReviewIds.length > 0) {
+        // Keep the valid review set, but need to resolve study through carry-over or creation
+      }
+      // If neither exists or both are invalid, continue with full carry-over logic
 
       // Check if yesterday's daily study was completed
       const yesterdayCompleted = isDailyStudyCompleted(yesterday);
       const yesterdayStudyIds = readDailySet(yesterdayStudyKey);
       const yesterdayReviewIds = readDailySet(yesterdayReviewKey);
 
-      let finalStudyIds: string[] = [];
-      let finalReviewIds: string[] = [];
+      // Check if yesterday's daily review was also completed
+      const yesterdayReviewCompleted = isDailyReviewCompleted(yesterday);
 
-      // Carry over logic for incomplete previous day
-      if (!yesterdayCompleted && yesterdayStudyIds && yesterdayStudyIds.length > 0) {
+      // Carry over logic for incomplete previous day (only if we don't have valid existing sets)
+      if (finalStudyIds.length === 0 && !yesterdayCompleted && yesterdayStudyIds && yesterdayStudyIds.length > 0) {
         // Carry over yesterday's incomplete study set, but validate problems still exist
         const validCarryOverIds = yesterdayStudyIds.filter(id => {
           const problem = problemMap.get(id);
@@ -708,13 +830,61 @@ export default function Dashboard() {
             setCompletedTodayIds(yesterdayCompletedIds);
           }
 
-          // Carry over review set too if it exists
-          if (yesterdayReviewIds && yesterdayReviewIds.length > 0) {
+          // Carry over review set too if it exists (only if we don't have valid existing review)
+          if (finalReviewIds.length === 0 && yesterdayReviewIds && yesterdayReviewIds.length > 0) {
             const validReviewCarryOver = yesterdayReviewIds.filter(id => {
               const problem = problemMap.get(id);
-              return problem && isStudied(problem) && !finalStudyIds.includes(id);
+              return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
             });
             finalReviewIds = validReviewCarryOver;
+
+            // Also carry over yesterday's completed review IDs to maintain progress
+            const yesterdayCompletedReviewIds = readCompletedReviewTodayIds(yesterday);
+            if (yesterdayCompletedReviewIds.length > 0) {
+              saveCompletedReviewTodayIds(today, yesterdayCompletedReviewIds);
+              setCompletedReviewTodayIds(yesterdayCompletedReviewIds);
+            }
+          }
+        }
+      }
+
+      // Carry over logic for incomplete review from previous day (independent of study)
+      if (!yesterdayReviewCompleted && yesterdayReviewIds && yesterdayReviewIds.length > 0 && finalReviewIds.length === 0) {
+        // Carry over yesterday's incomplete review set, but validate problems still exist
+        const validReviewCarryOverIds = yesterdayReviewIds.filter(id => {
+          const problem = problemMap.get(id);
+          return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
+        });
+
+        if (validReviewCarryOverIds.length > 0) {
+          finalReviewIds = validReviewCarryOverIds;
+
+          // Also carry over yesterday's completed review IDs to maintain progress
+          const yesterdayCompletedReviewIds = readCompletedReviewTodayIds(yesterday);
+          if (yesterdayCompletedReviewIds.length > 0) {
+            saveCompletedReviewTodayIds(today, yesterdayCompletedReviewIds);
+            setCompletedReviewTodayIds(yesterdayCompletedReviewIds);
+          }
+
+          // Carry over or create the original Daily Review IDs tracking
+          const yesterdayOriginalIds = readOriginalDailyReviewIds(yesterday);
+          if (yesterdayOriginalIds.length > 0) {
+            saveOriginalDailyReviewIds(today, yesterdayOriginalIds);
+
+            // Carry over timestamps
+            const yesterdayTimestamps = readDailyReviewTimestamps(yesterday);
+            saveDailyReviewTimestamps(today, yesterdayTimestamps);
+          } else {
+            // If no original IDs from yesterday, use the carried over IDs as original
+            saveOriginalDailyReviewIds(today, validReviewCarryOverIds);
+
+            // Create new timestamps for carried over problems
+            const currentTime = new Date().toISOString();
+            const timestamps: Record<string, string> = {};
+            validReviewCarryOverIds.forEach(id => {
+              timestamps[id] = currentTime;
+            });
+            saveDailyReviewTimestamps(today, timestamps);
           }
         }
       }
@@ -735,9 +905,15 @@ export default function Dashboard() {
           finalStudyIds = selectedForStudy.slice(0, dailyStudySize);
         }
 
-        // Create new review set
+      }
+
+      // Create new review set if not carried over and not already created
+      if (finalReviewIds.length === 0) {
+        const completedReviewToday = readCompletedReviewTodayIds(today);
+        const completedReviewSet = new Set(completedReviewToday);
+
         const eligibleForReview = problems.filter(p =>
-          isStudied(p) && !finalStudyIds.includes(p.id) && !completedSet.has(p.id)
+          (p.totalStudyTime || 0) > 0 && !finalStudyIds.includes(p.id) && !completedReviewSet.has(p.id)
         );
         if (eligibleForReview.length > 0) {
           const selectedForReview = pickRandomProblemIds(
@@ -753,6 +929,22 @@ export default function Dashboard() {
       saveDailySet(studyStorageKey, finalStudyIds);
       saveDailySet(reviewStorageKey, finalReviewIds);
 
+      // Save original Daily Review IDs for accurate completion tracking
+      if (finalReviewIds.length > 0) {
+        const existingOriginal = readOriginalDailyReviewIds(today);
+        if (existingOriginal.length === 0) {
+          saveOriginalDailyReviewIds(today, finalReviewIds);
+
+          // Store timestamps for when each problem was added to Daily Review
+          const currentTime = new Date().toISOString();
+          const timestamps: Record<string, string> = {};
+          finalReviewIds.forEach(id => {
+            timestamps[id] = currentTime;
+          });
+          saveDailyReviewTimestamps(today, timestamps);
+        }
+      }
+
       return { studyIds: finalStudyIds, reviewIds: finalReviewIds };
     };
 
@@ -760,6 +952,10 @@ export default function Dashboard() {
 
     setDailyStudyIds(prev => (arraysEqual(prev, studyIds) ? prev : studyIds));
     setDailyReviewIds(prev => (arraysEqual(prev, reviewIds) ? prev : reviewIds));
+
+    // Update original Daily Review IDs when they are loaded
+    const currentOriginalIds = readOriginalDailyReviewIds(today);
+    setOriginalDailyReviewIds(prev => (arraysEqual(prev, currentOriginalIds) ? prev : currentOriginalIds));
   }, [problems, problemMap, dailyStudySize, dailyReviewSize]);
 
   // Effect to monitor study progress and remove completed problems from daily study
@@ -806,6 +1002,62 @@ export default function Dashboard() {
       }
     }
   }, [problems, problemMap, dailyStudyIds, completedTodayIds]);
+
+  // Effect to monitor daily review progress and remove updated problems
+  useEffect(() => {
+    if (dailyReviewIds.length === 0) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    let hasChanges = false;
+    let newCompletedReviewIds = [...completedReviewTodayIds];
+    let newDailyReviewIds = [...dailyReviewIds];
+
+    // Get timestamps for when problems were added to Daily Review
+    const reviewTimestamps = readDailyReviewTimestamps(today);
+
+    // Check each problem in daily review to see if it has been updated
+    for (const problemId of dailyReviewIds) {
+      const problem = problemMap.get(problemId);
+      const reviewAddedTime = reviewTimestamps[problemId];
+
+      if (problem && reviewAddedTime && problem.lastUpdatedAt) {
+        // Check if problem was updated after it was added to Daily Review
+        const addedDate = new Date(reviewAddedTime);
+        const updatedDate = new Date(problem.lastUpdatedAt);
+
+        if (updatedDate > addedDate) {
+          // Problem has been updated - remove from daily review and mark as completed today
+          if (!completedReviewTodayIds.includes(problemId)) {
+            newCompletedReviewIds.push(problemId);
+            hasChanges = true;
+          }
+
+          // Remove from daily review set
+          const reviewIndex = newDailyReviewIds.indexOf(problemId);
+          if (reviewIndex > -1) {
+            newDailyReviewIds.splice(reviewIndex, 1);
+            hasChanges = true;
+          }
+        }
+      }
+    }
+
+    if (hasChanges) {
+      // Update state
+      setCompletedReviewTodayIds(newCompletedReviewIds);
+      setDailyReviewIds(newDailyReviewIds);
+
+      // Persist to localStorage
+      saveCompletedReviewTodayIds(today, newCompletedReviewIds);
+      const reviewStorageKey = `${DAILY_REVIEW_STORAGE_PREFIX}${today}`;
+      saveDailySet(reviewStorageKey, newDailyReviewIds);
+
+      // Check if daily review is now complete (all problems finished)
+      if (newDailyReviewIds.length === 0 && newCompletedReviewIds.length > 0) {
+        markDailyReviewCompleted(today);
+      }
+    }
+  }, [problems, problemMap, dailyReviewIds, completedReviewTodayIds]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1326,6 +1578,11 @@ export default function Dashboard() {
     const countLabel = problemsList.length === 1 ? 'problem' : 'problems';
     const targetSize = setType === 'study' ? dailyStudySize : dailyReviewSize;
 
+    // Filter completed count to only include problems that were in the original Daily Review set
+    const relevantCompletedCount = setType === 'review'
+      ? completedReviewTodayIds.filter(id => originalDailyReviewIds.includes(id)).length
+      : completedTodayIds.length;
+
     const handleClick = () => {
       if (!hasProblems) return;
       handleDailySetToggle(setType);
@@ -1385,11 +1642,20 @@ export default function Dashboard() {
               ({completedTodayIds.length} completed)
             </span>
           )}
+          {setType === 'review' && relevantCompletedCount > 0 && (
+            <span className="text-sm text-green-600 dark:text-green-400">
+              ({relevantCompletedCount} completed)
+            </span>
+          )}
         </div>
         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {setType === 'study' ? (
             completedTodayIds.length > 0
               ? `Progress: ${completedTodayIds.length}/${completedTodayIds.length + problemsList.length} completed`
+              : `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
+          ) : setType === 'review' ? (
+            relevantCompletedCount > 0
+              ? `Progress: ${relevantCompletedCount}/${relevantCompletedCount + problemsList.length} completed`
               : `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
           ) : (
             `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
@@ -1404,6 +1670,20 @@ export default function Dashboard() {
                 className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{
                   width: `${completedTodayIds.length / (completedTodayIds.length + problemsList.length) * 100}%`
+                }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {/* Progress bar for daily review */}
+        {setType === 'review' && (relevantCompletedCount > 0 || problemsList.length > 0) && (
+          <div className="mt-3">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-amber-500 to-amber-600 h-2 rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${relevantCompletedCount / (relevantCompletedCount + problemsList.length) * 100}%`
                 }}
               ></div>
             </div>
@@ -1437,6 +1717,20 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {completedTodayIds.length} problem{completedTodayIds.length !== 1 ? 's' : ''} studied for 10+ minutes
+              </p>
+            </div>
+          ) : setType === 'review' && relevantCompletedCount > 0 ? (
+            // Congratulations message for completed daily review
+            <div className="text-center py-4">
+              <SparklesIcon className="h-8 w-8 text-amber-500 mx-auto mb-3" />
+              <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                🌟 Excellent! 🌟
+              </h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                You completed today's review goal!
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {relevantCompletedCount} problem{relevantCompletedCount !== 1 ? 's' : ''} reviewed for 10+ minutes
               </p>
             </div>
           ) : (
