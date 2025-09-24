@@ -38,13 +38,15 @@ interface ProblemWithStudyTime extends Problem {
 
 const DAILY_STUDY_SET_SIZE = 4;
 const DAILY_REVIEW_SET_SIZE = 5;
-const DAILY_STUDY_MIN_SECONDS = 60;
+const DAILY_STUDY_MIN_SECONDS = 600; // 10 minutes
 
 const STUDY_SIZE_OPTIONS = [4, 8, 12, 16, 20] as const;
 const REVIEW_SIZE_OPTIONS = [5, 10, 15, 20] as const;
 
 const DAILY_STUDY_STORAGE_PREFIX = 'dashboard-daily-study-';
 const DAILY_REVIEW_STORAGE_PREFIX = 'dashboard-daily-review-';
+const DAILY_COMPLETED_STORAGE_PREFIX = 'dashboard-daily-completed-';
+const DAILY_STUDY_FINISHED_PREFIX = 'dashboard-daily-study-finished-';
 
 function stringToSeed(str: string): number {
   let hash = 0;
@@ -137,6 +139,83 @@ function readStoredSize<T extends readonly number[]>(key: string, fallback: numb
   return fallback;
 }
 
+function readCompletedTodayIds(today: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const key = `${DAILY_COMPLETED_STORAGE_PREFIX}${today}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+  } catch (error) {
+    console.warn('Failed to read completed today problems', error);
+    return [];
+  }
+}
+
+function saveCompletedTodayIds(today: string, ids: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_COMPLETED_STORAGE_PREFIX}${today}`;
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch (error) {
+    console.warn('Failed to save completed today problems', error);
+  }
+}
+
+function markDailyStudyCompleted(date: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `${DAILY_STUDY_FINISHED_PREFIX}${date}`;
+    window.localStorage.setItem(key, 'true');
+  } catch (error) {
+    console.warn('Failed to mark daily study completed', error);
+  }
+}
+
+function isDailyStudyCompleted(date: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const key = `${DAILY_STUDY_FINISHED_PREFIX}${date}`;
+    return window.localStorage.getItem(key) === 'true';
+  } catch (error) {
+    console.warn('Failed to check daily study completion', error);
+    return false;
+  }
+}
+
+function getPreviousDate(date: string): string {
+  const d = new Date(date);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split('T')[0];
+}
+
+function cleanupOldDailyData(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - 30); // Keep 30 days
+    const cutoffString = cutoffDate.toISOString().split('T')[0];
+
+    const keys = Object.keys(localStorage);
+    const dailyKeys = keys.filter(key =>
+      key.startsWith(DAILY_STUDY_STORAGE_PREFIX) ||
+      key.startsWith(DAILY_REVIEW_STORAGE_PREFIX) ||
+      key.startsWith(DAILY_COMPLETED_STORAGE_PREFIX) ||
+      key.startsWith(DAILY_STUDY_FINISHED_PREFIX)
+    );
+
+    for (const key of dailyKeys) {
+      const dateMatch = key.match(/(\d{4}-\d{2}-\d{2})$/);
+      if (dateMatch && dateMatch[1] < cutoffString) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to cleanup old daily data', error);
+  }
+}
+
 export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title' | 'studyTime';
 export type SortDirection = 'asc' | 'desc';
 
@@ -203,6 +282,7 @@ export default function Dashboard() {
 
   const [dailyStudyIds, setDailyStudyIds] = useState<string[]>([]);
   const [dailyReviewIds, setDailyReviewIds] = useState<string[]>([]);
+  const [completedTodayIds, setCompletedTodayIds] = useState<string[]>([]);
   const [activeDailySet, setActiveDailySet] = useState<'study' | 'review' | null>(null);
   const [dailyStudySize, setDailyStudySize] = useState(() => readStoredSize(DAILY_STUDY_SIZE_STORAGE_KEY, DAILY_STUDY_SET_SIZE, STUDY_SIZE_OPTIONS));
   const [dailyReviewSize, setDailyReviewSize] = useState(() => readStoredSize(DAILY_REVIEW_SIZE_STORAGE_KEY, DAILY_REVIEW_SET_SIZE, REVIEW_SIZE_OPTIONS));
@@ -545,6 +625,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadProblems();
+
+    // Initialize completed today IDs and cleanup old data
+    const today = new Date().toISOString().split('T')[0];
+    const completedIds = readCompletedTodayIds(today);
+    setCompletedTodayIds(completedIds);
+
+    // Cleanup old data periodically
+    cleanupOldDailyData();
   }, []);
 
   useEffect(() => {
@@ -555,8 +643,13 @@ export default function Dashboard() {
     }
 
     const today = new Date().toISOString().split('T')[0];
+    const yesterday = getPreviousDate(today);
+
     const studyStorageKey = `${DAILY_STUDY_STORAGE_PREFIX}${today}`;
     const reviewStorageKey = `${DAILY_REVIEW_STORAGE_PREFIX}${today}`;
+
+    const yesterdayStudyKey = `${DAILY_STUDY_STORAGE_PREFIX}${yesterday}`;
+    const yesterdayReviewKey = `${DAILY_REVIEW_STORAGE_PREFIX}${yesterday}`;
 
     const isUnstudied = (problem: ProblemWithStudyTime) => {
       const total = problem.totalStudyTime || 0;
@@ -568,55 +661,151 @@ export default function Dashboard() {
       return total >= DAILY_STUDY_MIN_SECONDS;
     };
 
-    const resolveDailyIds = (
-      storageKey: string,
-      predicate: (problem: ProblemWithStudyTime) => boolean,
-      limit: number,
-      exclude?: Set<string>
-    ): string[] => {
-      const eligible = problems.filter((problem) => predicate(problem) && !(exclude?.has(problem.id)));
-      const storedIds = readDailySet(storageKey);
+    // Smart daily set resolution with carry-over logic
+    const resolveSmartDailyIds = (): { studyIds: string[], reviewIds: string[] } => {
+      // Check if today's sets already exist (app reopened same day)
+      const existingStudyIds = readDailySet(studyStorageKey);
+      const existingReviewIds = readDailySet(reviewStorageKey);
 
-      let selectedIds: string[] = [];
-      if (storedIds) {
-        selectedIds = storedIds.filter((id) => {
+      if (existingStudyIds && existingReviewIds) {
+        // Today's sets already exist - validate them against current problems
+        const validStudyIds = existingStudyIds.filter(id => {
           const problem = problemMap.get(id);
-          return !!problem && predicate(problem) && !(exclude?.has(id));
+          return problem && isUnstudied(problem);
         });
+
+        const validReviewIds = existingReviewIds.filter(id => {
+          const problem = problemMap.get(id);
+          return problem && isStudied(problem) && !validStudyIds.includes(id);
+        });
+
+        return { studyIds: validStudyIds, reviewIds: validReviewIds };
       }
 
-      const desiredCount = Math.min(limit, eligible.length);
+      // Check if yesterday's daily study was completed
+      const yesterdayCompleted = isDailyStudyCompleted(yesterday);
+      const yesterdayStudyIds = readDailySet(yesterdayStudyKey);
+      const yesterdayReviewIds = readDailySet(yesterdayReviewKey);
 
-      if (desiredCount === 0) {
-        saveDailySet(storageKey, []);
-        return [];
+      let finalStudyIds: string[] = [];
+      let finalReviewIds: string[] = [];
+
+      // Carry over logic for incomplete previous day
+      if (!yesterdayCompleted && yesterdayStudyIds && yesterdayStudyIds.length > 0) {
+        // Carry over yesterday's incomplete study set, but validate problems still exist
+        const validCarryOverIds = yesterdayStudyIds.filter(id => {
+          const problem = problemMap.get(id);
+          return problem && isUnstudied(problem);
+        });
+
+        if (validCarryOverIds.length > 0) {
+          finalStudyIds = validCarryOverIds;
+
+          // Also carry over yesterday's completed IDs to maintain progress
+          const yesterdayCompletedIds = readCompletedTodayIds(yesterday);
+          if (yesterdayCompletedIds.length > 0) {
+            saveCompletedTodayIds(today, yesterdayCompletedIds);
+            setCompletedTodayIds(yesterdayCompletedIds);
+          }
+
+          // Carry over review set too if it exists
+          if (yesterdayReviewIds && yesterdayReviewIds.length > 0) {
+            const validReviewCarryOver = yesterdayReviewIds.filter(id => {
+              const problem = problemMap.get(id);
+              return problem && isStudied(problem) && !finalStudyIds.includes(id);
+            });
+            finalReviewIds = validReviewCarryOver;
+          }
+        }
       }
 
-      if (selectedIds.length < desiredCount) {
-        selectedIds = pickRandomProblemIds(eligible, limit, `${storageKey}-${eligible.length}`);
-        saveDailySet(storageKey, selectedIds);
-        return selectedIds;
+      // If no carry-over or carry-over is empty, create new sets
+      if (finalStudyIds.length === 0) {
+        const completedToday = readCompletedTodayIds(today);
+        const completedSet = new Set(completedToday);
+
+        // Create new study set
+        const eligibleForStudy = problems.filter(p => isUnstudied(p) && !completedSet.has(p.id));
+        if (eligibleForStudy.length > 0) {
+          const selectedForStudy = pickRandomProblemIds(
+            eligibleForStudy,
+            dailyStudySize,
+            `${studyStorageKey}-${eligibleForStudy.length}`
+          );
+          finalStudyIds = selectedForStudy.slice(0, dailyStudySize);
+        }
+
+        // Create new review set
+        const eligibleForReview = problems.filter(p =>
+          isStudied(p) && !finalStudyIds.includes(p.id) && !completedSet.has(p.id)
+        );
+        if (eligibleForReview.length > 0) {
+          const selectedForReview = pickRandomProblemIds(
+            eligibleForReview,
+            dailyReviewSize,
+            `${reviewStorageKey}-${eligibleForReview.length}`
+          );
+          finalReviewIds = selectedForReview.slice(0, dailyReviewSize);
+        }
       }
 
-      if (selectedIds.length > limit) {
-        selectedIds = selectedIds.slice(0, limit);
-      }
+      // Save the resolved sets
+      saveDailySet(studyStorageKey, finalStudyIds);
+      saveDailySet(reviewStorageKey, finalReviewIds);
 
-      saveDailySet(storageKey, selectedIds);
-      return selectedIds;
+      return { studyIds: finalStudyIds, reviewIds: finalReviewIds };
     };
 
-    const studyIds = resolveDailyIds(studyStorageKey, isUnstudied, dailyStudySize);
-    const reviewIds = resolveDailyIds(
-      reviewStorageKey,
-      isStudied,
-      dailyReviewSize,
-      new Set(studyIds)
-    );
+    const { studyIds, reviewIds } = resolveSmartDailyIds();
 
     setDailyStudyIds(prev => (arraysEqual(prev, studyIds) ? prev : studyIds));
     setDailyReviewIds(prev => (arraysEqual(prev, reviewIds) ? prev : reviewIds));
   }, [problems, problemMap, dailyStudySize, dailyReviewSize]);
+
+  // Effect to monitor study progress and remove completed problems from daily study
+  useEffect(() => {
+    if (dailyStudyIds.length === 0) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    let hasChanges = false;
+    let newCompletedIds = [...completedTodayIds];
+    let newDailyStudyIds = [...dailyStudyIds];
+
+    // Check each problem in daily study to see if it's completed (≥10 minutes)
+    for (const problemId of dailyStudyIds) {
+      const problem = problemMap.get(problemId);
+      if (problem && problem.totalStudyTime >= DAILY_STUDY_MIN_SECONDS) {
+        // Problem is completed - remove from daily study and mark as completed today
+        if (!completedTodayIds.includes(problemId)) {
+          newCompletedIds.push(problemId);
+          hasChanges = true;
+        }
+
+        // Remove from daily study set
+        const studyIndex = newDailyStudyIds.indexOf(problemId);
+        if (studyIndex > -1) {
+          newDailyStudyIds.splice(studyIndex, 1);
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      // Update state
+      setCompletedTodayIds(newCompletedIds);
+      setDailyStudyIds(newDailyStudyIds);
+
+      // Persist to localStorage
+      saveCompletedTodayIds(today, newCompletedIds);
+      const studyStorageKey = `${DAILY_STUDY_STORAGE_PREFIX}${today}`;
+      saveDailySet(studyStorageKey, newDailyStudyIds);
+
+      // Check if daily study is now complete (all problems finished)
+      if (newDailyStudyIds.length === 0 && newCompletedIds.length > 0) {
+        markDailyStudyCompleted(today);
+      }
+    }
+  }, [problems, problemMap, dailyStudyIds, completedTodayIds]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1127,7 +1316,7 @@ export default function Dashboard() {
     const isActive = activeDailySet === setType;
     const title = setType === 'study' ? 'Daily Study' : 'Daily Review';
     const description = setType === 'study'
-      ? 'Spend at least 1 minute with each of these fresh problems.'
+      ? 'Complete 10 minutes of study for each problem to finish your daily goal.'
       : 'Previously studied problems to reinforce.';
     const accentTextClass = setType === 'study' ? 'text-indigo-500' : 'text-amber-500';
     const accentDotClass = setType === 'study' ? 'bg-indigo-400' : 'bg-amber-400';
@@ -1191,10 +1380,35 @@ export default function Dashboard() {
         <div className="mt-4 flex items-baseline space-x-2">
           <span className="text-2xl font-bold text-gray-900 dark:text-white">{problemsList.length}</span>
           <span className="text-sm text-gray-500 dark:text-gray-400">{countLabel}</span>
+          {setType === 'study' && completedTodayIds.length > 0 && (
+            <span className="text-sm text-green-600 dark:text-green-400">
+              ({completedTodayIds.length} completed)
+            </span>
+          )}
         </div>
         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Target: {targetSize} {targetSize === 1 ? 'problem' : 'problems'} (right-click to change)
+          {setType === 'study' ? (
+            completedTodayIds.length > 0
+              ? `Progress: ${completedTodayIds.length}/${completedTodayIds.length + problemsList.length} completed`
+              : `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
+          ) : (
+            `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
+          )}
         </div>
+
+        {/* Progress bar for daily study */}
+        {setType === 'study' && (completedTodayIds.length > 0 || problemsList.length > 0) && (
+          <div className="mt-3">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${completedTodayIds.length / (completedTodayIds.length + problemsList.length) * 100}%`
+                }}
+              ></div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-4">
           {hasProblems ? (
@@ -1211,9 +1425,26 @@ export default function Dashboard() {
                 </li>
               )}
             </ul>
+          ) : setType === 'study' && completedTodayIds.length > 0 ? (
+            // Congratulations message for completed daily study
+            <div className="text-center py-4">
+              <SparklesIcon className="h-8 w-8 text-yellow-500 mx-auto mb-3" />
+              <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
+                🎉 Congratulations! 🎉
+              </h4>
+              <p className="text-sm text-gray-700 dark:text-gray-300 mb-1">
+                You completed today's study goal!
+              </p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                {completedTodayIds.length} problem{completedTodayIds.length !== 1 ? 's' : ''} studied for 10+ minutes
+              </p>
+            </div>
           ) : (
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Add more problems to build this daily set.
+              {setType === 'study'
+                ? "Add more problems to build this daily set."
+                : "Add more problems to build this daily set."
+              }
             </p>
           )}
         </div>
