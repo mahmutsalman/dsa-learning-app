@@ -1108,8 +1108,8 @@ export default function Dashboard() {
               invoke<Tag[]>('get_problem_tags', { problemId: problem.id })
             ]);
             
-            // Sum up total_duration from all cards for this problem
-            const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0), 0);
+            // Sum up total_duration AND review_duration from all cards for this problem
+            const totalStudyTime = cards.reduce((sum, card) => sum + (card.total_duration || 0) + (card.review_duration || 0), 0);
             
             // Use problem.updated_at as the last updated timestamp (simplified)
             const lastUpdatedAt = problem.updated_at;

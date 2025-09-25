@@ -2980,12 +2980,24 @@ impl DatabaseManager {
     /// Get the number of problems that have had study sessions today
     pub fn get_problems_worked_today(&self, today_str: &str) -> anyhow::Result<i32> {
         let sql = r#"
-            SELECT COUNT(DISTINCT p.id) as count
-            FROM problems p
-            INNER JOIN cards c ON p.id = c.problem_id
-            INNER JOIN time_sessions ts ON c.id = ts.card_id
-            WHERE DATE(ts.date) = ?1
-            AND ts.duration > 0
+            SELECT COUNT(DISTINCT all_sessions.problem_id) as count
+            FROM (
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN work_sessions ws ON c.id = ws.card_id
+                WHERE DATE(ws.session_date) = ?1
+                AND ws.duration_seconds > 0
+
+                UNION ALL
+
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN review_work_sessions rws ON c.id = rws.card_id
+                WHERE DATE(rws.session_date) = ?1
+                AND rws.duration_seconds > 0
+            ) as all_sessions
         "#;
         
         let count: i32 = self.connection.query_row(sql, [today_str], |row| {
@@ -2998,12 +3010,24 @@ impl DatabaseManager {
     /// Get the list of problem IDs that have had study sessions today
     pub fn get_problems_worked_today_list(&self, today_str: &str) -> anyhow::Result<Vec<String>> {
         let sql = r#"
-            SELECT DISTINCT p.id
-            FROM problems p
-            INNER JOIN cards c ON p.id = c.problem_id
-            INNER JOIN time_sessions ts ON c.id = ts.card_id
-            WHERE DATE(ts.date) = ?1
-            AND ts.duration > 0
+            SELECT DISTINCT all_sessions.problem_id as id
+            FROM (
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN work_sessions ws ON c.id = ws.card_id
+                WHERE DATE(ws.session_date) = ?1
+                AND ws.duration_seconds > 0
+
+                UNION ALL
+
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN review_work_sessions rws ON c.id = rws.card_id
+                WHERE DATE(rws.session_date) = ?1
+                AND rws.duration_seconds > 0
+            ) as all_sessions
         "#;
         
         let mut stmt = self.connection.prepare(sql)?;
@@ -3018,12 +3042,24 @@ impl DatabaseManager {
     /// Get the total worked duration for problems that have had study sessions today (in seconds)
     pub fn get_worked_today_total_duration(&self, today_str: &str) -> anyhow::Result<i32> {
         let sql = r#"
-            SELECT COALESCE(SUM(ts.duration), 0) as total_duration
-            FROM problems p
-            INNER JOIN cards c ON p.id = c.problem_id
-            INNER JOIN time_sessions ts ON c.id = ts.card_id
-            WHERE DATE(ts.date) = ?1
-            AND ts.duration > 0
+            SELECT COALESCE(SUM(all_sessions.duration), 0) as total_duration
+            FROM (
+                SELECT ws.duration_seconds as duration
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN work_sessions ws ON c.id = ws.card_id
+                WHERE DATE(ws.session_date) = ?1
+                AND ws.duration_seconds > 0
+
+                UNION ALL
+
+                SELECT rws.duration_seconds as duration
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN review_work_sessions rws ON c.id = rws.card_id
+                WHERE DATE(rws.session_date) = ?1
+                AND rws.duration_seconds > 0
+            ) as all_sessions
         "#;
         
         let total_duration: i32 = self.connection.query_row(sql, [today_str], |row| {
@@ -3036,14 +3072,27 @@ impl DatabaseManager {
     /// Get comprehensive daily work statistics
     pub fn get_daily_work_stats(&self, today_str: &str) -> anyhow::Result<DailyWorkStats> {
         let sql = r#"
-            SELECT 
-                COUNT(DISTINCT p.id) as problems_worked,
-                COALESCE(SUM(ts.duration), 0) as total_study_time_today
-            FROM problems p
-            INNER JOIN cards c ON p.id = c.problem_id
-            INNER JOIN time_sessions ts ON c.id = ts.card_id
-            WHERE DATE(ts.date) = ?1
-            AND ts.duration > 0
+            WITH all_sessions AS (
+                SELECT p.id as problem_id, ws.duration_seconds
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN work_sessions ws ON c.id = ws.card_id
+                WHERE DATE(ws.session_date) = ?1
+                AND ws.duration_seconds > 0
+
+                UNION ALL
+
+                SELECT p.id as problem_id, rws.duration_seconds
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN review_work_sessions rws ON c.id = rws.card_id
+                WHERE DATE(rws.session_date) = ?1
+                AND rws.duration_seconds > 0
+            )
+            SELECT
+                COUNT(DISTINCT problem_id) as problems_worked,
+                COALESCE(SUM(duration_seconds), 0) as total_study_time_today
+            FROM all_sessions
         "#;
         
         let result = self.connection.query_row(sql, [today_str], |row| {
@@ -3069,9 +3118,9 @@ impl DatabaseManager {
             |row| Ok(row.get(0)?)
         )?;
         
-        // Query for total study time across all problems
+        // Query for total study time across all problems (including both study and review time)
         let total_study_time: i32 = self.connection.query_row(
-            "SELECT COALESCE(SUM(total_duration), 0) FROM cards",
+            "SELECT COALESCE(SUM(total_duration + COALESCE(review_duration, 0)), 0) FROM cards",
             [],
             |row| Ok(row.get(0)?)
         )?;
@@ -3079,12 +3128,24 @@ impl DatabaseManager {
         // Query for problems worked today
         let problems_worked_today: i32 = self.connection.query_row(
             r#"
-            SELECT COUNT(DISTINCT p.id)
-            FROM problems p
-            INNER JOIN cards c ON p.id = c.problem_id
-            INNER JOIN time_sessions ts ON c.id = ts.card_id
-            WHERE DATE(ts.date) = ?1
-            AND ts.duration > 0
+            SELECT COUNT(DISTINCT all_sessions.problem_id)
+            FROM (
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN work_sessions ws ON c.id = ws.card_id
+                WHERE DATE(ws.session_date) = ?1
+                AND ws.duration_seconds > 0
+
+                UNION ALL
+
+                SELECT DISTINCT p.id as problem_id
+                FROM problems p
+                INNER JOIN cards c ON p.id = c.problem_id
+                INNER JOIN review_work_sessions rws ON c.id = rws.card_id
+                WHERE DATE(rws.session_date) = ?1
+                AND rws.duration_seconds > 0
+            ) as all_sessions
             "#,
             [today_str],
             |row| Ok(row.get(0)?)
