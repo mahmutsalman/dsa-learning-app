@@ -1302,33 +1302,43 @@ impl DatabaseManager {
             [session_id],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
         ).optional()?;
-        
+
         match session {
             Some((card_id, duration)) => {
                 // Begin transaction for atomic operation
                 let tx = self.connection.unchecked_transaction()?;
-                
-                // Delete the session
+
+                // Delete the session from time_sessions table
                 let rows_affected = tx.execute(
                     "DELETE FROM time_sessions WHERE id = ?1",
                     [session_id]
                 )?;
-                
+
                 if rows_affected == 0 {
                     return Err(anyhow::anyhow!("Session not found"));
                 }
-                
+
+                // Also delete the corresponding work_session record to maintain consistency
+                let work_sessions_deleted = tx.execute(
+                    "DELETE FROM work_sessions WHERE id = ?1",
+                    [session_id]
+                )?;
+
+                if work_sessions_deleted > 0 {
+                    println!("Also deleted corresponding work_session record for session '{}'", session_id);
+                }
+
                 // Update card's total duration (subtract the deleted session duration)
                 let now = Utc::now();
                 tx.execute(
                     "UPDATE cards SET total_duration = total_duration - ?1, last_modified = ?2 WHERE id = ?3",
                     params![duration, &now.to_rfc3339(), &card_id]
                 )?;
-                
+
                 // Commit the transaction
                 tx.commit()?;
-                
-                println!("Successfully deleted session '{}' and updated card total duration", session_id);
+
+                println!("Successfully deleted session '{}' from both tables and updated card total duration", session_id);
                 Ok(())
             },
             None => Err(anyhow::anyhow!("Session with id '{}' not found", session_id))

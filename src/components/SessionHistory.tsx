@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ClockIcon, CalendarDaysIcon, ChatBubbleBottomCenterTextIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { TimeSession } from '../types';
+import { WorkSessionService } from '../services/WorkSessionService';
 
 interface SessionHistoryProps {
   cardId: string | undefined;
@@ -81,20 +82,23 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
   const handleDeleteSession = async (sessionId: string) => {
     try {
       setDeleteConfirm({ sessionId, isDeleting: true });
-      
+
       await invoke('delete_session', { sessionId });
-      
+
       // Remove the session from local state
       setSessions(prev => prev.filter(s => s.id !== sessionId));
-      
+
+      // Clear the WorkSessionService cache to ensure stats are refreshed
+      WorkSessionService.clearCache();
+
       // Call callback to refresh card data
       if (onSessionDeleted) {
         onSessionDeleted();
       }
-      
+
       // Reset delete confirmation
       setDeleteConfirm({ sessionId: null, isDeleting: false });
-      
+
     } catch (err) {
       console.error('Failed to delete session:', err);
       setError(`Failed to delete session: ${err}`);
