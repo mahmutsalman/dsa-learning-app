@@ -41,6 +41,7 @@ pub struct AudioDeviceList {
 pub struct AppState {
     pub db: Arc<Mutex<DatabaseManager>>,
     pub current_timer: Arc<Mutex<Option<TimerSession>>>,
+    pub current_review_timer: Arc<Mutex<Option<ReviewTimerSession>>>,
     pub recording_state: Arc<Mutex<Option<RecordingSession>>>,
     pub audio_thread_sender: Arc<Mutex<Option<mpsc::Sender<AudioCommand>>>>,
     pub path_resolver: Arc<PathResolver>,
@@ -99,7 +100,8 @@ pub struct Card {
     pub language: String,
     pub notes: Option<String>,
     pub status: String, // 'In Progress', 'Completed', 'Paused'
-    pub total_duration: i32, // in seconds
+    pub total_duration: i32, // in seconds (for original study)
+    pub review_duration: Option<i32>, // in seconds (for review sessions)
     pub created_at: DateTime<Utc>,
     pub last_modified: DateTime<Utc>,
     pub parent_card_id: Option<String>,
@@ -255,6 +257,21 @@ pub struct TimeSession {
     pub notes: Option<String>,
 }
 
+// Review session model - parallel to TimeSession but for review/restudy tracking
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReviewSession {
+    pub id: String,
+    pub card_id: String,
+    pub start_time: DateTime<Utc>,
+    pub end_time: Option<DateTime<Utc>>,
+    pub duration: Option<i32>,
+    pub date: String,
+    pub is_active: bool,
+    pub notes: Option<String>,
+    pub original_session_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Recording {
     pub id: String,
@@ -323,6 +340,18 @@ pub struct TimerSession {
     pub is_paused: bool,
     pub pause_duration: i32, // in seconds
     pub work_session_id: Option<String>, // Associated work session ID for detailed tracking
+}
+
+// Review timer session model - parallel to TimerSession for review mode
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReviewTimerSession {
+    pub id: String,
+    pub card_id: String,
+    pub start_time: DateTime<Utc>,
+    pub is_paused: bool,
+    pub pause_duration: i32, // in seconds
+    pub review_work_session_id: Option<String>, // Associated review work session ID
+    pub original_session_id: Option<String>, // Reference to original study session
 }
 
 // Recording-specific models for in-memory recording state
@@ -437,6 +466,21 @@ pub struct WorkSession {
     pub duration_seconds: i32,
     pub hour_slot: i32, // 0-23 hour of the day
     pub created_at: DateTime<Utc>,
+}
+
+// Review work session model - parallel to WorkSession for review tracking
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReviewWorkSession {
+    pub id: String,
+    pub problem_id: String,
+    pub card_id: String,
+    pub session_date: String, // YYYY-MM-DD format
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
+    pub duration_seconds: i32,
+    pub hour_slot: i32, // 0-23 hour of the day
+    pub created_at: DateTime<Utc>,
+    pub original_work_session_id: Option<String>,
 }
 
 // Work session with problem details for enhanced queries

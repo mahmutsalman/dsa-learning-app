@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import useHeaderResponsiveness from '../hooks/useHeaderResponsiveness';
-import { 
-  ArrowLeftIcon, 
-  ArrowRightIcon, 
-  PlayIcon, 
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  PlayIcon,
   StopIcon,
   MicrophoneIcon,
   CheckCircleIcon,
@@ -12,12 +12,15 @@ import {
   TrashIcon,
   ClockIcon,
   SpeakerWaveIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  BookOpenIcon,
+  AcademicCapIcon
 } from '@heroicons/react/24/outline';
 import { LanguageSelector } from './LanguageSelector';
 import { FocusModeToggle } from './FocusModeToggle';
 import type { Problem, Card } from '../types';
 import type { UseTimerReturn } from '../hooks/useTimer';
+import type { UseReviewTimerReturn } from '../hooks/useReviewTimer';
 import type { AutoSaveState } from '../hooks/useAutoSave';
 import { SolutionCardButton, SolutionCardIndicator } from '../features/solution-card';
 
@@ -28,13 +31,16 @@ interface WorkspaceHeaderProps {
   language: string;
   onLanguageChange: (language: string) => void;
   timer: UseTimerReturn;
+  reviewTimer: UseReviewTimerReturn;
+  isReviewMode: boolean;
+  onToggleReviewMode: () => void;
   codeAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
   notesAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
   languageAutoSave: AutoSaveState & { isLoading: boolean; isSaved: boolean; error: string | null };
-  recordingState: { 
-    isRecording: boolean; 
-    isPaused: boolean; 
-    elapsedRecordingTime: number; 
+  recordingState: {
+    isRecording: boolean;
+    isPaused: boolean;
+    elapsedRecordingTime: number;
   };
   recordingsCount?: number;
   onToggleTimer: () => void;
@@ -190,6 +196,9 @@ export function WorkspaceHeader({
   language,
   onLanguageChange,
   timer,
+  reviewTimer,
+  isReviewMode,
+  onToggleReviewMode,
   codeAutoSave,
   notesAutoSave,
   languageAutoSave,
@@ -261,12 +270,15 @@ export function WorkspaceHeader({
       });
     }
   }, [responsive.headerBreakpoint, responsive.containerWidth, responsive.isStable]);
-  
-  // Smart dynamic timer display logic based on available container width
+
+  // Active timer state - accessible throughout component
+  const activeTimerState = isReviewMode ? reviewTimer.reviewTimerState : timer.timerState;
+
+  // Smart dynamic timer display logic based on available container width and mode
   const getTimerDisplayConfig = () => {
-    const liveTotalDuration = timer.timerState.isRunning 
-      ? timer.totalDuration + timer.timerState.elapsedTime
-      : timer.totalDuration;
+    const liveTotalDuration = activeTimerState.isRunning
+      ? (isReviewMode ? reviewTimer.totalReviewDuration : timer.totalDuration) + activeTimerState.elapsedTime
+      : (isReviewMode ? reviewTimer.totalReviewDuration : timer.totalDuration);
     
     // Determine compact level with enhanced hysteresis to prevent oscillation
     let compactLevel: number;
@@ -280,7 +292,7 @@ export function WorkspaceHeader({
       format = 'Single';
       return {
         showSingle: true,
-        primaryTime: timer.timerState.isRunning ? timer.timerState.elapsedTime : liveTotalDuration,
+        primaryTime: activeTimerState.isRunning ? activeTimerState.elapsedTime : liveTotalDuration,
         primaryLabel: '',
         showSeconds: false,
         compactLevel,
@@ -293,7 +305,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: '',
         secondaryLabel: '',
         showSeconds: false,
@@ -308,7 +320,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: '',
         secondaryLabel: '',
         showSeconds: false,
@@ -322,7 +334,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: 'Tot:',
         secondaryLabel: 'Now:',
         showSeconds: false,
@@ -337,7 +349,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: 'Tot:',
         secondaryLabel: 'Now:',
         showSeconds: false,
@@ -351,7 +363,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: 'Total:',
         secondaryLabel: 'Current:',
         showSeconds: false,
@@ -365,7 +377,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: timer.timerState.elapsedTime,
+        secondaryTime: activeTimerState.elapsedTime,
         primaryLabel: 'Total:',
         secondaryLabel: 'Current:',
         showSeconds: false,
@@ -605,6 +617,7 @@ export function WorkspaceHeader({
               </button>
             </div>
 
+
             {/* Focus Mode Toggle */}
             <FocusModeToggle size="md" />
 
@@ -633,19 +646,27 @@ export function WorkspaceHeader({
                 <button
                   ref={timerButtonRef}
                   onClick={onToggleTimer}
-                  disabled={timer.isLoading || isViewingSolution}
-                  className="header-scale-button header-timer-button with-icon bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                  disabled={(isReviewMode ? reviewTimer.isLoading : timer.isLoading) || isViewingSolution}
+                  className={`header-scale-button header-timer-button with-icon transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                    isReviewMode
+                      ? 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 border border-amber-200 dark:border-amber-700'
+                      : 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 border border-emerald-200 dark:border-emerald-700'
+                  }`}
                   style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
-                  title={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-                  aria-label={timer.timerState.isRunning ? "Stop timer session" : "Start timer session"}
-                  aria-pressed={timer.timerState.isRunning}
+                  title={activeTimerState.isRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
+                  aria-label={activeTimerState.isRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
+                  aria-pressed={activeTimerState.isRunning}
                 >
                   {/* Play/Stop Icon */}
                   <div className="flex-shrink-0">
-                    {timer.timerState.isRunning ? (
+                    {activeTimerState.isRunning ? (
                       <StopIcon className="h-4 w-4 text-red-500" />
                     ) : (
-                      <PlayIcon className="h-4 w-4 text-green-500" />
+                      <PlayIcon className={`h-4 w-4 ${
+                        isReviewMode
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      }`} />
                     )}
                   </div>
                   
@@ -660,8 +681,12 @@ export function WorkspaceHeader({
                       // Multi-level displays based on available width
                       <>
                         {/* Primary time display */}
-                        <span className={`text-xs font-mono text-gray-600 dark:text-gray-400 whitespace-nowrap ${
+                        <span className={`text-xs font-mono whitespace-nowrap ${
                           timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''
+                        } ${
+                          isReviewMode
+                            ? 'text-amber-700 dark:text-amber-300'
+                            : 'text-emerald-700 dark:text-emerald-300'
                         }`}>
                           {(() => {
                             const primaryFormatted = formatTime(timerConfig.primaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
@@ -686,9 +711,11 @@ export function WorkspaceHeader({
                         {/* Secondary time display - only for levels 3+ */}
                         {timerConfig.compactLevel >= 3 && (
                           <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
-                            timer.timerState.isRunning 
-                              ? 'text-red-500 dark:text-red-400' 
-                              : 'text-gray-500 dark:text-gray-400'
+                            activeTimerState.isRunning
+                              ? 'text-red-500 dark:text-red-400'
+                              : isReviewMode
+                                ? 'text-amber-600 dark:text-amber-400'
+                                : 'text-emerald-600 dark:text-emerald-400'
                           } ${timerConfig.compactLevel <= 4 ? 'leading-tight' : timerConfig.spacious ? 'leading-normal' : ''}`}>
                             {(() => {
                               const secondaryFormatted = formatTime(timerConfig.secondaryTime || 0, timerConfig.useMinutesFormat, timerConfig.noSpacing);
@@ -704,8 +731,8 @@ export function WorkspaceHeader({
                   {/* Error and Debug Info - hidden on xs */}
                   {screenSize !== 'xs' && (
                     <div className="flex items-center space-x-1">
-                      {timer.error && (
-                        <div className="text-xs text-red-500" title={timer.error}>
+                      {(isReviewMode ? reviewTimer.error : timer.error) && (
+                        <div className="text-xs text-red-500" title={isReviewMode ? reviewTimer.error : timer.error}>
                           ⚠️
                         </div>
                       )}
@@ -719,7 +746,7 @@ export function WorkspaceHeader({
                     onClick={() => setShowTimerDropdown(!showTimerDropdown)}
                     onMouseEnter={() => setShowTimerDropdown(true)}
                     className="header-scale-button compact icon-only hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ml-1"
-                    title="Timer options"
+                    title="Timer mode and options"
                   >
                     <ChevronDownIcon className="h-3 w-3" />
                   </button>
@@ -729,7 +756,7 @@ export function WorkspaceHeader({
               {/* Session History Dropdown */}
               {showTimerDropdown && (
                 <div 
-                  className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[120px]" 
+                  className="absolute top-full right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl min-w-[160px]" 
                   style={{ 
                     zIndex: 'var(--z-dropdown)', 
                     boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
@@ -741,6 +768,50 @@ export function WorkspaceHeader({
                   onMouseEnter={() => setShowTimerDropdown(true)}
                   onMouseLeave={() => setShowTimerDropdown(false)}
                 >
+                  {/* Study Mode Option */}
+                  <button
+                    onClick={() => {
+                      if (isReviewMode) onToggleReviewMode();
+                      setShowTimerDropdown(false);
+                    }}
+                    disabled={isViewingSolution}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      !isReviewMode
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <BookOpenIcon className="h-4 w-4" />
+                    <span>Study Mode</span>
+                    {!isReviewMode && (
+                      <div className="ml-auto w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400" />
+                    )}
+                  </button>
+
+                  {/* Review Mode Option */}
+                  <button
+                    onClick={() => {
+                      if (!isReviewMode) onToggleReviewMode();
+                      setShowTimerDropdown(false);
+                    }}
+                    disabled={isViewingSolution}
+                    className={`w-full px-3 py-2 text-left text-sm transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isReviewMode
+                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <AcademicCapIcon className="h-4 w-4" />
+                    <span>Review Mode</span>
+                    {isReviewMode && (
+                      <div className="ml-auto w-2 h-2 rounded-full bg-amber-600 dark:bg-amber-400" />
+                    )}
+                  </button>
+
+                  {/* Separator */}
+                  <div className="border-t border-gray-200 dark:border-gray-600 my-1"></div>
+
+                  {/* Session History */}
                   <button
                     onClick={() => {
                       onOpenSessionHistory();

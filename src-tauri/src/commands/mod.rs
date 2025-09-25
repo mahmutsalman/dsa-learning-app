@@ -1,5 +1,6 @@
 pub mod database;
 pub mod timer;
+pub mod review_timer;
 pub mod images;
 pub mod card_images;
 pub mod audio;

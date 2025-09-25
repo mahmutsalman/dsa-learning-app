@@ -131,6 +131,14 @@ async fn main() {
             commands::timer::get_timer_state,
             commands::timer::get_card_sessions,
             commands::timer::delete_session,
+            // Review Timer commands
+            commands::review_timer::start_review_timer_session,
+            commands::review_timer::stop_review_timer_session,
+            commands::review_timer::pause_review_timer_session,
+            commands::review_timer::resume_review_timer_session,
+            commands::review_timer::get_review_timer_state,
+            commands::review_timer::get_card_review_sessions,
+            commands::review_timer::delete_review_session,
             // Image commands
             commands::images::save_problem_image,
             commands::images::get_problem_images,
@@ -318,6 +326,7 @@ async fn main() {
             let app_state = AppState {
                 db: Arc::new(Mutex::new(db_manager)),
                 current_timer: Arc::new(Mutex::new(None)),
+                current_review_timer: Arc::new(Mutex::new(None)),
                 recording_state: Arc::new(Mutex::new(None)),
                 audio_thread_sender: Arc::new(Mutex::new(None)),
                 path_resolver,

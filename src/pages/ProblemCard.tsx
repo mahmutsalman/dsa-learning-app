@@ -25,6 +25,7 @@ import SessionHistory from '../components/SessionHistory';
 import RecordingHistory from '../components/RecordingHistory';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
+import { useReviewTimer } from '../hooks/useReviewTimer';
 import { useRecording } from '../hooks/useRecording';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
@@ -75,7 +76,11 @@ export default function ProblemCard() {
   
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
-  
+  const reviewTimer = useReviewTimer(currentCard?.id);
+
+  // Review mode state
+  const [isReviewMode, setIsReviewMode] = useState(false);
+
   // Recording functionality - integrated with backend
   const recording = useRecording(currentCard?.id);
 
@@ -1582,15 +1587,29 @@ export default function ProblemCard() {
   const toggleTimer = async () => {
     try {
       if (!currentCard) return;
-      
-      if (timer.timerState.isRunning) {
-        await timer.stopTimer();
+
+      if (isReviewMode) {
+        // Handle review timer
+        if (reviewTimer.reviewTimerState.isRunning) {
+          await reviewTimer.stopReviewTimer();
+        } else {
+          await reviewTimer.startReviewTimer(currentCard.id);
+        }
       } else {
-        await timer.startTimer(currentCard.id);
+        // Handle regular timer
+        if (timer.timerState.isRunning) {
+          await timer.stopTimer();
+        } else {
+          await timer.startTimer(currentCard.id);
+        }
       }
     } catch (err) {
       console.error('Timer error:', err);
     }
+  };
+
+  const toggleReviewMode = () => {
+    setIsReviewMode(!isReviewMode);
   };
 
 
@@ -1689,6 +1708,9 @@ export default function ProblemCard() {
                 language={language}
                 onLanguageChange={setLanguage}
                 timer={timer}
+                reviewTimer={reviewTimer}
+                isReviewMode={isReviewMode}
+                onToggleReviewMode={toggleReviewMode}
                 codeAutoSave={codeAutoSave}
                 notesAutoSave={notesAutoSave}
                 languageAutoSave={languageAutoSave}
@@ -1857,6 +1879,9 @@ export default function ProblemCard() {
               language={language}
               onLanguageChange={setLanguage}
               timer={timer}
+              reviewTimer={reviewTimer}
+              isReviewMode={isReviewMode}
+              onToggleReviewMode={toggleReviewMode}
               codeAutoSave={codeAutoSave}
               notesAutoSave={notesAutoSave}
               languageAutoSave={languageAutoSave}

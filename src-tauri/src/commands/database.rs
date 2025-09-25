@@ -901,7 +901,7 @@ fn parse_bullet_list(value: &str) -> Vec<String> {
     let mut items = Vec::new();
     
     
-    for (i, line) in lines.iter().enumerate() {
+    for (_i, line) in lines.iter().enumerate() {
         let trimmed = normalize_whitespace(line);
         
         

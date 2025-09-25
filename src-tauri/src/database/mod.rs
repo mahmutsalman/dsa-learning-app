@@ -981,6 +981,7 @@ impl DatabaseManager {
             notes: None,
             status: "In Progress".to_string(),
             total_duration: 0,
+            review_duration: Some(0),
             created_at: now,
             last_modified: now,
             parent_card_id: req.parent_card_id,
@@ -990,7 +991,7 @@ impl DatabaseManager {
     
     pub fn get_cards_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<Card>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id, is_solution
+            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, review_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE problem_id = ?1 ORDER BY card_number"
         )?;
         
@@ -1004,10 +1005,11 @@ impl DatabaseManager {
                 notes: row.get(5)?,
                 status: row.get(6)?,
                 total_duration: row.get(7)?,
-                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
-                last_modified: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                parent_card_id: row.get(10)?,
-                is_solution: Some(row.get::<_, i32>(11)? == 1), // Convert SQLite integer to boolean
+                review_duration: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                last_modified: row.get::<_, String>(10)?.parse().unwrap_or_else(|_| Utc::now()),
+                parent_card_id: row.get(11)?,
+                is_solution: Some(row.get::<_, i32>(12)? == 1), // Convert SQLite integer to boolean
             })
         })?;
         
@@ -1021,7 +1023,7 @@ impl DatabaseManager {
     
     pub fn get_card_by_id(&self, card_id: &str) -> anyhow::Result<Option<Card>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, created_at, last_modified, parent_card_id, is_solution
+            "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, review_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE id = ?1"
         )?;
         
@@ -1035,10 +1037,11 @@ impl DatabaseManager {
                 notes: row.get(5)?,
                 status: row.get(6)?,
                 total_duration: row.get(7)?,
-                created_at: row.get::<_, String>(8)?.parse().unwrap_or_else(|_| Utc::now()),
-                last_modified: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                parent_card_id: row.get(10)?,
-                is_solution: Some(row.get::<_, i32>(11)? == 1), // Convert SQLite integer to boolean
+                review_duration: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                last_modified: row.get::<_, String>(10)?.parse().unwrap_or_else(|_| Utc::now()),
+                parent_card_id: row.get(11)?,
+                is_solution: Some(row.get::<_, i32>(12)? == 1), // Convert SQLite integer to boolean
             })
         })?;
         
@@ -3495,5 +3498,156 @@ impl DatabaseManager {
         }
 
         Ok(results)
+    }
+
+    // Review Timer Session Methods
+
+    /// Start a new review timer session for a card
+    pub fn start_review_timer_session(&self, card_id: &str) -> anyhow::Result<(ReviewSession, String)> {
+        let session_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+        let date = now.format("%Y-%m-%d").to_string();
+        let now_str = now.to_rfc3339();
+
+        // Get problem_id from card (required for review_work_sessions)
+        let problem_id: String = self.connection.query_row(
+            "SELECT problem_id FROM cards WHERE id = ?1",
+            [card_id],
+            |row| row.get(0)
+        )?;
+
+        // Create review session
+        self.connection.execute(
+            "INSERT INTO review_sessions (id, card_id, start_time, date, is_active) VALUES (?1, ?2, ?3, ?4, 1)",
+            params![session_id, card_id, now_str, date]
+        )?;
+
+        // Create review work session with correct column names
+        let work_session_id = Uuid::new_v4().to_string();
+        let hour_slot = now.hour() as i32; // Current hour (0-23)
+
+        self.connection.execute(
+            "INSERT INTO review_work_sessions (id, problem_id, card_id, session_date, start_timestamp, duration_seconds, hour_slot) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![work_session_id, problem_id, card_id, date, now_str, 0, hour_slot]
+        )?;
+
+        let session = ReviewSession {
+            id: session_id.clone(),
+            card_id: card_id.to_string(),
+            start_time: now,
+            end_time: None,
+            duration: None,
+            date,
+            is_active: true,
+            notes: None,
+            original_session_id: None,
+            created_at: now,
+        };
+
+        Ok((session, work_session_id))
+    }
+
+    /// End a review timer session
+    pub fn end_review_timer_session(&self, session_id: &str, work_session_id: Option<&str>) -> anyhow::Result<()> {
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+
+        // Get session start time to calculate duration
+        let session_start: DateTime<Utc> = self.connection.query_row(
+            "SELECT start_time FROM review_sessions WHERE id = ?1",
+            [session_id],
+            |row| {
+                let start_str: String = row.get(0)?;
+                Ok(start_str.parse().unwrap_or_else(|_| Utc::now()))
+            }
+        )?;
+
+        let duration = (now - session_start).num_seconds() as i32;
+
+        // End the review session
+        self.connection.execute(
+            "UPDATE review_sessions SET end_time = ?1, duration = ?2, is_active = 0 WHERE id = ?3",
+            params![now_str, duration, session_id]
+        )?;
+
+        // End the work session if provided
+        if let Some(work_id) = work_session_id {
+            self.connection.execute(
+                "UPDATE review_work_sessions SET end_timestamp = ?1, duration_seconds = ?2 WHERE id = ?3",
+                params![now_str, duration, work_id]
+            )?;
+        }
+
+        // Update the card's review_duration
+        self.connection.execute(
+            "UPDATE cards SET review_duration = review_duration + ?1 WHERE id = (SELECT card_id FROM review_sessions WHERE id = ?2)",
+            params![duration, session_id]
+        )?;
+
+        Ok(())
+    }
+
+    /// Get all review sessions for a card
+    pub fn get_card_review_sessions(&self, card_id: &str) -> anyhow::Result<Vec<ReviewSession>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, card_id, start_time, end_time, duration, date, is_active, notes, original_session_id, created_at
+             FROM review_sessions WHERE card_id = ?1 ORDER BY start_time DESC"
+        )?;
+
+        let session_iter = stmt.query_map([card_id], |row| {
+            Ok(ReviewSession {
+                id: row.get(0)?,
+                card_id: row.get(1)?,
+                start_time: row.get::<_, String>(2)?.parse().unwrap_or_else(|_| Utc::now()),
+                end_time: row.get::<_, Option<String>>(3)?
+                    .map(|s| s.parse().unwrap_or_else(|_| Utc::now())),
+                duration: row.get(4)?,
+                date: row.get(5)?,
+                is_active: row.get::<_, i32>(6)? == 1,
+                notes: row.get(7)?,
+                original_session_id: row.get(8)?,
+                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+            })
+        })?;
+
+        let mut sessions = Vec::new();
+        for session in session_iter {
+            sessions.push(session?);
+        }
+
+        Ok(sessions)
+    }
+
+    /// Delete a review session
+    pub fn delete_review_session(&self, session_id: &str) -> anyhow::Result<()> {
+        // Get session duration to subtract from card's review_duration
+        let duration: Option<i32> = self.connection.query_row(
+            "SELECT duration FROM review_sessions WHERE id = ?1",
+            [session_id],
+            |row| Ok(row.get(0)?)
+        ).optional()?;
+
+        if let Some(dur) = duration {
+            // Update card's review_duration
+            self.connection.execute(
+                "UPDATE cards SET review_duration = review_duration - ?1 WHERE id = (SELECT card_id FROM review_sessions WHERE id = ?2)",
+                params![dur, session_id]
+            )?;
+        }
+
+        // Delete related work sessions by matching card_id and start_timestamp
+        // Since we don't have a direct foreign key, we use the card and time relationship
+        self.connection.execute(
+            "DELETE FROM review_work_sessions WHERE card_id = (SELECT card_id FROM review_sessions WHERE id = ?1) AND start_timestamp = (SELECT start_time FROM review_sessions WHERE id = ?1)",
+            [session_id]
+        )?;
+
+        // Delete the review session
+        self.connection.execute(
+            "DELETE FROM review_sessions WHERE id = ?1",
+            [session_id]
+        )?;
+
+        Ok(())
     }
 }

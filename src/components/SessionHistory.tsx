@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ClockIcon, CalendarDaysIcon, ChatBubbleBottomCenterTextIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { TimeSession } from '../types';
+import { ClockIcon, CalendarDaysIcon, ChatBubbleBottomCenterTextIcon, TrashIcon, AcademicCapIcon, BookOpenIcon } from '@heroicons/react/24/outline';
+import { TimeSession, ReviewSession } from '../types';
 import { WorkSessionService } from '../services/WorkSessionService';
 
 interface SessionHistoryProps {
@@ -11,8 +11,12 @@ interface SessionHistoryProps {
   onSessionDeleted?: () => void; // Callback to refresh card data after deletion
 }
 
+type SessionType = 'study' | 'review';
+
 export default function SessionHistory({ cardId, isOpen, onClose, onSessionDeleted }: SessionHistoryProps) {
+  const [activeTab, setActiveTab] = useState<SessionType>('study');
   const [sessions, setSessions] = useState<TimeSession[]>([]);
+  const [reviewSessions, setReviewSessions] = useState<ReviewSession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ sessionId: string | null; isDeleting: boolean }>({
@@ -28,13 +32,19 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
 
   const loadSessions = async () => {
     if (!cardId) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      const sessionData = await invoke<TimeSession[]>('get_card_sessions', { cardId });
+      // Load both regular and review sessions
+      const [sessionData, reviewSessionData] = await Promise.all([
+        invoke<TimeSession[]>('get_card_sessions', { cardId }),
+        invoke<ReviewSession[]>('get_card_review_sessions', { cardId })
+      ]);
+
       setSessions(sessionData);
+      setReviewSessions(reviewSessionData);
     } catch (err) {
       console.error('Failed to load sessions:', err);
       setError(err as string);
@@ -76,17 +86,30 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
   };
 
   const getTotalTime = (): number => {
-    return sessions.reduce((total, session) => total + (session.duration || 0), 0);
+    const activeSessions = activeTab === 'study' ? sessions : reviewSessions;
+    return activeSessions.reduce((total, session) => total + (session.duration || 0), 0);
+  };
+
+  const getActiveSessionCount = (): number => {
+    return activeTab === 'study' ? sessions.length : reviewSessions.length;
+  };
+
+  const getActiveSessions = (): (TimeSession | ReviewSession)[] => {
+    return activeTab === 'study' ? sessions : reviewSessions;
   };
 
   const handleDeleteSession = async (sessionId: string) => {
     try {
       setDeleteConfirm({ sessionId, isDeleting: true });
 
-      await invoke('delete_session', { sessionId });
-
-      // Remove the session from local state
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
+      // Delete either regular or review session based on active tab
+      if (activeTab === 'study') {
+        await invoke('delete_session', { sessionId });
+        setSessions(prev => prev.filter(s => s.id !== sessionId));
+      } else {
+        await invoke('delete_review_session', { sessionId });
+        setReviewSessions(prev => prev.filter(s => s.id !== sessionId));
+      }
 
       // Clear the WorkSessionService cache to ensure stats are refreshed
       WorkSessionService.clearCache();
@@ -122,9 +145,39 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Session History
-            </h2>
+            <div className="flex items-center space-x-3">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Session History
+              </h2>
+
+              {/* Tab Navigation */}
+              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                <button
+                  onClick={() => setActiveTab('study')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center space-x-1.5 ${
+                    activeTab === 'study'
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  <BookOpenIcon className="h-4 w-4" />
+                  <span>Study</span>
+                  <span className="text-xs opacity-75">({sessions.length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('review')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center space-x-1.5 ${
+                    activeTab === 'review'
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  <AcademicCapIcon className="h-4 w-4" />
+                  <span>Review</span>
+                  <span className="text-xs opacity-75">({reviewSessions.length})</span>
+                </button>
+              </div>
+            </div>
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
@@ -141,7 +194,7 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
             </div>
             <div className="flex items-center space-x-2">
               <CalendarDaysIcon className="h-4 w-4" />
-              <span>Sessions: {sessions.length}</span>
+              <span>Sessions: {getActiveSessionCount()}</span>
             </div>
           </div>
         </div>
@@ -163,17 +216,21 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
                 Retry
               </button>
             </div>
-          ) : sessions.length === 0 ? (
+          ) : getActiveSessions().length === 0 ? (
             <div className="text-center py-12">
               <ClockIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-400">No sessions found for this card.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {sessions.map((session) => (
+              {getActiveSessions().map((session) => (
                 <div
                   key={session.id}
-                  className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
+                  className={`rounded-lg p-4 border ${
+                    activeTab === 'study'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                  }`}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -187,7 +244,11 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
                           <span>{formatDuration(session.duration)}</span>
                         </div>
                         {session.is_active && (
-                          <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded">
+                          <span className={`px-2 py-1 text-xs rounded ${
+                            activeTab === 'study'
+                              ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200'
+                              : 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200'
+                          }`}>
                             Active
                           </span>
                         )}
@@ -205,7 +266,11 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
                       </div>
                       
                       {session.notes && (
-                        <div className="mt-3 p-3 bg-white dark:bg-gray-800 rounded border">
+                        <div className={`mt-3 p-3 rounded border ${
+                          activeTab === 'study'
+                            ? 'bg-emerald-25 dark:bg-emerald-900/10 border-emerald-150 dark:border-emerald-800/50'
+                            : 'bg-amber-25 dark:bg-amber-900/10 border-amber-150 dark:border-amber-800/50'
+                        }`}>
                           <div className="flex items-center space-x-2 mb-2">
                             <ChatBubbleBottomCenterTextIcon className="h-4 w-4 text-gray-500" />
                             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes</span>
@@ -243,7 +308,7 @@ export default function SessionHistory({ cardId, isOpen, onClose, onSessionDelet
               Delete Session?
             </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to delete this session? This action cannot be undone and will update your total study time.
+              Are you sure you want to delete this {activeTab} session? This action cannot be undone and will update your total {activeTab} time.
             </p>
             <div className="flex justify-end space-x-3">
               <button

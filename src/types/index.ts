@@ -47,6 +47,18 @@ export interface TimeSession {
   notes?: string;
 }
 
+export interface ReviewSession {
+  id: string;
+  card_id: string;
+  start_time: string;
+  end_time?: string;
+  duration?: number; // in seconds
+  date: string;
+  is_active: boolean;
+  notes?: string;
+  original_session_id?: string;
+}
+
 export interface Recording {
   id: string;
   card_id: string;
