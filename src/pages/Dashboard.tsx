@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { PlusIcon, ClockIcon, AcademicCapIcon, TagIcon, ArrowUpTrayIcon, CheckIcon, TrashIcon, ChevronUpIcon, ChevronDownIcon, XMarkIcon, CalendarDaysIcon, SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { Tooltip } from '../components/Tooltip';
 import { Problem, Difficulty, Card, Tag, SearchState, SearchType, ProblemDeleteStats } from '../types';
 import ProblemContextMenu from '../components/ProblemContextMenu';
 import TagModal from '../components/TagModal';
@@ -1578,6 +1579,11 @@ export default function Dashboard() {
     const countLabel = problemsList.length === 1 ? 'problem' : 'problems';
     const targetSize = setType === 'study' ? dailyStudySize : dailyReviewSize;
 
+    // Create tooltip content explaining the carry-over rules
+    const tooltipContent = setType === 'study'
+      ? "📚 Daily Study Rules:\n\n• Study each problem for 10+ minutes to complete it\n• Unfinished problems carry over to the next day\n• Your progress is saved and continues where you left off\n• Complete all problems to finish your daily goal"
+      : "🔄 Daily Review Rules:\n\n• Review previously studied problems to reinforce learning\n• Update any card to mark as reviewed and remove from today's list\n• Card must be updated to count as completed review\n• Finished reviews get closer to your daily review goal\n• Problems that need more review stay in rotation";
+
     // Filter completed count to only include problems that were in the original Daily Review set
     const relevantCompletedCount = setType === 'review'
       ? completedReviewTodayIds.filter(id => originalDailyReviewIds.includes(id)).length
@@ -1605,21 +1611,27 @@ export default function Dashboard() {
     };
 
     return (
-      <div
-        key={setType}
-        className={`
-          bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700
-          transition-all duration-200
-          ${hasProblems ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md' : 'opacity-60'}
-          ${isActive ? 'border-primary-400 dark:border-primary-500 ring-2 ring-primary-400/40 dark:ring-primary-500/50' : ''}
-        `}
-        onClick={hasProblems ? handleClick : undefined}
-        role={hasProblems ? 'button' : undefined}
-        tabIndex={hasProblems ? 0 : undefined}
-        onKeyPress={hasProblems ? handleKeyPress : undefined}
-        aria-disabled={!hasProblems}
-        onContextMenu={handleContextMenu}
+      <Tooltip
+        content={tooltipContent}
+        delay={500}
+        maxWidth="350px"
+        followCursor={true}
       >
+        <div
+          key={setType}
+          className={`
+            bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm border border-gray-200 dark:border-gray-700
+            transition-all duration-200
+            ${hasProblems ? 'cursor-pointer hover:border-primary-300 dark:hover:border-primary-600 hover:shadow-md' : 'opacity-60'}
+            ${isActive ? 'border-primary-400 dark:border-primary-500 ring-2 ring-primary-400/40 dark:ring-primary-500/50' : ''}
+          `}
+          onClick={hasProblems ? handleClick : undefined}
+          role={hasProblems ? 'button' : undefined}
+          tabIndex={hasProblems ? 0 : undefined}
+          onKeyPress={hasProblems ? handleKeyPress : undefined}
+          aria-disabled={!hasProblems}
+          onContextMenu={handleContextMenu}
+        >
         <div className="flex items-start justify-between">
           <div className={`h-8 w-8 ${accentTextClass} flex-shrink-0`}>{icon}</div>
           {isActive && (
@@ -1742,7 +1754,8 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-      </div>
+        </div>
+      </Tooltip>
     );
   };
 
