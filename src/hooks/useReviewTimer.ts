@@ -50,16 +50,16 @@ export function useReviewTimer(cardId?: string): UseReviewTimerReturn {
 
       // Validate and sanitize backend state
       const sanitizedState = {
-        currentSessionId: backendState.current_session_id,
-        elapsedTime: typeof backendState.elapsed_time === 'number' && !isNaN(backendState.elapsed_time)
-          ? backendState.elapsed_time
+        currentSessionId: (backendState as any).current_session_id,
+        elapsedTime: typeof (backendState as any).elapsed_time === 'number' && !isNaN((backendState as any).elapsed_time)
+          ? (backendState as any).elapsed_time
           : 0,
-        sessionStartTime: backendState.session_start_time
-          ? new Date(backendState.session_start_time)
+        sessionStartTime: (backendState as any).session_start_time
+          ? new Date((backendState as any).session_start_time)
           : undefined,
         // Ensure all boolean fields are properly set
-        isRunning: Boolean(backendState.is_running),
-        isPaused: Boolean(backendState.is_paused)
+        isRunning: Boolean((backendState as any).is_running),
+        isPaused: Boolean((backendState as any).is_paused)
       };
 
       debugLog('Sanitized review timer state:', sanitizedState);
@@ -101,16 +101,16 @@ export function useReviewTimer(cardId?: string): UseReviewTimerReturn {
 
       // Validate and sanitize new state
       const sanitizedNewState = {
-        currentSessionId: newState.current_session_id,
-        elapsedTime: typeof newState.elapsed_time === 'number' && !isNaN(newState.elapsed_time)
-          ? newState.elapsed_time
+        currentSessionId: (newState as any).current_session_id,
+        elapsedTime: typeof (newState as any).elapsed_time === 'number' && !isNaN((newState as any).elapsed_time)
+          ? (newState as any).elapsed_time
           : 0,
-        sessionStartTime: newState.session_start_time
-          ? new Date(newState.session_start_time)
+        sessionStartTime: (newState as any).session_start_time
+          ? new Date((newState as any).session_start_time)
           : undefined,
         // Ensure all boolean fields are properly set
-        isRunning: Boolean(newState.is_running),
-        isPaused: Boolean(newState.is_paused)
+        isRunning: Boolean((newState as any).is_running),
+        isPaused: Boolean((newState as any).is_paused)
       };
 
       debugLog('Sanitized start review timer state:', sanitizedNewState);

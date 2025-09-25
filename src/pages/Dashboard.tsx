@@ -1649,12 +1649,12 @@ export default function Dashboard() {
         <div className="mt-4 flex items-baseline space-x-2">
           <span className="text-2xl font-bold text-gray-900 dark:text-white">{problemsList.length}</span>
           <span className="text-sm text-gray-500 dark:text-gray-400">{countLabel}</span>
-          {setType === 'study' && completedTodayIds.length > 0 && (
+          {setType === 'study' && (problemsList.length > 0 || completedTodayIds.length > 0) && (
             <span className="text-sm text-green-600 dark:text-green-400">
               ({completedTodayIds.length} completed)
             </span>
           )}
-          {setType === 'review' && relevantCompletedCount > 0 && (
+          {setType === 'review' && (problemsList.length > 0 || relevantCompletedCount > 0) && (
             <span className="text-sm text-green-600 dark:text-green-400">
               ({relevantCompletedCount} completed)
             </span>
@@ -1662,40 +1662,40 @@ export default function Dashboard() {
         </div>
         <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {setType === 'study' ? (
-            completedTodayIds.length > 0
-              ? `Progress: ${completedTodayIds.length}/${completedTodayIds.length + problemsList.length} completed`
+            problemsList.length > 0 || completedTodayIds.length > 0
+              ? `Progress: ${completedTodayIds.length}/${targetSize} completed`
               : `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
           ) : setType === 'review' ? (
-            relevantCompletedCount > 0
-              ? `Progress: ${relevantCompletedCount}/${relevantCompletedCount + problemsList.length} completed`
+            problemsList.length > 0 || relevantCompletedCount > 0
+              ? `Progress: ${relevantCompletedCount}/${targetSize} completed`
               : `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
           ) : (
             `Target: ${targetSize} ${targetSize === 1 ? 'problem' : 'problems'} (right-click to change)`
           )}
         </div>
 
-        {/* Progress bar for daily study */}
-        {setType === 'study' && (completedTodayIds.length > 0 || problemsList.length > 0) && (
+        {/* Progress bar for daily study - always show if target size is set */}
+        {setType === 'study' && targetSize > 0 && (
           <div className="mt-3">
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
               <div
                 className="bg-gradient-to-r from-indigo-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{
-                  width: `${completedTodayIds.length / (completedTodayIds.length + problemsList.length) * 100}%`
+                  width: `${Math.min(completedTodayIds.length / targetSize * 100, 100)}%`
                 }}
               ></div>
             </div>
           </div>
         )}
 
-        {/* Progress bar for daily review */}
-        {setType === 'review' && (relevantCompletedCount > 0 || problemsList.length > 0) && (
+        {/* Progress bar for daily review - always show if target size is set */}
+        {setType === 'review' && targetSize > 0 && (
           <div className="mt-3">
             <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
               <div
                 className="bg-gradient-to-r from-amber-500 to-amber-600 h-2 rounded-full transition-all duration-500 ease-out"
                 style={{
-                  width: `${relevantCompletedCount / (relevantCompletedCount + problemsList.length) * 100}%`
+                  width: `${Math.min(relevantCompletedCount / targetSize * 100, 100)}%`
                 }}
               ></div>
             </div>

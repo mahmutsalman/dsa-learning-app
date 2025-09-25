@@ -29,6 +29,7 @@ export interface Card {
   notes: string;
   status: CardStatus;
   total_duration: number; // in seconds
+  review_duration?: number; // in seconds, for review mode
   created_at: string;
   last_modified: string;
   parent_card_id?: string;

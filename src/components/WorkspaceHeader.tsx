@@ -732,7 +732,7 @@ export function WorkspaceHeader({
                   {screenSize !== 'xs' && (
                     <div className="flex items-center space-x-1">
                       {(isReviewMode ? reviewTimer.error : timer.error) && (
-                        <div className="text-xs text-red-500" title={isReviewMode ? reviewTimer.error : timer.error}>
+                        <div className="text-xs text-red-500" title={(isReviewMode ? reviewTimer.error : timer.error) || undefined}>
                           ⚠️
                         </div>
                       )}
