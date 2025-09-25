@@ -3163,14 +3163,28 @@ impl DatabaseManager {
     /// Get work sessions for a specific date range
     pub fn get_work_sessions_by_date_range(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
         let sql = r#"
-            SELECT 
-                ws.id, ws.problem_id, p.title as problem_title, ws.card_id,
-                ws.session_date, ws.start_timestamp, ws.end_timestamp,
-                ws.duration_seconds, ws.hour_slot, ws.created_at
-            FROM work_sessions ws
-            JOIN problems p ON ws.problem_id = p.id
-            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
-            ORDER BY ws.start_timestamp DESC
+            SELECT
+                all_sessions.id, all_sessions.problem_id, all_sessions.problem_title, all_sessions.card_id,
+                all_sessions.session_date, all_sessions.start_timestamp, all_sessions.end_timestamp,
+                all_sessions.duration_seconds, all_sessions.hour_slot, all_sessions.created_at
+            FROM (
+                SELECT
+                    ws.id, ws.problem_id, p.title as problem_title, ws.card_id,
+                    ws.session_date, ws.start_timestamp, ws.end_timestamp,
+                    ws.duration_seconds, ws.hour_slot, ws.created_at
+                FROM work_sessions ws
+                JOIN problems p ON ws.problem_id = p.id
+                WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+                UNION ALL
+                SELECT
+                    rws.id, rws.problem_id, p.title as problem_title, rws.card_id,
+                    rws.session_date, rws.start_timestamp, rws.end_timestamp,
+                    rws.duration_seconds, rws.hour_slot, rws.created_at
+                FROM review_work_sessions rws
+                JOIN problems p ON rws.problem_id = p.id
+                WHERE rws.session_date >= ?1 AND rws.session_date <= ?2
+            ) as all_sessions
+            ORDER BY all_sessions.start_timestamp DESC
         "#;
         
         let mut stmt = self.connection.prepare(sql)?;
@@ -3219,14 +3233,19 @@ impl DatabaseManager {
         let end_date = Utc::now().format("%Y-%m-%d").to_string();
         let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
         
-        // Get overall summary stats
+        // Get overall summary stats combining both work sessions and review sessions
         let sql_summary = r#"
-            SELECT 
-                COUNT(DISTINCT ws.problem_id) as unique_problems,
+            SELECT
+                COUNT(DISTINCT all_sessions.problem_id) as unique_problems,
                 COUNT(*) as total_sessions,
-                COALESCE(SUM(ws.duration_seconds), 0) as total_duration
-            FROM work_sessions ws
-            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
+                COALESCE(SUM(all_sessions.duration_seconds), 0) as total_duration
+            FROM (
+                SELECT problem_id, duration_seconds FROM work_sessions
+                WHERE session_date >= ?1 AND session_date <= ?2
+                UNION ALL
+                SELECT problem_id, duration_seconds FROM review_work_sessions
+                WHERE session_date >= ?1 AND session_date <= ?2
+            ) as all_sessions
         "#;
         
         let (unique_problems_count, total_sessions_count, total_duration_seconds) = 
@@ -3332,18 +3351,23 @@ impl DatabaseManager {
         Ok(sessions)
     }
     
-    /// Get daily work aggregates for visualization
+    /// Get daily work aggregates for visualization combining both study and review sessions
     pub fn get_daily_aggregates(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<DailyWorkSummary>> {
         let sql = r#"
-            SELECT 
-                ws.session_date,
-                COALESCE(SUM(ws.duration_seconds), 0) as total_duration_seconds,
-                COUNT(DISTINCT ws.problem_id) as unique_problems_count,
+            SELECT
+                all_sessions.session_date,
+                COALESCE(SUM(all_sessions.duration_seconds), 0) as total_duration_seconds,
+                COUNT(DISTINCT all_sessions.problem_id) as unique_problems_count,
                 COUNT(*) as total_sessions_count
-            FROM work_sessions ws
-            WHERE ws.session_date >= ?1 AND ws.session_date <= ?2
-            GROUP BY ws.session_date
-            ORDER BY ws.session_date ASC
+            FROM (
+                SELECT session_date, duration_seconds, problem_id FROM work_sessions
+                WHERE session_date >= ?1 AND session_date <= ?2
+                UNION ALL
+                SELECT session_date, duration_seconds, problem_id FROM review_work_sessions
+                WHERE session_date >= ?1 AND session_date <= ?2
+            ) as all_sessions
+            GROUP BY all_sessions.session_date
+            ORDER BY all_sessions.session_date ASC
         "#;
         
         let mut stmt = self.connection.prepare(sql)?;
