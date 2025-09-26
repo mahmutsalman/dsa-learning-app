@@ -27,6 +27,7 @@ import { useAutoSave } from '../hooks/useAutoSave';
 import { useTimer } from '../hooks/useTimer';
 import { useReviewTimer } from '../hooks/useReviewTimer';
 import { useRecording } from '../hooks/useRecording';
+import { useReviewAudio } from '../hooks/useReviewAudio';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
@@ -55,6 +56,7 @@ export default function ProblemCard() {
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, isDeleting: false });
   const [sessionHistory, setSessionHistory] = useState({ isOpen: false });
   const [recordingHistory, setRecordingHistory] = useState({ isOpen: false });
+  const [reviewRecordingHistory, setReviewRecordingHistory] = useState({ isOpen: false });
   const [previousProblemId, setPreviousProblemId] = useState<string | null>(null);
   
   // Store original regular card when entering solution mode
@@ -77,6 +79,7 @@ export default function ProblemCard() {
   // Timer functionality - integrated with backend
   const timer = useTimer(currentCard?.id);
   const reviewTimer = useReviewTimer(currentCard?.id);
+  const reviewAudio = useReviewAudio(problemId, currentCard?.id);
 
   // Review mode state
   const [isReviewMode, setIsReviewMode] = useState(false);
@@ -1655,6 +1658,26 @@ export default function ProblemCard() {
     }
   };
 
+  const startReviewRecording = useCallback(async () => {
+    try {
+      if (!currentCard) {
+        console.warn('No card selected to start review recording');
+        return;
+      }
+      await reviewAudio.startReviewRecording(currentCard.id);
+    } catch (err) {
+      console.error('Review recording start error:', err);
+    }
+  }, [currentCard, reviewAudio]);
+
+  const stopReviewRecording = useCallback(async () => {
+    try {
+      await reviewAudio.stopReviewRecording();
+    } catch (err) {
+      console.error('Review recording stop error:', err);
+    }
+  }, [reviewAudio]);
+
   // Handle back navigation to previous related problem
   const handleBackToPreviousProblem = () => {
     if (previousProblemId) {
@@ -1716,12 +1739,22 @@ export default function ProblemCard() {
                 languageAutoSave={languageAutoSave}
                 recordingState={recording.recordingState}
                 recordingsCount={recording.recordingsCount}
+                reviewAudio={{
+                  state: reviewAudio.reviewRecordingState,
+                  isRecordingGlobally: reviewAudio.isRecordingGlobally,
+                  isRecordingForProblem: reviewAudio.isRecordingForProblem,
+                  isRecordingForCurrentCard: reviewAudio.isRecordingForCurrentCard,
+                  isLoading: reviewAudio.isLoading
+                }}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
+                onStartReviewRecording={startReviewRecording}
+                onStopReviewRecording={stopReviewRecording}
                 onNavigateCard={navigateToCard}
                 onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
                 onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
                 onOpenRecordingHistory={() => setRecordingHistory({ isOpen: true })}
+                onOpenReviewRecordingHistory={() => setReviewRecordingHistory({ isOpen: true })}
                 formatTimeDisplay={formatTimeDisplay}
                 getSiblingCards={getSiblingCards}
                 previousProblemId={previousProblemId}
@@ -1839,9 +1872,19 @@ export default function ProblemCard() {
           
           {/* Recording History Modal */}
           <RecordingHistory
+            scope="card"
             cardId={currentCard?.id}
             isOpen={recordingHistory.isOpen}
             onClose={() => setRecordingHistory({ isOpen: false })}
+          />
+
+          {/* Review Recording History Modal */}
+          <RecordingHistory
+            scope="review"
+            problemId={problem.id}
+            isOpen={reviewRecordingHistory.isOpen}
+            onClose={() => setReviewRecordingHistory({ isOpen: false })}
+            headerLabel="Review Recording History"
           />
           
           {/* Card Image Modal */}
@@ -1887,12 +1930,22 @@ export default function ProblemCard() {
               languageAutoSave={languageAutoSave}
               recordingState={recording.recordingState}
               recordingsCount={recording.recordingsCount}
+              reviewAudio={{
+                state: reviewAudio.reviewRecordingState,
+                isRecordingGlobally: reviewAudio.isRecordingGlobally,
+                isRecordingForProblem: reviewAudio.isRecordingForProblem,
+                isRecordingForCurrentCard: reviewAudio.isRecordingForCurrentCard,
+                isLoading: reviewAudio.isLoading
+              }}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}
+              onStartReviewRecording={startReviewRecording}
+              onStopReviewRecording={stopReviewRecording}
               onNavigateCard={navigateToCard}
               onDeleteCard={() => setDeleteModal({ isOpen: true, isDeleting: false })}
               onOpenSessionHistory={() => setSessionHistory({ isOpen: true })}
               onOpenRecordingHistory={() => setRecordingHistory({ isOpen: true })}
+              onOpenReviewRecordingHistory={() => setReviewRecordingHistory({ isOpen: true })}
               formatTimeDisplay={formatTimeDisplay}
               getSiblingCards={getSiblingCards}
               previousProblemId={previousProblemId}
@@ -2008,9 +2061,19 @@ export default function ProblemCard() {
       
       {/* Recording History Modal */}
       <RecordingHistory
+        scope="card"
         cardId={currentCard?.id}
         isOpen={recordingHistory.isOpen}
         onClose={() => setRecordingHistory({ isOpen: false })}
+      />
+
+      {/* Review Recording History Modal */}
+      <RecordingHistory
+        scope="review"
+        problemId={problem?.id || problemId || ''}
+        isOpen={reviewRecordingHistory.isOpen}
+        onClose={() => setReviewRecordingHistory({ isOpen: false })}
+        headerLabel="Review Recording History"
       />
 
       {/* Card Image Modal */}

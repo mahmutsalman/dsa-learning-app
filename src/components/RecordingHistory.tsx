@@ -18,15 +18,27 @@ interface Recording {
   filepath: string;
   file_size?: number;
   highlight_color?: RecordingHighlightColor | null;
+  problem_id?: string | null;
+  recording_type?: string | null;
 }
 
 interface RecordingHistoryProps {
-  cardId: string | undefined;
+  cardId?: string;
+  problemId?: string;
+  scope?: 'card' | 'review';
   isOpen: boolean;
   onClose: () => void;
+  headerLabel?: string;
 }
 
-export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingHistoryProps) {
+export default function RecordingHistory({
+  cardId,
+  problemId,
+  scope = 'card',
+  isOpen,
+  onClose,
+  headerLabel,
+}: RecordingHistoryProps) {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +73,14 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
     purple: 'Idea',
   };
   const baseRecordingClasses = 'rounded-lg p-4 transition-colors cursor-pointer select-none border border-transparent bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700';
+  const isReviewScope = scope === 'review';
+  const headerTitle = headerLabel ?? (isReviewScope ? 'Review Recording History' : 'Recording History');
+  const emptyStateTitle = isReviewScope ? 'No review recordings yet' : 'No recordings yet';
+  const emptyStateHint = isReviewScope
+    ? 'Start a review recording from the microphone context menu to begin capturing your walk-through.'
+    : 'Start recording by clicking the microphone button to create your first recording.';
+  const iconAccentClass = isReviewScope ? 'text-purple-600 dark:text-purple-400' : 'text-blue-600 dark:text-blue-400';
+  const loadingText = isReviewScope ? 'Loading review recordings...' : 'Loading recordings...';
 
   useEffect(() => {
     return () => {
@@ -70,10 +90,22 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
   }, []);
 
   useEffect(() => {
-    if (isOpen && cardId) {
-      loadRecordings();
+    if (!isOpen) return;
+
+    if (scope === 'card') {
+      if (cardId) {
+        loadRecordings();
+      } else {
+        setRecordings([]);
+      }
+    } else if (scope === 'review') {
+      if (problemId) {
+        loadRecordings();
+      } else {
+        setRecordings([]);
+      }
     }
-  }, [isOpen, cardId]);
+  }, [isOpen, cardId, problemId, scope]);
 
   // Add keyboard navigation for delete confirmation modal
   useEffect(() => {
@@ -92,13 +124,17 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
   }, [deleteConfirm.isOpen]);
 
   const loadRecordings = async () => {
-    if (!cardId) return;
-    
+    if (scope === 'card' && !cardId) return;
+    if (scope === 'review' && !problemId) return;
+
     setLoading(true);
     setError(null);
-    
+
     try {
-      const recordingData = await invoke<Recording[]>('get_card_recordings', { cardId });
+      const recordingData = await invoke<Recording[]>(
+        scope === 'card' ? 'get_card_recordings' : 'get_problem_review_recordings',
+        scope === 'card' ? { cardId } : { problemId }
+      );
       const normalized = recordingData.map((recording) => ({
         ...recording,
         highlight_color: recording.highlight_color ?? null,
@@ -261,9 +297,9 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center space-x-3">
-            <MicrophoneIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <MicrophoneIcon className={`h-6 w-6 ${iconAccentClass}`} />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Recording History</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{headerTitle}</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {recordings.length} recording{recordings.length !== 1 ? 's' : ''} • 
                 Total: {formatDuration(getTotalDuration())} • 
@@ -285,8 +321,12 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
         <div className="flex-1 overflow-y-auto p-6">
           {loading && (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-500 dark:text-gray-400">Loading recordings...</p>
+              <div
+                className={`animate-spin rounded-full h-8 w-8 border-b-2 mx-auto ${
+                  isReviewScope ? 'border-purple-500' : 'border-blue-600'
+                }`}
+              ></div>
+              <p className="mt-2 text-gray-500 dark:text-gray-400">{loadingText}</p>
             </div>
           )}
 
@@ -302,10 +342,8 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
           {!loading && !error && recordings.length === 0 && (
             <div className="text-center py-12">
               <MicrophoneIcon className="h-12 w-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No recordings yet</h3>
-              <p className="text-gray-500 dark:text-gray-400">
-                Start recording by clicking the microphone button to create your first recording.
-              </p>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">{emptyStateTitle}</h3>
+              <p className="text-gray-500 dark:text-gray-400">{emptyStateHint}</p>
             </div>
           )}
 
@@ -361,6 +399,12 @@ export default function RecordingHistory({ cardId, isOpen, onClose }: RecordingH
                               {recording.file_size && (
                                 <div className="flex items-center space-x-1">
                                   <span>{formatFileSize(recording.file_size)}</span>
+                                </div>
+                              )}
+                              {isReviewScope && (
+                                <div className="flex items-center space-x-1">
+                                  <span className="uppercase text-[10px] font-semibold text-purple-500">Source Card</span>
+                                  <span>{recording.card_id || '—'}</span>
                                 </div>
                               )}
                             </div>

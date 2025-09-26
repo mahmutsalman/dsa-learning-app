@@ -1,9 +1,9 @@
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 use crate::database::DatabaseManager;
 use crate::path_resolver::PathResolver;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 
 // Audio command types (moved here to avoid circular dependency)
 #[derive(Debug)]
@@ -47,11 +47,20 @@ pub struct AppState {
     pub path_resolver: Arc<PathResolver>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RecordingMode {
+    Card,
+    Review,
+}
+
 // Recording session state (without the non-Send cpal Stream)
 #[derive(Debug, Clone)]
 pub struct RecordingSession {
     pub id: String,
     pub card_id: String,
+    pub problem_id: String,
+    pub recording_mode: RecordingMode,
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
     pub filename: String,
@@ -65,10 +74,10 @@ pub struct Problem {
     pub title: String,
     pub description: String,
     pub difficulty: String, // 'Easy', 'Medium', 'Hard'
-    pub topic: String,   // JSON string for array
+    pub topic: String,      // JSON string for array
     pub leetcode_url: Option<String>,
-    pub constraints: String, // JSON string for array
-    pub hints: String,       // JSON string for array
+    pub constraints: String,                 // JSON string for array
+    pub hints: String,                       // JSON string for array
     pub related_problem_ids: Option<String>, // JSON string for array of problem IDs
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>, // Only set when actually updated
@@ -88,7 +97,7 @@ pub struct FrontendProblem {
     pub related_problem_ids: Vec<String>, // Array of related problem IDs
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>, // Only set when actually updated
-    pub tags: Vec<String>, // For compatibility with frontend expectations
+    pub tags: Vec<String>,                 // For compatibility with frontend expectations
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -99,8 +108,8 @@ pub struct Card {
     pub code: Option<String>,
     pub language: String,
     pub notes: Option<String>,
-    pub status: String, // 'In Progress', 'Completed', 'Paused'
-    pub total_duration: i32, // in seconds (for original study)
+    pub status: String,               // 'In Progress', 'Completed', 'Paused'
+    pub total_duration: i32,          // in seconds (for original study)
     pub review_duration: Option<i32>, // in seconds (for review sessions)
     pub created_at: DateTime<Utc>,
     pub last_modified: DateTime<Utc>,
@@ -285,6 +294,8 @@ pub struct Recording {
     pub filepath: String,
     pub file_size: Option<i64>,
     pub highlight_color: Option<String>,
+    pub problem_id: Option<String>,
+    pub recording_type: Option<String>,
 }
 
 // Tag models
@@ -338,7 +349,7 @@ pub struct TimerSession {
     pub card_id: String,
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
-    pub pause_duration: i32, // in seconds
+    pub pause_duration: i32,             // in seconds
     pub work_session_id: Option<String>, // Associated work session ID for detailed tracking
 }
 
@@ -349,9 +360,9 @@ pub struct ReviewTimerSession {
     pub card_id: String,
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
-    pub pause_duration: i32, // in seconds
+    pub pause_duration: i32,                    // in seconds
     pub review_work_session_id: Option<String>, // Associated review work session ID
-    pub original_session_id: Option<String>, // Reference to original study session
+    pub original_session_id: Option<String>,    // Reference to original study session
 }
 
 // Recording-specific models for in-memory recording state
@@ -367,6 +378,12 @@ pub struct RecordingState {
     pub recording_start_time: Option<DateTime<Utc>>,
     #[serde(rename = "elapsedRecordingTime")]
     pub elapsed_recording_time: i32, // in seconds
+    #[serde(rename = "recordingMode")]
+    pub recording_mode: Option<RecordingMode>,
+    #[serde(rename = "cardId")]
+    pub card_id: Option<String>,
+    #[serde(rename = "problemId")]
+    pub problem_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -451,7 +468,7 @@ pub struct ProblemsWorkedTodayResponse {
 pub struct DailyWorkStats {
     pub problems_worked: i32,
     pub total_study_time_today: i32, // in seconds
-    pub date: String, // ISO date string (YYYY-MM-DD)
+    pub date: String,                // ISO date string (YYYY-MM-DD)
 }
 
 // Work session models for detailed time tracking and visualization

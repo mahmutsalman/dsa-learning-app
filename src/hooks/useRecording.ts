@@ -7,6 +7,9 @@ export interface RecordingState {
   currentRecordingId?: string;
   recordingStartTime?: Date;
   elapsedRecordingTime: number; // in seconds
+  recordingMode?: 'card' | 'review';
+  cardId?: string;
+  problemId?: string;
 }
 
 export interface RecordingInfo {
@@ -66,7 +69,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       debugLog('Refreshing recording state...');
       setError(null);
       
-      const backendState = await invoke<RecordingState>('get_recording_state');
+      const backendState = await invoke<any>('get_recording_state');
       debugLog('Backend recording state received:', backendState);
       
       // Validate and sanitize backend state
@@ -80,7 +83,12 @@ export function useRecording(cardId?: string): UseRecordingReturn {
           : undefined,
         // Ensure all boolean fields are properly set
         isRecording: Boolean(backendState.isRecording),
-        isPaused: Boolean(backendState.isPaused)
+        isPaused: Boolean(backendState.isPaused),
+        recordingMode: backendState.recordingMode === 'review' || backendState.recordingMode === 'card'
+          ? backendState.recordingMode
+          : undefined,
+        cardId: typeof backendState.cardId === 'string' ? backendState.cardId : undefined,
+        problemId: typeof backendState.problemId === 'string' ? backendState.problemId : undefined
       };
       
       debugLog('Sanitized recording state:', sanitizedState);
@@ -109,7 +117,10 @@ export function useRecording(cardId?: string): UseRecordingReturn {
         isPaused: false,
         currentRecordingId: recordingInfo.filename,
         recordingStartTime: new Date(),
-        elapsedRecordingTime: 0
+        elapsedRecordingTime: 0,
+        recordingMode: 'card',
+        cardId: targetCardId,
+        problemId: undefined
       });
     } catch (err) {
       setError(err as string);
@@ -133,7 +144,10 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       setRecordingState({
         isRecording: false,
         isPaused: false,
-        elapsedRecordingTime: 0
+        elapsedRecordingTime: 0,
+        recordingMode: undefined,
+        cardId: undefined,
+        problemId: undefined
       });
       
       // Reload recordings list
@@ -190,7 +204,10 @@ export function useRecording(cardId?: string): UseRecordingReturn {
     setRecordingState({
       isRecording: false,
       isPaused: false,
-      elapsedRecordingTime: 0
+      elapsedRecordingTime: 0,
+      recordingMode: undefined,
+      cardId: undefined,
+      problemId: undefined
     });
     setRecordings([]);
     setError(null);

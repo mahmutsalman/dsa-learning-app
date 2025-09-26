@@ -23,6 +23,8 @@ import type { UseTimerReturn } from '../hooks/useTimer';
 import type { UseReviewTimerReturn } from '../hooks/useReviewTimer';
 import type { AutoSaveState } from '../hooks/useAutoSave';
 import { SolutionCardButton, SolutionCardIndicator } from '../features/solution-card';
+import ReviewRecordingContextMenu from './ReviewRecordingContextMenu';
+import type { ReviewRecordingState } from '../hooks/useReviewAudio';
 
 interface WorkspaceHeaderProps {
   problem: Problem;
@@ -41,6 +43,7 @@ interface WorkspaceHeaderProps {
     isRecording: boolean;
     isPaused: boolean;
     elapsedRecordingTime: number;
+    recordingMode?: 'card' | 'review';
   };
   recordingsCount?: number;
   onToggleTimer: () => void;
@@ -56,6 +59,16 @@ interface WorkspaceHeaderProps {
   // Solution card props
   isViewingSolution?: boolean;
   onSolutionToggle?: (event: React.KeyboardEvent | React.MouseEvent) => void;
+  reviewAudio: {
+    state: ReviewRecordingState;
+    isRecordingGlobally: boolean;
+    isRecordingForProblem: boolean;
+    isRecordingForCurrentCard: boolean;
+    isLoading: boolean;
+  };
+  onStartReviewRecording: () => void;
+  onStopReviewRecording: () => void;
+  onOpenReviewRecordingHistory: () => void;
 }
 
 // Hook to measure container available width with enhanced stability controls
@@ -217,6 +230,10 @@ export function WorkspaceHeader({
   isViewingSolution = false,
   onSolutionToggle,
   isTransitioning = false,
+  reviewAudio,
+  onStartReviewRecording,
+  onStopReviewRecording,
+  onOpenReviewRecordingHistory,
 }: WorkspaceHeaderProps & { isTransitioning?: boolean }) {
   const navigate = useNavigate();
   const timerButtonRef = useRef<HTMLButtonElement>(null);
@@ -229,6 +246,26 @@ export function WorkspaceHeader({
   const [showTimerDropdown, setShowTimerDropdown] = useState(false);
   const [showRecordingDropdown, setShowRecordingDropdown] = useState(false);
   const [fromAnalytics, setFromAnalytics] = useState(false);
+  const [reviewMenuPosition, setReviewMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const isReviewRecordingActive = reviewAudio.isRecordingGlobally;
+  const isReviewRecordingOnThisProblem = reviewAudio.isRecordingForProblem;
+  const isReviewRecordingOnCurrentCard = reviewAudio.isRecordingForCurrentCard;
+  const reviewRecordingElapsed = reviewAudio.state.elapsedRecordingTime;
+  const reviewRecordingSourceCardId = reviewAudio.state.sourceCardId;
+  const isCardRecordingActive = recordingState.isRecording && recordingState.recordingMode !== 'review';
+  const canStartReviewRecording = Boolean(
+    currentCard &&
+    !isViewingSolution &&
+    !isCardRecordingActive &&
+    !isReviewRecordingActive &&
+    !reviewAudio.isLoading
+  );
+  const canStopReviewRecording = isReviewRecordingActive && !reviewAudio.isLoading;
+  const recordingButtonTitle = isReviewRecordingActive
+    ? 'Review recording in progress'
+    : recordingState.isRecording
+      ? 'Stop recording'
+      : 'Start recording';
 
   // Detect if this ProblemCard was opened from Analytics
   useEffect(() => {
@@ -273,11 +310,14 @@ export function WorkspaceHeader({
 
   // Active timer state - accessible throughout component
   const activeTimerState = isReviewMode ? reviewTimer.reviewTimerState : timer.timerState;
+  const isTimerLockedToAnotherCard = isReviewMode && isReviewRecordingOnThisProblem && !isReviewRecordingOnCurrentCard;
+  const displayTimerIsRunning = !isTimerLockedToAnotherCard && activeTimerState.isRunning;
+  const displayElapsedTime = isTimerLockedToAnotherCard ? 0 : activeTimerState.elapsedTime;
 
   // Smart dynamic timer display logic based on available container width and mode
   const getTimerDisplayConfig = () => {
-    const liveTotalDuration = activeTimerState.isRunning
-      ? (isReviewMode ? reviewTimer.totalReviewDuration : timer.totalDuration) + activeTimerState.elapsedTime
+    const liveTotalDuration = displayTimerIsRunning
+      ? (isReviewMode ? reviewTimer.totalReviewDuration : timer.totalDuration) + displayElapsedTime
       : (isReviewMode ? reviewTimer.totalReviewDuration : timer.totalDuration);
     
     // Determine compact level with enhanced hysteresis to prevent oscillation
@@ -292,7 +332,7 @@ export function WorkspaceHeader({
       format = 'Single';
       return {
         showSingle: true,
-        primaryTime: activeTimerState.isRunning ? activeTimerState.elapsedTime : liveTotalDuration,
+        primaryTime: displayTimerIsRunning ? displayElapsedTime : liveTotalDuration,
         primaryLabel: '',
         showSeconds: false,
         compactLevel,
@@ -305,7 +345,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: '',
         secondaryLabel: '',
         showSeconds: false,
@@ -320,7 +360,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: '',
         secondaryLabel: '',
         showSeconds: false,
@@ -334,7 +374,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: 'Tot:',
         secondaryLabel: 'Now:',
         showSeconds: false,
@@ -349,7 +389,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: 'Tot:',
         secondaryLabel: 'Now:',
         showSeconds: false,
@@ -363,7 +403,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: 'Total:',
         secondaryLabel: 'Current:',
         showSeconds: false,
@@ -377,7 +417,7 @@ export function WorkspaceHeader({
       return {
         showSingle: false,
         primaryTime: liveTotalDuration,
-        secondaryTime: activeTimerState.elapsedTime,
+        secondaryTime: displayElapsedTime,
         primaryLabel: 'Total:',
         secondaryLabel: 'Current:',
         showSeconds: false,
@@ -624,6 +664,12 @@ export function WorkspaceHeader({
             {/* Timer with integrated Session History */}
             <div 
               className="relative focus-minimize" 
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setShowRecordingDropdown(false);
+                setReviewMenuPosition({ x: event.clientX, y: event.clientY });
+              }}
               onMouseLeave={(e) => {
                 // Add small delay and check if mouse is moving to dropdown
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -646,20 +692,20 @@ export function WorkspaceHeader({
                 <button
                   ref={timerButtonRef}
                   onClick={onToggleTimer}
-                  disabled={(isReviewMode ? reviewTimer.isLoading : timer.isLoading) || isViewingSolution}
+                  disabled={(isReviewMode ? reviewTimer.isLoading : timer.isLoading) || isViewingSolution || isTimerLockedToAnotherCard}
                   className={`header-scale-button header-timer-button with-icon transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
                     isReviewMode
                       ? 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-800/30 border border-amber-200 dark:border-amber-700'
                       : 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 border border-emerald-200 dark:border-emerald-700'
                   }`}
                   style={{ gap: timerConfig.spacious ? '0.75rem' : timerConfig.noSpacing ? '0.25rem' : '0.5rem' }}
-                  title={activeTimerState.isRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
-                  aria-label={activeTimerState.isRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
-                  aria-pressed={activeTimerState.isRunning}
+                  title={displayTimerIsRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
+                  aria-label={displayTimerIsRunning ? `Stop ${isReviewMode ? 'review' : 'study'} timer session` : `Start ${isReviewMode ? 'review' : 'study'} timer session`}
+                  aria-pressed={displayTimerIsRunning}
                 >
                   {/* Play/Stop Icon */}
                   <div className="flex-shrink-0">
-                    {activeTimerState.isRunning ? (
+                    {displayTimerIsRunning ? (
                       <StopIcon className="h-4 w-4 text-red-500" />
                     ) : (
                       <PlayIcon className={`h-4 w-4 ${
@@ -711,7 +757,7 @@ export function WorkspaceHeader({
                         {/* Secondary time display - only for levels 3+ */}
                         {timerConfig.compactLevel >= 3 && (
                           <span className={`text-xs font-mono transition-colors whitespace-nowrap ${
-                            activeTimerState.isRunning
+                            displayTimerIsRunning
                               ? 'text-red-500 dark:text-red-400'
                               : isReviewMode
                                 ? 'text-amber-600 dark:text-amber-400'
@@ -824,7 +870,7 @@ export function WorkspaceHeader({
                   </button>
 
                   {/* TEMPORARY TEST BUTTON - TO BE REMOVED */}
-                  {activeTimerState.isRunning && (
+                  {displayTimerIsRunning && (
                     <button
                       onClick={async () => {
                         try {
@@ -861,8 +907,14 @@ export function WorkspaceHeader({
             </div>
 
             {/* Recording with integrated Recording History */}
-            <div 
-              className="relative focus-minimize" 
+            <div
+              className="relative focus-minimize"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setShowRecordingDropdown(false);
+                setReviewMenuPosition({ x: event.clientX, y: event.clientY });
+              }}
               onMouseLeave={(e) => {
                 // Add small delay and check if mouse is moving to dropdown
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -884,15 +936,21 @@ export function WorkspaceHeader({
                 {/* Main Recording Button */}
                 <button
                   onClick={onToggleRecording}
-                  disabled={isViewingSolution}
+                  disabled={isViewingSolution || isReviewRecordingActive}
                   className={`header-scale-button header-timer-button with-icon transition-colors ${
                     recordingState.isRecording
                       ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                       : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title={recordingState.isRecording ? "Stop recording" : "Start recording"}
-                  aria-label={recordingState.isRecording ? "Stop recording" : "Start recording"}
-                  aria-pressed={recordingState.isRecording}
+                  title={recordingButtonTitle}
+                  aria-label={recordingButtonTitle}
+                  aria-pressed={recordingState.isRecording && recordingState.recordingMode !== 'review'}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setShowRecordingDropdown(false);
+                    setReviewMenuPosition({ x: event.clientX, y: event.clientY });
+                  }}
                 >
                   {/* Mic Icon with Recording Badge */}
                   <div className="flex-shrink-0 relative">
@@ -905,7 +963,7 @@ export function WorkspaceHeader({
                   </div>
                   
                   {/* Recording Timer Display - responsive */}
-                  {recordingState.isRecording && (
+                  {recordingState.isRecording && recordingState.recordingMode !== 'review' && (
                     <div className="flex flex-col items-center min-w-0">
                       <span className={`text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap ${
                         screenSize === 'xs' ? 'hidden' : ''
@@ -915,6 +973,21 @@ export function WorkspaceHeader({
                     </div>
                   )}
                 </button>
+
+                {isReviewRecordingActive && (
+                  <div className="ml-3 px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-200 text-xs font-medium flex items-center space-x-2">
+                    <span className="relative inline-flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                    </span>
+                    <span>
+                      Review recording • {formatTimeDisplay(reviewRecordingElapsed || 0, false)}
+                      {reviewRecordingSourceCardId && !isReviewRecordingOnCurrentCard && (
+                        <span className="ml-1 opacity-70">(source card: {reviewRecordingSourceCardId})</span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 
                 {/* Recording History Dropdown Trigger */}
                 {(screenSize === 'md' || screenSize === 'lg' || screenSize === 'xl') && (
@@ -970,6 +1043,16 @@ export function WorkspaceHeader({
           </div>
         </div>
       </div>
+      <ReviewRecordingContextMenu
+        isOpen={Boolean(reviewMenuPosition)}
+        position={reviewMenuPosition}
+        onClose={() => setReviewMenuPosition(null)}
+        onStartReviewRecording={onStartReviewRecording}
+        onStopReviewRecording={onStopReviewRecording}
+        onOpenHistory={onOpenReviewRecordingHistory}
+        canStart={canStartReviewRecording}
+        canStop={canStopReviewRecording}
+      />
     </div>
   );
 }

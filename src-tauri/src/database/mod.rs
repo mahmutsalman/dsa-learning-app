@@ -1,18 +1,18 @@
 mod schema;
 
-use rusqlite::{Connection, params, OptionalExtension};
-use anyhow::Context;
-use chrono::{Utc, DateTime, NaiveDateTime, Timelike};
-use uuid::Uuid;
 use crate::models::*;
-use schema::{CREATE_TABLES_SQL, CREATE_INDEXES_SQL};
+use anyhow::Context;
+use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
+use schema::{CREATE_INDEXES_SQL, CREATE_TABLES_SQL};
+use uuid::Uuid;
 
 // Helper functions for JSON parsing
 fn parse_json_array(json_str: &str) -> Vec<String> {
     if json_str.is_empty() || json_str == "null" {
         return Vec::new();
     }
-    
+
     match serde_json::from_str::<Vec<String>>(json_str) {
         Ok(array) => array,
         Err(_) => {
@@ -22,7 +22,11 @@ fn parse_json_array(json_str: &str) -> Vec<String> {
                 Vec::new()
             } else {
                 // Treat as comma-separated string
-                json_str.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+                json_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
             }
         }
     }
@@ -31,9 +35,9 @@ fn parse_json_array(json_str: &str) -> Vec<String> {
 fn convert_problem_to_frontend(db_problem: Problem) -> FrontendProblem {
     let related_problem_ids = match db_problem.related_problem_ids {
         Some(ids_json) => parse_json_array(&ids_json),
-        None => Vec::new()
+        None => Vec::new(),
     };
-    
+
     FrontendProblem {
         id: db_problem.id,
         title: db_problem.title,
@@ -56,14 +60,17 @@ fn parse_datetime_flexible(datetime_str: &str) -> DateTime<Utc> {
     if let Ok(dt) = datetime_str.parse::<DateTime<Utc>>() {
         return dt;
     }
-    
+
     // Try parsing as simple datetime format (old format: "2025-08-07 19:10:58")
     if let Ok(naive_dt) = NaiveDateTime::parse_from_str(datetime_str, "%Y-%m-%d %H:%M:%S") {
         return naive_dt.and_utc();
     }
-    
+
     // If all parsing fails, return current time as fallback
-    eprintln!("⚠️ Failed to parse datetime '{}', using current time as fallback", datetime_str);
+    eprintln!(
+        "⚠️ Failed to parse datetime '{}', using current time as fallback",
+        datetime_str
+    );
     Utc::now()
 }
 
@@ -85,42 +92,48 @@ impl DatabaseManager {
                 .context("Failed to get data directory")?
                 .join("com.dsalearning.dsaapp")
         };
-        
-        std::fs::create_dir_all(&app_data_dir)
-            .context("Failed to create app data directory")?;
-            
+
+        std::fs::create_dir_all(&app_data_dir).context("Failed to create app data directory")?;
+
         Self::new_with_path(app_data_dir).await
     }
-    
+
     // New method that accepts a custom path for Tauri-resolved directories
     pub async fn new_with_path(app_data_dir: std::path::PathBuf) -> anyhow::Result<Self> {
-        println!("🔧 [Database] Initializing database with path: {}", app_data_dir.display());
-        
-        std::fs::create_dir_all(&app_data_dir)
-            .context("Failed to create app data directory")?;
-        
+        println!(
+            "🔧 [Database] Initializing database with path: {}",
+            app_data_dir.display()
+        );
+
+        std::fs::create_dir_all(&app_data_dir).context("Failed to create app data directory")?;
+
         let db_path = app_data_dir.join("database.db");
-        
-        let connection = Connection::open(&db_path)
-            .context("Failed to open database connection")?;
-        
+
+        let connection =
+            Connection::open(&db_path).context("Failed to open database connection")?;
+
         // Enable foreign keys and WAL mode (using query_row to handle potential return values)
-        let _: i32 = connection.query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0)).unwrap_or(0);
-        let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap_or_else(|_| "delete".to_string());
-        
+        let _: i32 = connection
+            .query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0))
+            .unwrap_or(0);
+        let _: String = connection
+            .query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))
+            .unwrap_or_else(|_| "delete".to_string());
+
         let mut db_manager = Self { connection };
-        
+
         // Initialize database schema
-        db_manager.init_schema()
+        db_manager
+            .init_schema()
             .await
             .context("Failed to initialize database schema")?;
-        
+
         Ok(db_manager)
     }
-    
+
     pub async fn connect_existing() -> anyhow::Result<Self> {
         println!("🔧 [Database] Attempting to connect to existing database...");
-        
+
         let app_data_dir = if cfg!(debug_assertions) {
             // Development: use project data folder
             std::env::current_dir()
@@ -132,49 +145,61 @@ impl DatabaseManager {
                 .context("Failed to get data directory")?
                 .join("com.dsalearning.dsaapp")
         };
-        
+
         Self::connect_existing_with_path(app_data_dir).await
     }
-    
+
     // New method that accepts a custom path for Tauri-resolved directories
-    pub async fn connect_existing_with_path(app_data_dir: std::path::PathBuf) -> anyhow::Result<Self> {
-        println!("🔧 [Database] Attempting to connect to existing database with path: {}", app_data_dir.display());
-        
+    pub async fn connect_existing_with_path(
+        app_data_dir: std::path::PathBuf,
+    ) -> anyhow::Result<Self> {
+        println!(
+            "🔧 [Database] Attempting to connect to existing database with path: {}",
+            app_data_dir.display()
+        );
+
         let db_path = app_data_dir.join("database.db");
-        
+
         println!("🔧 [Database] Database path: {:?}", db_path);
-        
+
         // Check if database file exists
         if !db_path.exists() {
-            return Err(anyhow::anyhow!("Database file does not exist. Run initialization first."));
+            return Err(anyhow::anyhow!(
+                "Database file does not exist. Run initialization first."
+            ));
         }
-        
-        let connection = Connection::open(&db_path)
-            .context("Failed to open database connection")?;
-        
+
+        let connection =
+            Connection::open(&db_path).context("Failed to open database connection")?;
+
         // Enable foreign keys and WAL mode (using query_row to handle potential return values)
-        let _: i32 = connection.query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0)).unwrap_or(0);
-        let _: String = connection.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0)).unwrap_or_else(|_| "delete".to_string());
-        
+        let _: i32 = connection
+            .query_row("PRAGMA foreign_keys = ON", [], |row| row.get(0))
+            .unwrap_or(0);
+        let _: String = connection
+            .query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))
+            .unwrap_or_else(|_| "delete".to_string());
+
         let mut db_manager = Self { connection };
-        
+
         // CRITICAL: Always check and run migration for existing databases
         println!("🔧 [Database] Checking if migration is needed...");
-        db_manager.init_schema()
+        db_manager
+            .init_schema()
             .await
             .context("Failed to initialize/migrate database schema")?;
-        
+
         println!("🔧 [Database] Connected to existing database with schema validation complete");
         Ok(db_manager)
     }
-    
+
     async fn init_schema(&mut self) -> anyhow::Result<()> {
         println!("🔧 [Database] Initializing comprehensive database schema...");
-        
+
         // Check if this is a migration from old schema
         let needs_migration = self.check_migration_needed().await?;
         println!("🔧 [Database] Migration needed: {}", needs_migration);
-        
+
         if needs_migration {
             println!("🔧 [Database] Existing database detected - performing safe migration...");
             self.migrate_database().await?;
@@ -182,60 +207,127 @@ impl DatabaseManager {
             println!("🔧 [Database] Creating fresh database with complete schema...");
             self.create_fresh_schema().await?;
         }
-        
+
+        // Ensure new recording columns exist even on legacy databases
+        self.ensure_recording_columns()?;
+
         // Verify time_sessions table exists after migration/creation
         let time_sessions_exists = self.verify_time_sessions_table().await?;
-        println!("🔧 [Database] time_sessions table exists: {}", time_sessions_exists);
-        
+        println!(
+            "🔧 [Database] time_sessions table exists: {}",
+            time_sessions_exists
+        );
+
         if !time_sessions_exists {
             println!("❌ [Database] CRITICAL: time_sessions table missing after migration!");
-            return Err(anyhow::anyhow!("time_sessions table was not created successfully"));
+            return Err(anyhow::anyhow!(
+                "time_sessions table was not created successfully"
+            ));
         }
-        
+
         println!("✅ [Database] Schema initialization completed successfully!");
         Ok(())
     }
-    
+
+    fn ensure_recording_columns(&mut self) -> anyhow::Result<()> {
+        println!("🔧 [Database] Ensuring recording columns are up to date...");
+
+        let column_names: Vec<String> = self
+            .connection
+            .prepare("PRAGMA table_info(recordings)")?
+            .query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
+        if !column_names.contains(&"recording_type".to_string()) {
+            println!("🔧 [Database] Adding recording_type column to recordings table...");
+            self.connection.execute(
+                "ALTER TABLE recordings ADD COLUMN recording_type TEXT NOT NULL DEFAULT 'card' CHECK(recording_type IN ('card', 'review'))",
+                [],
+            )?;
+        }
+
+        if !column_names.contains(&"problem_id".to_string()) {
+            println!("🔧 [Database] Adding problem_id column to recordings table...");
+            self.connection
+                .execute("ALTER TABLE recordings ADD COLUMN problem_id TEXT", [])?;
+            println!("🔧 [Database] Backfilling problem_id values for existing recordings...");
+            self.connection.execute(
+                "UPDATE recordings SET problem_id = (SELECT problem_id FROM cards WHERE cards.id = recordings.card_id) WHERE problem_id IS NULL",
+                [],
+            )?;
+        } else {
+            println!("🔧 [Database] problem_id column already present, skipping add...");
+            // Ensure backfill occurred (legacy DBs might have NULL values)
+            self.connection.execute(
+                "UPDATE recordings SET problem_id = (SELECT problem_id FROM cards WHERE cards.id = recordings.card_id) WHERE problem_id IS NULL",
+                [],
+            )?;
+        }
+
+        // Ensure helpful indexes exist
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_recordings_type ON recordings(recording_type)",
+            [],
+        )?;
+        self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_recordings_problem_type ON recordings(problem_id, recording_type)",
+            [],
+        )?;
+
+        Ok(())
+    }
+
     async fn verify_time_sessions_table(&self) -> anyhow::Result<bool> {
         let count: i64 = self.connection.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
         Ok(count > 0)
     }
-    
+
     async fn check_migration_needed(&self) -> anyhow::Result<bool> {
         println!("🔍 [Database] Checking migration status...");
-        
+
         // Check if problems table exists (indicates existing database)
         let problems_exists: i64 = self.connection.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
-        println!("🔍 [Database] problems table exists: {}", problems_exists > 0);
-        
+        println!(
+            "🔍 [Database] problems table exists: {}",
+            problems_exists > 0
+        );
+
         // Check if time_sessions table exists (indicates complete schema)
         let time_sessions_exists: i64 = self.connection.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
-        println!("🔍 [Database] time_sessions table exists: {}", time_sessions_exists > 0);
-        
+        println!(
+            "🔍 [Database] time_sessions table exists: {}",
+            time_sessions_exists > 0
+        );
+
         // Check if problems table has old 'category' column but no 'topic' column
         let has_category_column = if problems_exists > 0 {
-            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+            let column_info: Result<Vec<String>, _> = self
+                .connection
+                .prepare("PRAGMA table_info(problems)")?
                 .query_map([], |row| Ok(row.get::<_, String>(1)?))?
                 .collect();
-            
+
             match column_info {
                 Ok(columns) => {
                     println!("🔍 [Database] problems table columns: {:?}", columns);
                     let has_category = columns.contains(&"category".to_string());
                     let has_topic = columns.contains(&"topic".to_string());
-                    println!("🔍 [Database] has_category: {}, has_topic: {}", has_category, has_topic);
+                    println!(
+                        "🔍 [Database] has_category: {}, has_topic: {}",
+                        has_category, has_topic
+                    );
                     has_category && !has_topic
                 }
                 Err(e) => {
@@ -246,31 +338,33 @@ impl DatabaseManager {
         } else {
             false
         };
-        
+
         // List all existing tables for debugging
-        let tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+        let tables: Vec<String> = self
+            .connection
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
             .query_map([], |row| Ok(row.get::<_, String>(0)?))?
             .collect::<Result<Vec<String>, _>>()?;
         println!("🔍 [Database] Existing tables: {:?}", tables);
-        
+
         // Migration needed if:
         // 1. Problems exist but time_sessions don't (original migration)
         // 2. Problems table has 'category' column but no 'topic' column (new migration)
         let needs_table_migration = problems_exists > 0 && time_sessions_exists == 0;
         let needs_column_migration = has_category_column;
         let migration_needed = needs_table_migration || needs_column_migration;
-        
-        println!("🔍 [Database] Migration logic: table_migration={}, column_migration={}, total_needed={}", 
+
+        println!("🔍 [Database] Migration logic: table_migration={}, column_migration={}, total_needed={}",
                  needs_table_migration,
                  needs_column_migration,
                  migration_needed);
-        
+
         Ok(migration_needed)
     }
-    
+
     async fn create_fresh_schema(&mut self) -> anyhow::Result<()> {
         println!("🏗️ [Database] Executing complete table creation...");
-        
+
         // Execute all table creation statements
         match self.connection.execute_batch(CREATE_TABLES_SQL) {
             Ok(_) => println!("✅ [Database] Tables created successfully"),
@@ -279,9 +373,21 @@ impl DatabaseManager {
                 return Err(anyhow::anyhow!("Failed to create tables: {}", e));
             }
         }
-        
+
+        // Ensure critical columns exist before creating indexes (handles legacy databases gracefully)
+        if let Err(e) = self.ensure_recording_columns() {
+            println!(
+                "⚠️ [Database] Failed to ensure recording columns before index creation: {}",
+                e
+            );
+            return Err(anyhow::anyhow!(
+                "Failed to ensure recording columns before index creation: {}",
+                e
+            ));
+        }
+
         println!("🏗️ [Database] Creating performance indexes...");
-        
+
         // Execute all index creation statements
         match self.connection.execute_batch(CREATE_INDEXES_SQL) {
             Ok(_) => println!("✅ [Database] Indexes created successfully"),
@@ -290,60 +396,82 @@ impl DatabaseManager {
                 return Err(anyhow::anyhow!("Failed to create indexes: {}", e));
             }
         }
-        
+
         println!("✅ [Database] Fresh schema creation completed");
         Ok(())
     }
-    
+
     async fn migrate_database(&mut self) -> anyhow::Result<()> {
         println!("🔄 [Database Migration] Starting comprehensive migration process...");
-        
+
         // First, verify what tables currently exist
-        let existing_tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+        let existing_tables: Vec<String> = self
+            .connection
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
             .query_map([], |row| Ok(row.get::<_, String>(0)?))
             .context("Failed to query existing tables")?
             .collect::<Result<Vec<String>, _>>()?;
-        println!("🔄 [Database Migration] Current tables before migration: {:?}", existing_tables);
-        
+        println!(
+            "🔄 [Database Migration] Current tables before migration: {:?}",
+            existing_tables
+        );
+
         // Check if we need to migrate category -> topic column
         let needs_column_migration = if existing_tables.contains(&"problems".to_string()) {
-            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+            let column_info: Result<Vec<String>, _> = self
+                .connection
+                .prepare("PRAGMA table_info(problems)")?
                 .query_map([], |row| Ok(row.get::<_, String>(1)?))?
                 .collect();
-                
+
             match column_info {
                 Ok(columns) => {
                     let has_category = columns.contains(&"category".to_string());
                     let has_topic = columns.contains(&"topic".to_string());
                     has_category && !has_topic
                 }
-                Err(_) => false
+                Err(_) => false,
             }
         } else {
             false
         };
-        
+
         // Perform category -> topic migration if needed
         if needs_column_migration {
             println!("🔄 [Database Migration] Migrating category column to topic...");
             self.migrate_category_to_topic().await?;
         }
-        
+
         // Check if we need to add related_problem_ids column
-        println!("🔍 [Database Migration] Checking if related_problem_ids column migration is needed...");
-        let needs_related_problems_migration = if existing_tables.contains(&"problems".to_string()) {
+        println!(
+            "🔍 [Database Migration] Checking if related_problem_ids column migration is needed..."
+        );
+        let needs_related_problems_migration = if existing_tables.contains(&"problems".to_string())
+        {
             println!("🔍 [Database Migration] Problems table exists, checking columns...");
-            let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")?
+            let column_info: Result<Vec<String>, _> = self
+                .connection
+                .prepare("PRAGMA table_info(problems)")?
                 .query_map([], |row| Ok(row.get::<_, String>(1)?))?
                 .collect();
-                
+
             match column_info {
                 Ok(columns) => {
-                    println!("🔍 [Database Migration] Current problems table columns: {:?}", columns);
-                    let has_related_problem_ids = columns.contains(&"related_problem_ids".to_string());
-                    println!("🔍 [Database Migration] Has related_problem_ids column: {}", has_related_problem_ids);
+                    println!(
+                        "🔍 [Database Migration] Current problems table columns: {:?}",
+                        columns
+                    );
+                    let has_related_problem_ids =
+                        columns.contains(&"related_problem_ids".to_string());
+                    println!(
+                        "🔍 [Database Migration] Has related_problem_ids column: {}",
+                        has_related_problem_ids
+                    );
                     let needs_migration = !has_related_problem_ids;
-                    println!("🔍 [Database Migration] Needs related_problem_ids migration: {}", needs_migration);
+                    println!(
+                        "🔍 [Database Migration] Needs related_problem_ids migration: {}",
+                        needs_migration
+                    );
                     needs_migration
                 }
                 Err(e) => {
@@ -355,14 +483,14 @@ impl DatabaseManager {
             println!("🔍 [Database Migration] Problems table does not exist, no related_problem_ids migration needed");
             false
         };
-        
+
         // Perform related_problem_ids migration if needed
         if needs_related_problems_migration {
             println!("🔄 [Database Migration] Related problems migration required - executing...");
             match self.migrate_add_related_problems_column().await {
                 Ok(()) => {
                     println!("✅ [Database Migration] Related problems migration completed successfully!");
-                },
+                }
                 Err(e) => {
                     let error_msg = format!("Related problems migration failed: {}", e);
                     println!("❌ [Database Migration] {}", error_msg);
@@ -372,7 +500,7 @@ impl DatabaseManager {
         } else {
             println!("ℹ️ [Database Migration] Related problems migration not needed, skipping...");
         }
-        
+
         // Add missing tables one by one with error handling
         let missing_tables = [
             ("time_sessions", "CREATE TABLE IF NOT EXISTS time_sessions (
@@ -437,22 +565,32 @@ impl DatabaseManager {
                 FOREIGN KEY (tag_id) REFERENCES tags(id)
             )")
         ];
-        
+
         for (table_name, create_sql) in missing_tables.iter() {
             println!("🔄 [Database Migration] Processing table: {}", table_name);
-            println!("🔄 [Database Migration] SQL: {}", create_sql.chars().take(100).collect::<String>() + "...");
-            
+            println!(
+                "🔄 [Database Migration] SQL: {}",
+                create_sql.chars().take(100).collect::<String>() + "..."
+            );
+
             match self.connection.execute(create_sql, []) {
                 Ok(rows_affected) => {
                     println!("✅ [Database Migration] Successfully processed table: {} (rows affected: {})", table_name, rows_affected);
-                },
+                }
                 Err(e) => {
-                    println!("❌ [Database Migration] Failed to create table {}: {}", table_name, e);
-                    return Err(anyhow::anyhow!("Migration failed for table {}: {}", table_name, e));
+                    println!(
+                        "❌ [Database Migration] Failed to create table {}: {}",
+                        table_name, e
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Migration failed for table {}: {}",
+                        table_name,
+                        e
+                    ));
                 }
             }
         }
-        
+
         // Add missing indexes
         println!("🔄 [Database Migration] Adding performance indexes...");
         let missing_indexes = [
@@ -463,66 +601,84 @@ impl DatabaseManager {
             "CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id)",
             "CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id)"
         ];
-        
+
         for (i, index_sql) in missing_indexes.iter().enumerate() {
-            println!("🔄 [Database Migration] Adding index {}/{}: {}", i+1, missing_indexes.len(), index_sql.chars().take(80).collect::<String>() + "...");
+            println!(
+                "🔄 [Database Migration] Adding index {}/{}: {}",
+                i + 1,
+                missing_indexes.len(),
+                index_sql.chars().take(80).collect::<String>() + "..."
+            );
             match self.connection.execute(index_sql, []) {
-                Ok(rows_affected) => println!("✅ [Database Migration] Index added successfully (rows affected: {})", rows_affected),
+                Ok(rows_affected) => println!(
+                    "✅ [Database Migration] Index added successfully (rows affected: {})",
+                    rows_affected
+                ),
                 Err(e) => {
                     println!("⚠️ [Database Migration] Index creation warning: {}", e);
                     // Don't fail on index errors, they might already exist
                 }
             }
         }
-        
+
         // Verify tables exist after migration
-        let final_tables: Vec<String> = self.connection.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
+        let final_tables: Vec<String> = self
+            .connection
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")?
             .query_map([], |row| Ok(row.get::<_, String>(0)?))
             .context("Failed to verify tables after migration")?
             .collect::<Result<Vec<String>, _>>()?;
-        println!("🔄 [Database Migration] Tables after migration: {:?}", final_tables);
-        
+        println!(
+            "🔄 [Database Migration] Tables after migration: {:?}",
+            final_tables
+        );
+
         // Check specifically for time_sessions table
         let time_sessions_count: i64 = self.connection.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='time_sessions'",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
-        println!("🔄 [Database Migration] time_sessions table check: {} (should be 1)", time_sessions_count);
-        
+        println!(
+            "🔄 [Database Migration] time_sessions table check: {} (should be 1)",
+            time_sessions_count
+        );
+
         if time_sessions_count == 0 {
-            return Err(anyhow::anyhow!("CRITICAL: time_sessions table was not created during migration!"));
+            return Err(anyhow::anyhow!(
+                "CRITICAL: time_sessions table was not created during migration!"
+            ));
         }
-        
+
         println!("✅ [Database Migration] Migration completed successfully!");
         Ok(())
     }
-    
+
     async fn migrate_category_to_topic(&mut self) -> anyhow::Result<()> {
         println!("🔄 [Database Migration] Starting category -> topic column migration...");
-        
+
         // SQLite doesn't support ALTER TABLE DROP COLUMN until version 3.35.0
         // So we use the standard SQLite approach: create new table, copy data, drop old, rename
-        
+
         // Temporarily disable foreign key constraints for migration
         println!("🔄 [Database Migration] Disabling foreign key constraints for migration...");
         self.connection.execute("PRAGMA foreign_keys = OFF", [])?;
-        
+
         // Begin transaction for atomic migration
         let tx = self.connection.unchecked_transaction()?;
-        
+
         // Step 0: Check if problems_new already exists and drop it (cleanup from failed migration)
         let problems_new_exists: i64 = tx.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems_new'",
             [],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
-        
+
         if problems_new_exists > 0 {
             println!("🔄 [Database Migration] Found existing problems_new table from previous migration, dropping it...");
             tx.execute("DROP TABLE problems_new", [])?;
         }
-        
+
         // Step 1: Create a new problems table with the correct schema
         println!("🔄 [Database Migration] Creating new problems table with topic column...");
         tx.execute(
@@ -538,9 +694,9 @@ impl DatabaseManager {
                 hints TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )",
-            []
+            [],
         )?;
-        
+
         // Step 2: Copy all data from old table to new table, mapping category -> topic
         println!("🔄 [Database Migration] Copying data from old table to new table...");
         let rows_copied = tx.execute(
@@ -549,99 +705,126 @@ impl DatabaseManager {
              FROM problems",
             []
         )?;
-        println!("🔄 [Database Migration] Copied {} rows from old table to new table", rows_copied);
-        
+        println!(
+            "🔄 [Database Migration] Copied {} rows from old table to new table",
+            rows_copied
+        );
+
         // Step 3: Drop the old table
         println!("🔄 [Database Migration] Dropping old problems table...");
         tx.execute("DROP TABLE problems", [])?;
-        
+
         // Step 4: Rename the new table to the original name
         println!("🔄 [Database Migration] Renaming new table to problems...");
         tx.execute("ALTER TABLE problems_new RENAME TO problems", [])?;
-        
+
         // Commit the transaction
         tx.commit()?;
-        
+
         // Re-enable foreign key constraints
         println!("🔄 [Database Migration] Re-enabling foreign key constraints...");
         self.connection.execute("PRAGMA foreign_keys = ON", [])?;
-        
+
         println!("✅ [Database Migration] Category -> Topic migration completed successfully!");
         Ok(())
     }
-    
+
     async fn migrate_add_related_problems_column(&mut self) -> anyhow::Result<()> {
         println!("🔄 [Database Migration] Adding related_problem_ids column to problems table...");
-        
+
         // First, verify the problems table exists
-        let problems_exists: i64 = self.connection.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'",
-            [],
-            |row| row.get(0)
-        ).context("Failed to check if problems table exists")?;
-        
+        let problems_exists: i64 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='problems'",
+                [],
+                |row| row.get(0),
+            )
+            .context("Failed to check if problems table exists")?;
+
         if problems_exists == 0 {
-            return Err(anyhow::anyhow!("Problems table does not exist - cannot add related_problem_ids column"));
+            return Err(anyhow::anyhow!(
+                "Problems table does not exist - cannot add related_problem_ids column"
+            ));
         }
-        
+
         // Check if column already exists (double check)
-        let columns_result: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+        let columns_result: Result<Vec<String>, _> = self
+            .connection
+            .prepare("PRAGMA table_info(problems)")
             .context("Failed to prepare PRAGMA table_info")?
             .query_map([], |row| Ok(row.get::<_, String>(1)?))
             .context("Failed to query table info")?
             .collect();
-            
+
         match columns_result {
             Ok(columns) => {
                 if columns.contains(&"related_problem_ids".to_string()) {
                     println!("✅ [Database Migration] related_problem_ids column already exists, skipping...");
                     return Ok(());
                 }
-            },
+            }
             Err(e) => {
-                println!("⚠️ [Database Migration] Warning: Could not check existing columns: {}", e);
+                println!(
+                    "⚠️ [Database Migration] Warning: Could not check existing columns: {}",
+                    e
+                );
                 // Continue with migration attempt anyway
             }
         }
-        
-        println!("🔄 [Database Migration] Executing ALTER TABLE to add related_problem_ids column...");
-        
+
+        println!(
+            "🔄 [Database Migration] Executing ALTER TABLE to add related_problem_ids column..."
+        );
+
         match self.connection.execute(
             "ALTER TABLE problems ADD COLUMN related_problem_ids TEXT",
-            []
+            [],
         ) {
             Ok(rows_affected) => {
-                println!("✅ [Database Migration] ALTER TABLE executed successfully (rows affected: {})", rows_affected);
-                
+                println!(
+                    "✅ [Database Migration] ALTER TABLE executed successfully (rows affected: {})",
+                    rows_affected
+                );
+
                 // Verify the column was actually added
-                let verification_result: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+                let verification_result: Result<Vec<String>, _> = self
+                    .connection
+                    .prepare("PRAGMA table_info(problems)")
                     .context("Failed to prepare verification PRAGMA")?
                     .query_map([], |row| Ok(row.get::<_, String>(1)?))
                     .context("Failed to query verification table info")?
                     .collect();
-                    
+
                 match verification_result {
                     Ok(columns) => {
                         if columns.contains(&"related_problem_ids".to_string()) {
                             println!("✅ [Database Migration] Verified: related_problem_ids column was successfully added!");
                             Ok(())
                         } else {
-                            let error_msg = format!("Column addition failed verification. Current columns: {:?}", columns);
+                            let error_msg = format!(
+                                "Column addition failed verification. Current columns: {:?}",
+                                columns
+                            );
                             println!("❌ [Database Migration] {}", error_msg);
                             Err(anyhow::anyhow!(error_msg))
                         }
-                    },
+                    }
                     Err(e) => {
                         let error_msg = format!("Failed to verify column addition: {}", e);
                         println!("❌ [Database Migration] {}", error_msg);
                         Err(anyhow::anyhow!(error_msg))
                     }
                 }
-            },
+            }
             Err(e) => {
-                let error_msg = format!("Failed to add related_problem_ids column: {} (Error type: {})", e, std::any::type_name_of_val(&e));
+                let error_msg = format!(
+                    "Failed to add related_problem_ids column: {} (Error type: {})",
+                    e,
+                    std::any::type_name_of_val(&e)
+                );
                 println!("❌ [Database Migration] {}", error_msg);
-                
+
                 // Check if it's a "duplicate column" error (which means it already exists)
                 let error_str = e.to_string().to_lowercase();
                 if error_str.contains("duplicate column") || error_str.contains("already exists") {
@@ -656,16 +839,18 @@ impl DatabaseManager {
 
     // Helper function to check if related_problem_ids column exists
     fn has_related_problem_ids_column(&self) -> bool {
-        let column_info: Result<Vec<String>, _> = self.connection.prepare("PRAGMA table_info(problems)")
+        let column_info: Result<Vec<String>, _> = self
+            .connection
+            .prepare("PRAGMA table_info(problems)")
             .and_then(|mut stmt| {
                 stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))
                     .map(|rows| rows.collect::<Result<Vec<String>, _>>())
             })
             .and_then(|result| result);
-            
+
         match column_info {
             Ok(columns) => columns.contains(&"related_problem_ids".to_string()),
-            Err(_) => false
+            Err(_) => false,
         }
     }
 
@@ -673,22 +858,23 @@ impl DatabaseManager {
     pub fn create_problem(&mut self, req: CreateProblemRequest) -> anyhow::Result<FrontendProblem> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         let topic_json = serde_json::to_string(&req.topic)?;
         let constraints_json = serde_json::to_string(&req.constraints)?;
         let hints_json = serde_json::to_string(&req.hints)?;
         let leetcode_url = req.leetcode_url.as_ref().map(|s| s.as_str()).unwrap_or("");
-        
+
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        
+
         if has_related_column {
             // Use new schema with related_problem_ids column
-            let related_problem_ids_json = req.related_problem_ids
+            let related_problem_ids_json = req
+                .related_problem_ids
                 .as_ref()
                 .map(|ids| serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string()))
                 .unwrap_or_else(|| "[]".to_string());
-                
+
             self.connection.execute(
                 "INSERT INTO problems (id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -723,7 +909,7 @@ impl DatabaseManager {
                 ],
             )?;
         }
-        
+
         // Return the frontend-compatible version
         Ok(FrontendProblem {
             id,
@@ -740,19 +926,19 @@ impl DatabaseManager {
             tags: Vec::new(), // Empty for newly created problems
         })
     }
-    
+
     pub fn get_problems(&self) -> anyhow::Result<Vec<FrontendProblem>> {
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        
+
         let sql = if has_related_column {
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at FROM problems ORDER BY created_at DESC"
         } else {
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at, updated_at FROM problems ORDER BY created_at DESC"
         };
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        
+
         let problem_iter = stmt.query_map([], |row| {
             let db_problem = Problem {
                 id: row.get(0)?,
@@ -765,31 +951,33 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                 created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
-                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                updated_at: row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
-        
+
         let mut problems = Vec::new();
         for problem in problem_iter {
             problems.push(problem?);
         }
-        
+
         Ok(problems)
     }
-    
+
     pub fn get_problem_by_id(&self, id: &str) -> anyhow::Result<Option<FrontendProblem>> {
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        
+
         let sql = if has_related_column {
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at, updated_at FROM problems WHERE id = ?1"
         } else {
             "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, NULL as related_problem_ids, created_at, updated_at FROM problems WHERE id = ?1"
         };
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        
+
         let mut problem_iter = stmt.query_map([id], |row| {
             let db_problem = Problem {
                 id: row.get(0)?,
@@ -802,18 +990,23 @@ impl DatabaseManager {
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
                 created_at: parse_datetime_flexible(&row.get::<_, String>(9)?),
-                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                updated_at: row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(db_problem))
         })?;
-        
+
         match problem_iter.next() {
             Some(problem) => Ok(Some(problem?)),
             None => Ok(None),
         }
     }
 
-    pub fn update_problem(&mut self, req: UpdateProblemRequest) -> anyhow::Result<Option<FrontendProblem>> {
+    pub fn update_problem(
+        &mut self,
+        req: UpdateProblemRequest,
+    ) -> anyhow::Result<Option<FrontendProblem>> {
         // First check if problem exists
         let existing_problem = self.get_problem_by_id(&req.id)?;
         if existing_problem.is_none() {
@@ -887,18 +1080,20 @@ impl DatabaseManager {
             "UPDATE problems SET {} WHERE id = ?",
             update_fields.join(", ")
         );
-        
+
         // Add the id to the end of the values
         update_values.push(Box::new(req.id.clone()));
 
         // Execute the update
         let rows_affected = self.connection.execute(
             &sql,
-            rusqlite::params_from_iter(update_values.iter().map(|v| v.as_ref()))
+            rusqlite::params_from_iter(update_values.iter().map(|v| v.as_ref())),
         )?;
 
         if rows_affected == 0 {
-            return Err(anyhow::anyhow!("Failed to update problem - no rows affected"));
+            return Err(anyhow::anyhow!(
+                "Failed to update problem - no rows affected"
+            ));
         }
 
         // Return the updated problem
@@ -912,11 +1107,14 @@ impl DatabaseManager {
             "UPDATE problems SET updated_at = ? WHERE id = ?",
             params![&now.to_rfc3339(), problem_id],
         )?;
-        
+
         if rows_affected == 0 {
-            return Err(anyhow::anyhow!("Problem with id '{}' not found for timestamp update", problem_id));
+            return Err(anyhow::anyhow!(
+                "Problem with id '{}' not found for timestamp update",
+                problem_id
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -924,16 +1122,19 @@ impl DatabaseManager {
     pub fn create_card(&mut self, req: CreateCardRequest) -> anyhow::Result<Card> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         // Get next card number for this problem
-        let card_number: i32 = self.connection.query_row(
-            "SELECT COALESCE(MAX(card_number), 0) + 1 FROM cards WHERE problem_id = ?1",
-            [&req.problem_id],
-            |row| row.get(0),
-        ).unwrap_or(1);
-        
+        let card_number: i32 = self
+            .connection
+            .query_row(
+                "SELECT COALESCE(MAX(card_number), 0) + 1 FROM cards WHERE problem_id = ?1",
+                [&req.problem_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(1);
+
         let language = req.language.as_ref().map(|s| s.as_str()).unwrap_or("java");
-        
+
         // Fix FOREIGN KEY constraint: use NULL instead of empty string for parent_card_id
         match req.parent_card_id.as_ref() {
             Some(parent_id) if !parent_id.is_empty() => {
@@ -968,10 +1169,10 @@ impl DatabaseManager {
                 )?;
             }
         }
-        
+
         // Update the problem's updated_at timestamp since a new card was created
         self.update_problem_timestamp(&req.problem_id)?;
-        
+
         Ok(Card {
             id,
             problem_id: req.problem_id,
@@ -988,13 +1189,13 @@ impl DatabaseManager {
             is_solution: Some(false), // Regular cards are not solution cards
         })
     }
-    
+
     pub fn get_cards_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<Card>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, review_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE problem_id = ?1 ORDER BY card_number"
         )?;
-        
+
         let card_iter = stmt.query_map([problem_id], |row| {
             Ok(Card {
                 id: row.get(0)?,
@@ -1006,27 +1207,33 @@ impl DatabaseManager {
                 status: row.get(6)?,
                 total_duration: row.get(7)?,
                 review_duration: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                last_modified: row.get::<_, String>(10)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                last_modified: row
+                    .get::<_, String>(10)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
                 parent_card_id: row.get(11)?,
                 is_solution: Some(row.get::<_, i32>(12)? == 1), // Convert SQLite integer to boolean
             })
         })?;
-        
+
         let mut cards = Vec::new();
         for card in card_iter {
             cards.push(card?);
         }
-        
+
         Ok(cards)
     }
-    
+
     pub fn get_card_by_id(&self, card_id: &str) -> anyhow::Result<Option<Card>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, problem_id, card_number, code, language, notes, status, total_duration, review_duration, created_at, last_modified, parent_card_id, is_solution
              FROM cards WHERE id = ?1"
         )?;
-        
+
         let card_iter = stmt.query_map([card_id], |row| {
             Ok(Card {
                 id: row.get(0)?,
@@ -1038,27 +1245,33 @@ impl DatabaseManager {
                 status: row.get(6)?,
                 total_duration: row.get(7)?,
                 review_duration: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                last_modified: row.get::<_, String>(10)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                last_modified: row
+                    .get::<_, String>(10)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
                 parent_card_id: row.get(11)?,
                 is_solution: Some(row.get::<_, i32>(12)? == 1), // Convert SQLite integer to boolean
             })
         })?;
-        
+
         let mut cards = Vec::new();
         for card in card_iter {
             cards.push(card?);
         }
-        
+
         Ok(cards.into_iter().next())
     }
-    
+
     pub fn update_card(&mut self, req: UpdateCardRequest) -> anyhow::Result<Option<Card>> {
         let now = Utc::now();
         let now_str = now.to_rfc3339();
-        
+
         let mut fields_updated = false;
-        
+
         // Build query to update only provided fields
         if let Some(ref code) = req.code {
             self.connection.execute(
@@ -1067,7 +1280,7 @@ impl DatabaseManager {
             )?;
             fields_updated = true;
         }
-        
+
         if let Some(ref notes) = req.notes {
             self.connection.execute(
                 "UPDATE cards SET notes = ?1, last_modified = ?2 WHERE id = ?3",
@@ -1075,7 +1288,7 @@ impl DatabaseManager {
             )?;
             fields_updated = true;
         }
-        
+
         if let Some(ref language) = req.language {
             self.connection.execute(
                 "UPDATE cards SET language = ?1, last_modified = ?2 WHERE id = ?3",
@@ -1083,7 +1296,7 @@ impl DatabaseManager {
             )?;
             fields_updated = true;
         }
-        
+
         if let Some(ref status) = req.status {
             self.connection.execute(
                 "UPDATE cards SET status = ?1, last_modified = ?2 WHERE id = ?3",
@@ -1091,7 +1304,7 @@ impl DatabaseManager {
             )?;
             fields_updated = true;
         }
-        
+
         // If any fields were updated, also update the problem's timestamp
         if fields_updated {
             // Get the problem_id from the card
@@ -1100,11 +1313,11 @@ impl DatabaseManager {
                 [&req.id],
                 |row| row.get(0),
             )?;
-            
+
             // Update the problem's updated_at timestamp
             self.update_problem_timestamp(&problem_id)?;
         }
-        
+
         // Return the updated card
         self.get_card_by_id(&req.id)
     }
@@ -1120,7 +1333,9 @@ impl DatabaseManager {
 
         // Safety check: Only allow deletion of child cards for now
         // (Main cards should be kept to preserve problem structure)
-        if card.parent_card_id.is_none() || card.parent_card_id.as_ref().map_or(true, |s| s.is_empty()) {
+        if card.parent_card_id.is_none()
+            || card.parent_card_id.as_ref().map_or(true, |s| s.is_empty())
+        {
             return Err(anyhow::anyhow!(
                 "Cannot delete main cards. Only child cards can be deleted for safety."
             ));
@@ -1130,31 +1345,25 @@ impl DatabaseManager {
         let tx = self.connection.unchecked_transaction()?;
 
         // Delete associated data in correct order (child tables first)
-        
+
         // 1. Delete any time sessions for this card
         // Note: These tables might not exist yet, so we use IF EXISTS
-        tx.execute(
-            "DELETE FROM time_sessions WHERE card_id = ?1",
-            [card_id],
-        ).unwrap_or(0); // Ignore errors if table doesn't exist
-        
+        tx.execute("DELETE FROM time_sessions WHERE card_id = ?1", [card_id])
+            .unwrap_or(0); // Ignore errors if table doesn't exist
+
         // 2. Delete any recordings for this card
-        tx.execute(
-            "DELETE FROM recordings WHERE card_id = ?1", 
-            [card_id],
-        ).unwrap_or(0); // Ignore errors if table doesn't exist
-        
+        tx.execute("DELETE FROM recordings WHERE card_id = ?1", [card_id])
+            .unwrap_or(0); // Ignore errors if table doesn't exist
+
         // 3. Delete any connections where this card is source or target
         tx.execute(
             "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
             [card_id],
-        ).unwrap_or(0); // Ignore errors if table doesn't exist
+        )
+        .unwrap_or(0); // Ignore errors if table doesn't exist
 
         // 4. Finally, delete the card itself
-        let rows_affected = tx.execute(
-            "DELETE FROM cards WHERE id = ?1",
-            [card_id],
-        )?;
+        let rows_affected = tx.execute("DELETE FROM cards WHERE id = ?1", [card_id])?;
 
         if rows_affected == 0 {
             return Err(anyhow::anyhow!("Failed to delete card - no rows affected"));
@@ -1162,11 +1371,14 @@ impl DatabaseManager {
 
         // Commit the transaction
         tx.commit()?;
-        
+
         // Update the problem's updated_at timestamp since a card was deleted
         self.update_problem_timestamp(&card.problem_id)?;
 
-        println!("Successfully deleted card '{}' and associated data", card_id);
+        println!(
+            "Successfully deleted card '{}' and associated data",
+            card_id
+        );
         Ok(())
     }
 
@@ -1176,28 +1388,31 @@ impl DatabaseManager {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let date = now.format("%Y-%m-%d").to_string();
-        
+
         // Get the problem_id from the card first
         let problem_id: String = self.connection.query_row(
             "SELECT problem_id FROM cards WHERE id = ?1",
             [card_id],
             |row| row.get(0),
         )?;
-        
+
         // Create work session for detailed tracking
         let work_session_id = self.create_work_session(&problem_id, card_id, now)?;
-        println!("📊 [Database] Created work session {} for timer session {}", work_session_id, id);
-        
+        println!(
+            "📊 [Database] Created work session {} for timer session {}",
+            work_session_id, id
+        );
+
         // Create time session
         self.connection.execute(
             "INSERT INTO time_sessions (id, card_id, start_time, date, is_active)
              VALUES (?1, ?2, ?3, ?4, 1)",
             params![&id, card_id, &now.to_rfc3339(), &date],
         )?;
-        
+
         // Update the problem's updated_at timestamp since a timer was started
         self.update_problem_timestamp(&problem_id)?;
-        
+
         let time_session = TimeSession {
             id,
             card_id: card_id.to_string(),
@@ -1208,75 +1423,85 @@ impl DatabaseManager {
             is_active: true,
             notes: None,
         };
-        
+
         Ok((time_session, work_session_id))
     }
-    
+
     #[allow(dead_code)]
-    pub fn end_timer_session(&mut self, session_id: &str, work_session_id: Option<&str>) -> anyhow::Result<()> {
+    pub fn end_timer_session(
+        &mut self,
+        session_id: &str,
+        work_session_id: Option<&str>,
+    ) -> anyhow::Result<()> {
         let now = Utc::now();
-        
+
         // Get session start time
         let start_time: String = self.connection.query_row(
             "SELECT start_time FROM time_sessions WHERE id = ?1",
             [session_id],
             |row| row.get(0),
         )?;
-        
+
         let start_time = start_time.parse::<chrono::DateTime<Utc>>()?;
         let duration = (now - start_time).num_seconds() as i32;
-        
+
         // Complete work session for detailed tracking
         if let Some(work_session_id) = work_session_id {
             match self.complete_work_session(work_session_id, now) {
-                Ok(()) => println!("📊 [Database] Completed work session {} for timer session {}", work_session_id, session_id),
-                Err(e) => println!("⚠️ [Database] Failed to complete work session {}: {}", work_session_id, e),
+                Ok(()) => println!(
+                    "📊 [Database] Completed work session {} for timer session {}",
+                    work_session_id, session_id
+                ),
+                Err(e) => println!(
+                    "⚠️ [Database] Failed to complete work session {}: {}",
+                    work_session_id, e
+                ),
             }
         }
-        
+
         // Update session
         self.connection.execute(
             "UPDATE time_sessions SET end_time = ?1, duration = ?2, is_active = 0 WHERE id = ?3",
             params![&now.to_rfc3339(), duration, session_id],
         )?;
-        
+
         // Update card total duration
         let card_id: String = self.connection.query_row(
             "SELECT card_id FROM time_sessions WHERE id = ?1",
             [session_id],
             |row| row.get(0),
         )?;
-        
+
         let now = Utc::now();
         self.connection.execute(
             "UPDATE cards SET total_duration = total_duration + ?1, last_modified = ?2 WHERE id = ?3",
             params![duration, &now.to_rfc3339(), &card_id],
         )?;
-        
+
         // Get the problem_id from the card and update problem timestamp
         let problem_id: String = self.connection.query_row(
             "SELECT problem_id FROM cards WHERE id = ?1",
             [&card_id],
             |row| row.get(0),
         )?;
-        
+
         // Update the problem's updated_at timestamp since a timer session ended
         self.update_problem_timestamp(&problem_id)?;
-        
+
         Ok(())
     }
-    
+
     #[allow(dead_code)]
     pub fn get_sessions_for_card(&self, card_id: &str) -> anyhow::Result<Vec<TimeSession>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, card_id, start_time, end_time, duration, date, is_active, notes 
-             FROM time_sessions WHERE card_id = ?1 ORDER BY start_time DESC"
+            "SELECT id, card_id, start_time, end_time, duration, date, is_active, notes
+             FROM time_sessions WHERE card_id = ?1 ORDER BY start_time DESC",
         )?;
-        
+
         let session_iter = stmt.query_map([card_id], |row| {
             let start_time_str: String = row.get(2)?;
             let end_time_str: Option<String> = row.get(3)?;
-            
+
             Ok(TimeSession {
                 id: row.get(0)?,
                 card_id: row.get(1)?,
@@ -1288,23 +1513,26 @@ impl DatabaseManager {
                 notes: row.get(7)?,
             })
         })?;
-        
+
         let mut sessions = Vec::new();
         for session in session_iter {
             sessions.push(session?);
         }
-        
+
         Ok(sessions)
     }
-    
+
     #[allow(dead_code)]
     pub fn delete_time_session(&mut self, session_id: &str) -> anyhow::Result<()> {
         // First, get the session details to update the card's total duration
-        let session: Option<(String, i32)> = self.connection.query_row(
-            "SELECT card_id, duration FROM time_sessions WHERE id = ?1",
-            [session_id],
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
-        ).optional()?;
+        let session: Option<(String, i32)> = self
+            .connection
+            .query_row(
+                "SELECT card_id, duration FROM time_sessions WHERE id = ?1",
+                [session_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )
+            .optional()?;
 
         match session {
             Some((card_id, duration)) => {
@@ -1312,23 +1540,22 @@ impl DatabaseManager {
                 let tx = self.connection.unchecked_transaction()?;
 
                 // Delete the session from time_sessions table
-                let rows_affected = tx.execute(
-                    "DELETE FROM time_sessions WHERE id = ?1",
-                    [session_id]
-                )?;
+                let rows_affected =
+                    tx.execute("DELETE FROM time_sessions WHERE id = ?1", [session_id])?;
 
                 if rows_affected == 0 {
                     return Err(anyhow::anyhow!("Session not found"));
                 }
 
                 // Also delete the corresponding work_session record to maintain consistency
-                let work_sessions_deleted = tx.execute(
-                    "DELETE FROM work_sessions WHERE id = ?1",
-                    [session_id]
-                )?;
+                let work_sessions_deleted =
+                    tx.execute("DELETE FROM work_sessions WHERE id = ?1", [session_id])?;
 
                 if work_sessions_deleted > 0 {
-                    println!("Also deleted corresponding work_session record for session '{}'", session_id);
+                    println!(
+                        "Also deleted corresponding work_session record for session '{}'",
+                        session_id
+                    );
                 }
 
                 // Update card's total duration (subtract the deleted session duration)
@@ -1343,28 +1570,44 @@ impl DatabaseManager {
 
                 println!("Successfully deleted session '{}' from both tables and updated card total duration", session_id);
                 Ok(())
-            },
-            None => Err(anyhow::anyhow!("Session with id '{}' not found", session_id))
+            }
+            None => Err(anyhow::anyhow!(
+                "Session with id '{}' not found",
+                session_id
+            )),
         }
     }
 
     // Recording operations
-    pub fn save_recording(&mut self, card_id: &str, filename: &str, filepath: &str, duration: Option<i32>) -> anyhow::Result<Recording> {
+    pub fn save_recording(
+        &mut self,
+        card_id: &str,
+        filename: &str,
+        filepath: &str,
+        duration: Option<i32>,
+        recording_type: &str,
+        problem_id_override: Option<&str>,
+    ) -> anyhow::Result<Recording> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         // Get file size - resolve relative path to absolute path
-        let file_size = if filepath.starts_with("dev-data/") || filepath.starts_with("app-data/") || filepath.starts_with("attachments/") {
+        let file_size = if filepath.starts_with("dev-data/")
+            || filepath.starts_with("app-data/")
+            || filepath.starts_with("attachments/")
+        {
             // Convert relative path to absolute path based on environment
             let absolute_path = if filepath.starts_with("dev-data/") {
                 // Development path: project_root/dev-data/...
-                let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                let current_dir =
+                    std::env::current_dir().context("Failed to get current directory")?;
                 current_dir.join(filepath)
             } else if filepath.starts_with("app-data/") {
                 // Production path: resolve to actual app data directory
                 if cfg!(debug_assertions) {
                     // In development, this shouldn't happen, but handle it
-                    let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                    let current_dir =
+                        std::env::current_dir().context("Failed to get current directory")?;
                     current_dir.join("dev-data").join(&filepath[9..]) // Remove "app-data/" prefix
                 } else {
                     // Production: resolve to actual app data directory
@@ -1387,14 +1630,19 @@ impl DatabaseManager {
                 }
             } else {
                 // Legacy "attachments/" path - assume project root for backward compatibility
-                let current_dir = std::env::current_dir().context("Failed to get current directory")?;
+                let current_dir =
+                    std::env::current_dir().context("Failed to get current directory")?;
                 current_dir.join(filepath)
             };
-            
+
             std::fs::metadata(&absolute_path)
                 .map(|m| m.len() as i64)
                 .map_err(|e| {
-                    println!("Warning: Failed to get file metadata for {}: {}", absolute_path.display(), e);
+                    println!(
+                        "Warning: Failed to get file metadata for {}: {}",
+                        absolute_path.display(),
+                        e
+                    );
                     e
                 })
                 .ok()
@@ -1403,15 +1651,29 @@ impl DatabaseManager {
             std::fs::metadata(filepath)
                 .map(|m| m.len() as i64)
                 .map_err(|e| {
-                    println!("Warning: Failed to get file metadata for {}: {}", filepath, e);
+                    println!(
+                        "Warning: Failed to get file metadata for {}: {}",
+                        filepath, e
+                    );
                     e
                 })
                 .ok()
         };
-        
+
+        // Resolve problem id (use override first, fallback to card lookup)
+        let problem_id: String = if let Some(id) = problem_id_override {
+            id.to_string()
+        } else {
+            self.connection.query_row(
+                "SELECT problem_id FROM cards WHERE id = ?1",
+                [card_id],
+                |row| row.get(0),
+            )?
+        };
+
         self.connection.execute(
-            "INSERT INTO recordings (id, card_id, audio_url, filename, filepath, duration, file_size, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO recordings (id, card_id, audio_url, filename, filepath, duration, file_size, created_at, recording_type, problem_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 &id,
                 card_id,
@@ -1421,19 +1683,14 @@ impl DatabaseManager {
                 duration,
                 file_size,
                 &now.to_rfc3339(),
+                recording_type,
+                &problem_id,
             ],
         )?;
-        
-        // Get the problem_id from the card and update problem timestamp
-        let problem_id: String = self.connection.query_row(
-            "SELECT problem_id FROM cards WHERE id = ?1",
-            [card_id],
-            |row| row.get(0),
-        )?;
-        
+
         // Update the problem's updated_at timestamp since a recording was saved
         self.update_problem_timestamp(&problem_id)?;
-        
+
         Ok(Recording {
             id,
             card_id: card_id.to_string(),
@@ -1446,17 +1703,19 @@ impl DatabaseManager {
             filepath: filepath.to_string(),
             file_size,
             highlight_color: None,
+            problem_id: Some(problem_id),
+            recording_type: Some(recording_type.to_string()),
         })
     }
-    
+
     pub fn get_recordings(&self) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
-            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color \
+            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color, r.problem_id, r.recording_type \
              FROM recordings r \
              LEFT JOIN recording_highlights rh ON rh.recording_id = r.id \
              ORDER BY r.created_at DESC"
         )?;
-        
+
         let recording_iter = stmt.query_map([], |row| {
             Ok(Recording {
                 id: row.get(0)?,
@@ -1465,31 +1724,36 @@ impl DatabaseManager {
                 audio_url: row.get(3)?,
                 duration: row.get(4)?,
                 transcript: row.get(5)?,
-                created_at: row.get::<_, String>(6)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: row
+                    .get::<_, String>(6)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
                 filename: row.get(7)?,
                 filepath: row.get(8)?,
                 file_size: row.get(9)?,
                 highlight_color: row.get(10)?,
+                problem_id: row.get(11)?,
+                recording_type: row.get(12)?,
             })
         })?;
-        
+
         let mut recordings = Vec::new();
         for recording in recording_iter {
             recordings.push(recording?);
         }
-        
+
         Ok(recordings)
     }
-    
+
     pub fn get_recordings_for_card(&self, card_id: &str) -> anyhow::Result<Vec<Recording>> {
         let mut stmt = self.connection.prepare(
-            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color \
+            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color, r.problem_id, r.recording_type \
              FROM recordings r \
              LEFT JOIN recording_highlights rh ON rh.recording_id = r.id \
-             WHERE r.card_id = ?1 \
+             WHERE r.card_id = ?1 AND r.recording_type = 'card' \
              ORDER BY r.created_at DESC"
         )?;
-        
+
         let recording_iter = stmt.query_map([card_id], |row| {
             Ok(Recording {
                 id: row.get(0)?,
@@ -1499,32 +1763,88 @@ impl DatabaseManager {
                 duration: row.get(4)?,
                 transcript: row.get(5)?,
                 created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
-                    .map_err(|e| rusqlite::Error::InvalidColumnType(6, e.to_string().into(), rusqlite::types::Type::Text))?
+                    .map_err(|e| {
+                        rusqlite::Error::InvalidColumnType(
+                            6,
+                            e.to_string().into(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?
                     .with_timezone(&chrono::Utc),
                 filename: row.get(7)?,
                 filepath: row.get(8)?,
                 file_size: row.get(9)?,
                 highlight_color: row.get(10)?,
+                problem_id: row.get(11)?,
+                recording_type: row.get(12)?,
             })
         })?;
-        
+
         let mut recordings = Vec::new();
         for recording in recording_iter {
             recordings.push(recording?);
         }
-        
+
         Ok(recordings)
     }
-    
+
+    pub fn get_review_recordings_for_problem(
+        &self,
+        problem_id: &str,
+    ) -> anyhow::Result<Vec<Recording>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT r.id, r.card_id, r.time_session_id, r.audio_url, r.duration, r.transcript, r.created_at, r.filename, r.filepath, r.file_size, rh.color, r.problem_id, r.recording_type \
+             FROM recordings r \
+             LEFT JOIN recording_highlights rh ON rh.recording_id = r.id \
+             WHERE r.problem_id = ?1 AND r.recording_type = 'review' \
+             ORDER BY r.created_at DESC"
+        )?;
+
+        let recording_iter = stmt.query_map([problem_id], |row| {
+            Ok(Recording {
+                id: row.get(0)?,
+                card_id: row.get(1)?,
+                time_session_id: row.get(2)?,
+                audio_url: row.get(3)?,
+                duration: row.get(4)?,
+                transcript: row.get(5)?,
+                created_at: chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(6)?)
+                    .map_err(|e| {
+                        rusqlite::Error::InvalidColumnType(
+                            6,
+                            e.to_string().into(),
+                            rusqlite::types::Type::Text,
+                        )
+                    })?
+                    .with_timezone(&chrono::Utc),
+                filename: row.get(7)?,
+                filepath: row.get(8)?,
+                file_size: row.get(9)?,
+                highlight_color: row.get(10)?,
+                problem_id: row.get(11)?,
+                recording_type: row.get(12)?,
+            })
+        })?;
+
+        let mut recordings = Vec::new();
+        for recording in recording_iter {
+            recordings.push(recording?);
+        }
+
+        Ok(recordings)
+    }
+
     pub fn delete_recording(&mut self, recording_id: &str) -> anyhow::Result<()> {
         // Check if recording exists before attempting deletion
-        let rows_affected = self.connection.execute(
-            "DELETE FROM recordings WHERE id = ?1",
-            [recording_id]
-        )?;
-        
+        let rows_affected = self
+            .connection
+            .execute("DELETE FROM recordings WHERE id = ?1", [recording_id])?;
+
         if rows_affected == 0 {
-            return Err(anyhow::anyhow!("Recording with id '{}' not found", recording_id));
+            return Err(anyhow::anyhow!(
+                "Recording with id '{}' not found",
+                recording_id
+            ));
         }
 
         println!("Successfully deleted recording '{}'", recording_id);
@@ -1570,18 +1890,14 @@ impl DatabaseManager {
     // Database analysis functions
     pub fn get_database_stats(&self) -> anyhow::Result<DatabaseStats> {
         // Count problems
-        let problem_count: i32 = self.connection.query_row(
-            "SELECT COUNT(*) FROM problems",
-            [],
-            |row| row.get(0),
-        )?;
+        let problem_count: i32 =
+            self.connection
+                .query_row("SELECT COUNT(*) FROM problems", [], |row| row.get(0))?;
 
         // Count total cards
-        let total_cards: i32 = self.connection.query_row(
-            "SELECT COUNT(*) FROM cards",
-            [],
-            |row| row.get(0),
-        )?;
+        let total_cards: i32 =
+            self.connection
+                .query_row("SELECT COUNT(*) FROM cards", [], |row| row.get(0))?;
 
         // Count main cards (parent_card_id IS NULL)
         let main_cards: i32 = self.connection.query_row(
@@ -1607,13 +1923,13 @@ impl DatabaseManager {
 
     pub fn get_card_hierarchy(&self) -> anyhow::Result<Vec<CardHierarchy>> {
         let mut stmt = self.connection.prepare(
-            "SELECT 
+            "SELECT
                 c.id, c.problem_id, c.card_number, c.parent_card_id,
                 p.title as problem_title,
                 (SELECT COUNT(*) FROM cards WHERE parent_card_id = c.id) as child_count
              FROM cards c
              JOIN problems p ON c.problem_id = p.id
-             ORDER BY p.title, c.card_number"
+             ORDER BY p.title, c.card_number",
         )?;
 
         let hierarchy_iter = stmt.query_map([], |row| {
@@ -1637,7 +1953,7 @@ impl DatabaseManager {
 
     pub fn get_cards_per_problem(&self) -> anyhow::Result<Vec<CardCountPerProblem>> {
         let mut stmt = self.connection.prepare(
-            "SELECT 
+            "SELECT
                 p.id, p.title,
                 COUNT(c.id) as total_cards,
                 COUNT(CASE WHEN c.parent_card_id IS NULL OR c.parent_card_id = '' THEN 1 END) as main_cards,
@@ -1667,23 +1983,33 @@ impl DatabaseManager {
     }
 
     // Image-related operations
-    pub fn save_problem_image(&mut self, problem_id: &str, image_path: &str, caption: Option<String>, position: Option<i32>) -> anyhow::Result<ProblemImage> {
+    pub fn save_problem_image(
+        &mut self,
+        problem_id: &str,
+        image_path: &str,
+        caption: Option<String>,
+        position: Option<i32>,
+    ) -> anyhow::Result<ProblemImage> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         // Get the next position if not provided
         let position = match position {
             Some(pos) => pos,
             None => {
-                let max_position: Option<i32> = self.connection.query_row(
-                    "SELECT MAX(position) FROM problem_images WHERE problem_id = ?1",
-                    [problem_id],
-                    |row| row.get(0),
-                ).optional()?.flatten();
+                let max_position: Option<i32> = self
+                    .connection
+                    .query_row(
+                        "SELECT MAX(position) FROM problem_images WHERE problem_id = ?1",
+                        [problem_id],
+                        |row| row.get(0),
+                    )
+                    .optional()?
+                    .flatten();
                 max_position.unwrap_or(-1) + 1
             }
         };
-        
+
         self.connection.execute(
             "INSERT INTO problem_images (id, problem_id, image_path, caption, position, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
@@ -1696,7 +2022,7 @@ impl DatabaseManager {
                 &now.to_rfc3339(),
             ],
         )?;
-        
+
         Ok(ProblemImage {
             id,
             problem_id: problem_id.to_string(),
@@ -1706,16 +2032,16 @@ impl DatabaseManager {
             created_at: now,
         })
     }
-    
+
     pub fn get_problem_images(&self, problem_id: &str) -> anyhow::Result<Vec<ProblemImage>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, image_path, caption, position, created_at 
-             FROM problem_images WHERE problem_id = ?1 ORDER BY position"
+            "SELECT id, problem_id, image_path, caption, position, created_at
+             FROM problem_images WHERE problem_id = ?1 ORDER BY position",
         )?;
-        
+
         let image_iter = stmt.query_map([problem_id], |row| {
             let created_at_str: String = row.get(5)?;
-            
+
             Ok(ProblemImage {
                 id: row.get(0)?,
                 problem_id: row.get(1)?,
@@ -1725,57 +2051,69 @@ impl DatabaseManager {
                 created_at: created_at_str.parse().unwrap_or_else(|_| Utc::now()),
             })
         })?;
-        
+
         let mut images = Vec::new();
         for image in image_iter {
             images.push(image?);
         }
-        
+
         Ok(images)
     }
-    
+
     pub fn delete_problem_image(&mut self, image_id: &str) -> anyhow::Result<String> {
-        println!("🗃️ Database: Attempting to delete image with id: {}", image_id);
-        
+        println!(
+            "🗃️ Database: Attempting to delete image with id: {}",
+            image_id
+        );
+
         // First get the image path so we can delete the file
-        let image_path: String = self.connection.query_row(
-            "SELECT image_path FROM problem_images WHERE id = ?1",
-            [image_id],
-            |row| row.get(0),
-        ).map_err(|e| {
-            println!("❌ Database: Failed to find image with id '{}': {}", image_id, e);
-            e
-        })?;
-        
+        let image_path: String = self
+            .connection
+            .query_row(
+                "SELECT image_path FROM problem_images WHERE id = ?1",
+                [image_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| {
+                println!(
+                    "❌ Database: Failed to find image with id '{}': {}",
+                    image_id, e
+                );
+                e
+            })?;
+
         println!("✅ Database: Found image path: {}", image_path);
-        
+
         // Delete from database
-        let rows_affected = self.connection.execute(
-            "DELETE FROM problem_images WHERE id = ?1",
-            [image_id]
-        ).map_err(|e| {
-            println!("❌ Database: Failed to execute delete query: {}", e);
-            e
-        })?;
-        
-        println!("🔄 Database: Delete query executed, rows_affected: {}", rows_affected);
-        
+        let rows_affected = self
+            .connection
+            .execute("DELETE FROM problem_images WHERE id = ?1", [image_id])
+            .map_err(|e| {
+                println!("❌ Database: Failed to execute delete query: {}", e);
+                e
+            })?;
+
+        println!(
+            "🔄 Database: Delete query executed, rows_affected: {}",
+            rows_affected
+        );
+
         if rows_affected == 0 {
             println!("❌ Database: No rows were affected - image not found");
             return Err(anyhow::anyhow!("Image not found"));
         }
-        
+
         println!("✅ Database: Image deleted successfully from database");
         Ok(image_path)
     }
-    
+
     pub fn update_image_positions(&mut self, updates: Vec<(String, i32)>) -> anyhow::Result<()> {
         let tx = self.connection.unchecked_transaction()?;
 
         for (image_id, position) in updates {
             tx.execute(
                 "UPDATE problem_images SET position = ?1 WHERE id = ?2",
-                params![position, &image_id]
+                params![position, &image_id],
             )?;
         }
 
@@ -1784,7 +2122,13 @@ impl DatabaseManager {
     }
 
     // Card image-related operations
-    pub fn save_card_image(&mut self, card_id: &str, image_path: &str, caption: Option<String>, position: Option<i32>) -> anyhow::Result<CardImage> {
+    pub fn save_card_image(
+        &mut self,
+        card_id: &str,
+        image_path: &str,
+        caption: Option<String>,
+        position: Option<i32>,
+    ) -> anyhow::Result<CardImage> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
 
@@ -1792,11 +2136,15 @@ impl DatabaseManager {
         let position = match position {
             Some(pos) => pos,
             None => {
-                let max_position: Option<i32> = self.connection.query_row(
-                    "SELECT MAX(position) FROM card_images WHERE card_id = ?1",
-                    [card_id],
-                    |row| row.get(0),
-                ).optional()?.flatten();
+                let max_position: Option<i32> = self
+                    .connection
+                    .query_row(
+                        "SELECT MAX(position) FROM card_images WHERE card_id = ?1",
+                        [card_id],
+                        |row| row.get(0),
+                    )
+                    .optional()?
+                    .flatten();
                 max_position.unwrap_or(-1) + 1
             }
         };
@@ -1826,7 +2174,7 @@ impl DatabaseManager {
     pub fn get_card_images(&self, card_id: &str) -> anyhow::Result<Vec<CardImage>> {
         let mut stmt = self.connection.prepare(
             "SELECT id, card_id, image_path, caption, position, created_at
-             FROM card_images WHERE card_id = ?1 ORDER BY position"
+             FROM card_images WHERE card_id = ?1 ORDER BY position",
         )?;
 
         let image_iter = stmt.query_map([card_id], |row| {
@@ -1851,25 +2199,33 @@ impl DatabaseManager {
     }
 
     pub fn delete_card_image(&mut self, image_id: &str) -> anyhow::Result<String> {
-        println!("🗃️ Database: Attempting to delete card image with id: {}", image_id);
+        println!(
+            "🗃️ Database: Attempting to delete card image with id: {}",
+            image_id
+        );
 
         // First get the image path so we can delete the file
-        let image_path: String = self.connection.query_row(
-            "SELECT image_path FROM card_images WHERE id = ?1",
-            [image_id],
-            |row| row.get(0),
-        ).map_err(|e| {
-            println!("❌ Database: Failed to find image with id {}: {}", image_id, e);
-            anyhow::anyhow!("Image not found: {}", e)
-        })?;
+        let image_path: String = self
+            .connection
+            .query_row(
+                "SELECT image_path FROM card_images WHERE id = ?1",
+                [image_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| {
+                println!(
+                    "❌ Database: Failed to find image with id {}: {}",
+                    image_id, e
+                );
+                anyhow::anyhow!("Image not found: {}", e)
+            })?;
 
         println!("✅ Database: Found image path: {}", image_path);
 
         // Delete the database record
-        let rows_affected = self.connection.execute(
-            "DELETE FROM card_images WHERE id = ?1",
-            [image_id]
-        )?;
+        let rows_affected = self
+            .connection
+            .execute("DELETE FROM card_images WHERE id = ?1", [image_id])?;
 
         if rows_affected == 0 {
             println!("❌ Database: No rows were affected - image not found");
@@ -1880,13 +2236,16 @@ impl DatabaseManager {
         Ok(image_path)
     }
 
-    pub fn update_card_image_positions(&mut self, updates: Vec<(String, i32)>) -> anyhow::Result<()> {
+    pub fn update_card_image_positions(
+        &mut self,
+        updates: Vec<(String, i32)>,
+    ) -> anyhow::Result<()> {
         let tx = self.connection.unchecked_transaction()?;
 
         for (image_id, position) in updates {
             tx.execute(
                 "UPDATE card_images SET position = ?1 WHERE id = ?2",
-                params![position, &image_id]
+                params![position, &image_id],
             )?;
         }
 
@@ -1897,13 +2256,13 @@ impl DatabaseManager {
     // Tag management operations
     pub fn get_problem_tags(&self, problem_id: &str) -> anyhow::Result<Vec<Tag>> {
         let mut stmt = self.connection.prepare(
-            "SELECT t.id, t.name, t.color, t.category 
-             FROM tags t 
-             JOIN problem_tags pt ON t.id = pt.tag_id 
-             WHERE pt.problem_id = ?1 
-             ORDER BY t.name"
+            "SELECT t.id, t.name, t.color, t.category
+             FROM tags t
+             JOIN problem_tags pt ON t.id = pt.tag_id
+             WHERE pt.problem_id = ?1
+             ORDER BY t.name",
         )?;
-        
+
         let tag_iter = stmt.query_map([problem_id], |row| {
             Ok(Tag {
                 id: row.get(0)?,
@@ -1912,20 +2271,20 @@ impl DatabaseManager {
                 category: row.get(3)?,
             })
         })?;
-        
+
         let mut tags = Vec::new();
         for tag in tag_iter {
             tags.push(tag?);
         }
-        
+
         Ok(tags)
     }
-    
+
     pub fn get_all_tags(&self) -> anyhow::Result<Vec<Tag>> {
-        let mut stmt = self.connection.prepare(
-            "SELECT id, name, color, category FROM tags ORDER BY name"
-        )?;
-        
+        let mut stmt = self
+            .connection
+            .prepare("SELECT id, name, color, category FROM tags ORDER BY name")?;
+
         let tag_iter = stmt.query_map([], |row| {
             Ok(Tag {
                 id: row.get(0)?,
@@ -1934,40 +2293,45 @@ impl DatabaseManager {
                 category: row.get(3)?,
             })
         })?;
-        
+
         let mut tags = Vec::new();
         for tag in tag_iter {
             tags.push(tag?);
         }
-        
+
         Ok(tags)
     }
-    
+
     pub fn add_problem_tag(&mut self, req: AddProblemTagRequest) -> anyhow::Result<Tag> {
         // First, check if tag already exists
-        let existing_tag: Option<Tag> = self.connection.query_row(
-            "SELECT id, name, color, category FROM tags WHERE name = ?1",
-            [&req.tag_name],
-            |row| Ok(Tag {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                color: row.get(2)?,
-                category: row.get(3)?,
-            })
-        ).optional()?;
-        
+        let existing_tag: Option<Tag> = self
+            .connection
+            .query_row(
+                "SELECT id, name, color, category FROM tags WHERE name = ?1",
+                [&req.tag_name],
+                |row| {
+                    Ok(Tag {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        color: row.get(2)?,
+                        category: row.get(3)?,
+                    })
+                },
+            )
+            .optional()?;
+
         let tag = match existing_tag {
             Some(tag) => tag,
             None => {
                 // Create new tag
                 let tag_id = Uuid::new_v4().to_string();
                 let category = req.category.unwrap_or_else(|| "custom".to_string());
-                
+
                 self.connection.execute(
                     "INSERT INTO tags (id, name, color, category) VALUES (?1, ?2, ?3, ?4)",
                     params![&tag_id, &req.tag_name, &req.color, &category],
                 )?;
-                
+
                 Tag {
                     id: tag_id,
                     name: req.tag_name.clone(),
@@ -1976,14 +2340,14 @@ impl DatabaseManager {
                 }
             }
         };
-        
+
         // Check if the problem-tag relationship already exists
         let exists: i32 = self.connection.query_row(
             "SELECT COUNT(*) FROM problem_tags WHERE problem_id = ?1 AND tag_id = ?2",
             params![&req.problem_id, &tag.id],
             |row| row.get(0),
         )?;
-        
+
         // Only add the relationship if it doesn't exist
         if exists == 0 {
             self.connection.execute(
@@ -1991,53 +2355,63 @@ impl DatabaseManager {
                 params![&req.problem_id, &tag.id],
             )?;
         }
-        
+
         Ok(tag)
     }
-    
+
     pub fn remove_problem_tag(&mut self, req: RemoveProblemTagRequest) -> anyhow::Result<()> {
         let rows_affected = self.connection.execute(
             "DELETE FROM problem_tags WHERE problem_id = ?1 AND tag_id = ?2",
             params![&req.problem_id, &req.tag_id],
         )?;
-        
+
         if rows_affected == 0 {
             return Err(anyhow::anyhow!("Tag relationship not found"));
         }
-        
+
         Ok(())
     }
-    
-    pub fn filter_problems_by_tags(&self, tag_ids: Vec<String>) -> anyhow::Result<Vec<FrontendProblem>> {
+
+    pub fn filter_problems_by_tags(
+        &self,
+        tag_ids: Vec<String>,
+    ) -> anyhow::Result<Vec<FrontendProblem>> {
         if tag_ids.is_empty() {
             return Ok(Vec::new());
         }
 
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
-        
+        let related_column_sql = if has_related_column {
+            "related_problem_ids"
+        } else {
+            "NULL as related_problem_ids"
+        };
+
         // Create placeholders for the IN clause
         let placeholders: Vec<&str> = tag_ids.iter().map(|_| "?").collect();
         let placeholders_str = placeholders.join(", ");
-        
+
         let sql = format!(
-            "SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at 
+            "SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at
              FROM problems p
              INNER JOIN problem_tags pt ON p.id = pt.problem_id
              WHERE pt.tag_id IN ({})
              ORDER BY p.title",
             related_column_sql, placeholders_str
         );
-        
+
         println!("DEBUG: Filter by tags SQL: {}", sql);
         println!("DEBUG: Tag IDs: {:?}", tag_ids);
-        
+
         let mut stmt = self.connection.prepare(&sql)?;
-        
+
         // Convert tag_ids to rusqlite::ToSql compatible values
-        let params: Vec<&dyn rusqlite::ToSql> = tag_ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
-        
+        let params: Vec<&dyn rusqlite::ToSql> = tag_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
+
         let problem_iter = stmt.query_map(&params[..], |row| {
             let problem = Problem {
                 id: row.get(0)?,
@@ -2049,48 +2423,68 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                updated_at: row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
-        
+
         let mut problems = Vec::new();
         for problem in problem_iter {
             problems.push(problem?);
         }
-        
-        println!("DEBUG: Found {} problems with selected tags", problems.len());
+
+        println!(
+            "DEBUG: Found {} problems with selected tags",
+            problems.len()
+        );
         Ok(problems)
     }
 
     pub fn get_tag_suggestions(&self, query: &str, limit: i32) -> anyhow::Result<Vec<String>> {
         let search_pattern = format!("%{}%", query);
-        
+
         let mut stmt = self.connection.prepare(
-            "SELECT DISTINCT name FROM tags 
-             WHERE name LIKE ?1 
-             ORDER BY name 
-             LIMIT ?2"
+            "SELECT DISTINCT name FROM tags
+             WHERE name LIKE ?1
+             ORDER BY name
+             LIMIT ?2",
         )?;
-        
-        let suggestions = stmt.query_map(params![search_pattern, limit], |row| {
-            Ok(row.get::<_, String>(0)?)
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+
+        let suggestions = stmt
+            .query_map(params![search_pattern, limit], |row| {
+                Ok(row.get::<_, String>(0)?)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(suggestions)
     }
-    
+
     // Problem connection functions
-    pub fn search_problems_by_title(&self, query: &str, limit: i32, exclude_id: Option<&str>) -> anyhow::Result<Vec<FrontendProblem>> {
+    pub fn search_problems_by_title(
+        &self,
+        query: &str,
+        limit: i32,
+        exclude_id: Option<&str>,
+    ) -> anyhow::Result<Vec<FrontendProblem>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
-        
+
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
-        
-        let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(exclude_id) = exclude_id {
+        let related_column_sql = if has_related_column {
+            "related_problem_ids"
+        } else {
+            "NULL as related_problem_ids"
+        };
+
+        let (sql, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = if let Some(exclude_id) =
+            exclude_id
+        {
             (
                 format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
                          FROM problems
@@ -2116,9 +2510,9 @@ impl DatabaseManager {
                 ],
             )
         };
-        
+
         let mut stmt = self.connection.prepare(&sql)?;
-        
+
         let problem_iter = stmt.query_map(
             rusqlite::params_from_iter(params.iter().map(|v| v.as_ref())),
             |row| {
@@ -2132,68 +2526,85 @@ impl DatabaseManager {
                     constraints: row.get(6)?,
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8).ok(), // Use .ok() to handle NULL gracefully
-                    created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                    created_at: row
+                        .get::<_, String>(9)?
+                        .parse()
+                        .unwrap_or_else(|_| Utc::now()),
+                    updated_at: row
+                        .get::<_, Option<String>>(10)?
+                        .and_then(|s| s.parse().ok()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             },
         )?;
-        
+
         let mut problems = Vec::new();
         for problem in problem_iter {
             problems.push(problem?);
         }
-        
+
         Ok(problems)
     }
-    
-    pub fn add_problem_relation(&mut self, problem_id: &str, related_problem_id: &str) -> anyhow::Result<()> {
+
+    pub fn add_problem_relation(
+        &mut self,
+        problem_id: &str,
+        related_problem_id: &str,
+    ) -> anyhow::Result<()> {
         // Add relation to the first problem
         self.add_relation_to_problem(problem_id, related_problem_id)?;
-        
+
         // Add bidirectional relation to the second problem
         self.add_relation_to_problem(related_problem_id, problem_id)?;
-        
+
         Ok(())
     }
-    
-    pub fn remove_problem_relation(&mut self, problem_id: &str, related_problem_id: &str) -> anyhow::Result<()> {
+
+    pub fn remove_problem_relation(
+        &mut self,
+        problem_id: &str,
+        related_problem_id: &str,
+    ) -> anyhow::Result<()> {
         // Remove relation from the first problem
         self.remove_relation_from_problem(problem_id, related_problem_id)?;
-        
+
         // Remove bidirectional relation from the second problem
         self.remove_relation_from_problem(related_problem_id, problem_id)?;
-        
+
         Ok(())
     }
-    
+
     pub fn get_related_problems(&self, problem_id: &str) -> anyhow::Result<Vec<FrontendProblem>> {
         // Get the problem to access its related_problem_ids
         if let Some(problem) = self.get_problem_by_id(problem_id)? {
             if problem.related_problem_ids.is_empty() {
                 return Ok(Vec::new());
             }
-            
+
             // Build query to get all related problems
-            let placeholders = problem.related_problem_ids.iter()
+            let placeholders = problem
+                .related_problem_ids
+                .iter()
                 .map(|_| "?")
                 .collect::<Vec<_>>()
                 .join(", ");
-            
+
             let sql = format!(
-                "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at 
-                 FROM problems 
-                 WHERE id IN ({}) 
+                "SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, related_problem_ids, created_at
+                 FROM problems
+                 WHERE id IN ({})
                  ORDER BY title",
                 placeholders
             );
-            
+
             let mut stmt = self.connection.prepare(&sql)?;
-            
-            let params: Vec<&dyn rusqlite::ToSql> = problem.related_problem_ids.iter()
+
+            let params: Vec<&dyn rusqlite::ToSql> = problem
+                .related_problem_ids
+                .iter()
                 .map(|id| id as &dyn rusqlite::ToSql)
                 .collect();
-                
+
             let problem_iter = stmt.query_map(params.as_slice(), |row| {
                 let db_problem = Problem {
                     id: row.get(0)?,
@@ -2205,30 +2616,45 @@ impl DatabaseManager {
                     constraints: row.get(6)?,
                     hints: row.get(7)?,
                     related_problem_ids: row.get(8)?,
-                    created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                    updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                    created_at: row
+                        .get::<_, String>(9)?
+                        .parse()
+                        .unwrap_or_else(|_| Utc::now()),
+                    updated_at: row
+                        .get::<_, Option<String>>(10)?
+                        .and_then(|s| s.parse().ok()),
                 };
                 Ok(convert_problem_to_frontend(db_problem))
             })?;
-            
+
             let mut related_problems = Vec::new();
             for problem in problem_iter {
                 related_problems.push(problem?);
             }
-            
+
             Ok(related_problems)
         } else {
-            Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id))
+            Err(anyhow::anyhow!(
+                "Problem with id '{}' not found",
+                problem_id
+            ))
         }
     }
-    
+
     // Helper functions for managing relations
-    fn add_relation_to_problem(&mut self, problem_id: &str, new_related_id: &str) -> anyhow::Result<()> {
+    fn add_relation_to_problem(
+        &mut self,
+        problem_id: &str,
+        new_related_id: &str,
+    ) -> anyhow::Result<()> {
         if let Some(mut problem) = self.get_problem_by_id(problem_id)? {
             // Check if relation already exists
-            if !problem.related_problem_ids.contains(&new_related_id.to_string()) {
+            if !problem
+                .related_problem_ids
+                .contains(&new_related_id.to_string())
+            {
                 problem.related_problem_ids.push(new_related_id.to_string());
-                
+
                 // Update the problem in database
                 let update_req = UpdateProblemRequest {
                     id: problem_id.to_string(),
@@ -2241,18 +2667,24 @@ impl DatabaseManager {
                     hints: None,
                     related_problem_ids: Some(problem.related_problem_ids),
                 };
-                
+
                 self.update_problem(update_req)?;
             }
         }
         Ok(())
     }
-    
-    fn remove_relation_from_problem(&mut self, problem_id: &str, related_id_to_remove: &str) -> anyhow::Result<()> {
+
+    fn remove_relation_from_problem(
+        &mut self,
+        problem_id: &str,
+        related_id_to_remove: &str,
+    ) -> anyhow::Result<()> {
         if let Some(mut problem) = self.get_problem_by_id(problem_id)? {
             // Remove the relation if it exists
-            problem.related_problem_ids.retain(|id| id != related_id_to_remove);
-            
+            problem
+                .related_problem_ids
+                .retain(|id| id != related_id_to_remove);
+
             // Update the problem in database
             let update_req = UpdateProblemRequest {
                 id: problem_id.to_string(),
@@ -2265,7 +2697,7 @@ impl DatabaseManager {
                 hints: None,
                 related_problem_ids: Some(problem.related_problem_ids),
             };
-            
+
             self.update_problem(update_req)?;
         }
         Ok(())
@@ -2274,17 +2706,21 @@ impl DatabaseManager {
     // Search operations for Name/Topic/Tags system
     pub fn search_problems_by_topic(&self, query: &str) -> anyhow::Result<Vec<FrontendProblem>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
-        
+
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
-        
+        let related_column_sql = if has_related_column {
+            "related_problem_ids"
+        } else {
+            "NULL as related_problem_ids"
+        };
+
         let sql = format!("SELECT id, title, description, difficulty, topic, leetcode_url, constraints, hints, {}, created_at, updated_at
                           FROM problems
                           WHERE LOWER(topic) LIKE ?1
                           ORDER BY title
                           LIMIT 50", related_column_sql);
-        
+
         let mut stmt = self.connection.prepare(&sql)?;
         let problem_iter = stmt.query_map([search_pattern], |row| {
             let problem = Problem {
@@ -2297,8 +2733,13 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                updated_at: row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
@@ -2313,12 +2754,19 @@ impl DatabaseManager {
 
     pub fn search_problems_by_tags(&self, query: &str) -> anyhow::Result<Vec<FrontendProblem>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
-        println!("DEBUG: Tag search query: '{}', pattern: '{}'", query, search_pattern);
-        
+        println!(
+            "DEBUG: Tag search query: '{}', pattern: '{}'",
+            query, search_pattern
+        );
+
         // Check if related_problem_ids column exists for backward compatibility
         let has_related_column = self.has_related_problem_ids_column();
-        let related_column_sql = if has_related_column { "related_problem_ids" } else { "NULL as related_problem_ids" };
-        
+        let related_column_sql = if has_related_column {
+            "related_problem_ids"
+        } else {
+            "NULL as related_problem_ids"
+        };
+
         // Search in problem_tags table (normalized tags)
         let sql = format!("SELECT DISTINCT p.id, p.title, p.description, p.difficulty, p.topic, p.leetcode_url, p.constraints, p.hints, {}, p.created_at, p.updated_at
                           FROM problems p
@@ -2327,25 +2775,31 @@ impl DatabaseManager {
                           WHERE LOWER(t.name) LIKE ?1
                           ORDER BY p.title
                           LIMIT 50", related_column_sql);
-        
+
         println!("DEBUG: Executing SQL: {}", sql);
-        
+
         // Debug: Check if the tag exists at all
-        let tag_exists: Option<String> = self.connection.query_row(
-            "SELECT name FROM tags WHERE LOWER(name) LIKE ?1",
-            [&search_pattern],
-            |row| Ok(row.get::<_, String>(0)?)
-        ).optional()?;
+        let tag_exists: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT name FROM tags WHERE LOWER(name) LIKE ?1",
+                [&search_pattern],
+                |row| Ok(row.get::<_, String>(0)?),
+            )
+            .optional()?;
         println!("DEBUG: Tag exists check: {:?}", tag_exists);
-        
+
         // Debug: Check problem_tags relationships
         let relationship_count: i32 = self.connection.query_row(
             "SELECT COUNT(*) FROM problem_tags pt INNER JOIN tags t ON pt.tag_id = t.id WHERE LOWER(t.name) LIKE ?1",
             [&search_pattern],
             |row| Ok(row.get(0)?)
         )?;
-        println!("DEBUG: Problem-tag relationships found: {}", relationship_count);
-        
+        println!(
+            "DEBUG: Problem-tag relationships found: {}",
+            relationship_count
+        );
+
         let mut stmt = self.connection.prepare(&sql)?;
         let problem_iter = stmt.query_map([&search_pattern], |row| {
             let problem = Problem {
@@ -2358,8 +2812,13 @@ impl DatabaseManager {
                 constraints: row.get(6)?,
                 hints: row.get(7)?,
                 related_problem_ids: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
-                updated_at: row.get::<_, Option<String>>(10)?.and_then(|s| s.parse().ok()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                updated_at: row
+                    .get::<_, Option<String>>(10)?
+                    .and_then(|s| s.parse().ok()),
             };
             Ok(convert_problem_to_frontend(problem))
         })?;
@@ -2371,7 +2830,10 @@ impl DatabaseManager {
 
         println!("DEBUG: Tag search found {} problems", problems.len());
         for problem in &problems {
-            println!("DEBUG: Found problem: {} (ID: {})", problem.title, problem.id);
+            println!(
+                "DEBUG: Found problem: {} (ID: {})",
+                problem.title, problem.id
+            );
         }
 
         Ok(problems)
@@ -2379,17 +2841,16 @@ impl DatabaseManager {
 
     pub fn get_title_suggestions(&self, query: &str) -> anyhow::Result<Vec<String>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
-        
-        let sql = "SELECT DISTINCT title 
-                   FROM problems 
-                   WHERE LOWER(title) LIKE ?1 
-                   ORDER BY title 
+
+        let sql = "SELECT DISTINCT title
+                   FROM problems
+                   WHERE LOWER(title) LIKE ?1
+                   ORDER BY title
                    LIMIT 10";
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let suggestion_iter = stmt.query_map([search_pattern], |row| {
-            Ok(row.get::<_, String>(0)?)
-        })?;
+        let suggestion_iter =
+            stmt.query_map([search_pattern], |row| Ok(row.get::<_, String>(0)?))?;
 
         let mut suggestions = Vec::new();
         for suggestion in suggestion_iter {
@@ -2401,14 +2862,14 @@ impl DatabaseManager {
 
     pub fn get_topic_suggestions(&self, query: &str) -> anyhow::Result<Vec<String>> {
         let search_pattern = format!("%{}%", query.to_lowercase());
-        
+
         // Since topic is stored as JSON array, we need to search within the JSON content
-        let sql = "SELECT DISTINCT topic 
-                   FROM problems 
+        let sql = "SELECT DISTINCT topic
+                   FROM problems
                    WHERE LOWER(topic) LIKE ?1 AND topic IS NOT NULL AND topic != '[]'
-                   ORDER BY topic 
+                   ORDER BY topic
                    LIMIT 10";
-        
+
         let mut stmt = self.connection.prepare(sql)?;
         let topic_iter = stmt.query_map([search_pattern], |row| {
             let topic_json: String = row.get(0)?;
@@ -2421,7 +2882,9 @@ impl DatabaseManager {
             // Parse JSON array and extract individual topics
             let topics: Vec<String> = parse_json_array(&topic_json);
             for topic in topics {
-                if topic.to_lowercase().contains(&query.to_lowercase()) && !suggestions.contains(&topic) {
+                if topic.to_lowercase().contains(&query.to_lowercase())
+                    && !suggestions.contains(&topic)
+                {
                     suggestions.push(topic);
                     if suggestions.len() >= 10 {
                         break;
@@ -2437,15 +2900,15 @@ impl DatabaseManager {
     }
 
     // Solution Card Methods
-    
+
     /// Get the solution card for a specific problem
     pub fn get_solution_card(&self, problem_id: &str) -> anyhow::Result<Option<SolutionCard>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, 
+            "SELECT id, problem_id, card_number, code, language, notes, status,
                     total_duration, created_at, last_modified, is_solution
-             FROM cards 
+             FROM cards
              WHERE problem_id = ? AND is_solution = 1
-             LIMIT 1"
+             LIMIT 1",
         )?;
 
         let card_iter = stmt.query_map(params![problem_id], |row| {
@@ -2482,7 +2945,7 @@ impl DatabaseManager {
                 id, problem_id, card_number, code, language, notes, status,
                 total_duration, created_at, last_modified, is_solution
              ) VALUES (?, ?, 0, '', 'java', '', 'In Progress', 0, ?, ?, 1)",
-            params![card_id, problem_id, now, now]
+            params![card_id, problem_id, now, now],
         )?;
 
         // Return the created card
@@ -2502,28 +2965,38 @@ impl DatabaseManager {
     }
 
     /// Update solution card code
-    pub fn update_solution_card_code(&self, card_id: &str, code: &str, language: &str) -> anyhow::Result<()> {
+    pub fn update_solution_card_code(
+        &self,
+        card_id: &str,
+        code: &str,
+        language: &str,
+    ) -> anyhow::Result<()> {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
         // ENHANCED LOGGING: Log the operation details
         println!("🔵 [DB_DEBUG] update_solution_card_code called:");
         println!("🔵 [DB_DEBUG]   card_id: {}", card_id);
         println!("🔵 [DB_DEBUG]   code length: {}", code.len());
-        println!("🔵 [DB_DEBUG]   code preview: {}", &code[..std::cmp::min(50, code.len())]);
+        println!(
+            "🔵 [DB_DEBUG]   code preview: {}",
+            &code[..std::cmp::min(50, code.len())]
+        );
         println!("🔵 [DB_DEBUG]   language: {}", language);
         println!("🔵 [DB_DEBUG]   timestamp: {}", now);
 
         // Check if the card exists and is a solution card BEFORE update
         let before_query = "SELECT id, code, language, is_solution FROM cards WHERE id = ?";
         let mut stmt = self.connection.prepare(before_query)?;
-        let before_result = stmt.query_row([card_id], |row| {
-            Ok((
-                row.get::<_, String>("id")?,
-                row.get::<_, String>("code")?,
-                row.get::<_, String>("language")?,
-                row.get::<_, Option<bool>>("is_solution")?,
-            ))
-        }).optional()?;
+        let before_result = stmt
+            .query_row([card_id], |row| {
+                Ok((
+                    row.get::<_, String>("id")?,
+                    row.get::<_, String>("code")?,
+                    row.get::<_, String>("language")?,
+                    row.get::<_, Option<bool>>("is_solution")?,
+                ))
+            })
+            .optional()?;
 
         match before_result {
             Some((id, old_code, old_lang, is_sol)) => {
@@ -2544,10 +3017,13 @@ impl DatabaseManager {
             "UPDATE cards
              SET code = ?, language = ?, last_modified = ?
              WHERE id = ? AND is_solution = 1",
-            params![code, language, now, card_id]
+            params![code, language, now, card_id],
         )?;
 
-        println!("🔵 [DB_DEBUG] UPDATE executed, rows affected: {}", rows_affected);
+        println!(
+            "🔵 [DB_DEBUG] UPDATE executed, rows affected: {}",
+            rows_affected
+        );
 
         if rows_affected == 0 {
             println!("🔴 [DB_DEBUG] WARNING: No rows were updated! Either card doesn't exist or is_solution != 1");
@@ -2556,13 +3032,15 @@ impl DatabaseManager {
         // Verify the update by checking the card again
         let after_query = "SELECT code, language, is_solution FROM cards WHERE id = ?";
         let mut after_stmt = self.connection.prepare(after_query)?;
-        let after_result = after_stmt.query_row([card_id], |row| {
-            Ok((
-                row.get::<_, String>("code")?,
-                row.get::<_, String>("language")?,
-                row.get::<_, Option<bool>>("is_solution")?,
-            ))
-        }).optional()?;
+        let after_result = after_stmt
+            .query_row([card_id], |row| {
+                Ok((
+                    row.get::<_, String>("code")?,
+                    row.get::<_, String>("language")?,
+                    row.get::<_, Option<bool>>("is_solution")?,
+                ))
+            })
+            .optional()?;
 
         match after_result {
             Some((new_code, new_lang, is_sol)) => {
@@ -2588,7 +3066,10 @@ impl DatabaseManager {
         println!("🟢 [DB_DEBUG] update_solution_card_notes called:");
         println!("🟢 [DB_DEBUG]   card_id: {}", card_id);
         println!("🟢 [DB_DEBUG]   notes length: {}", notes.len());
-        println!("🟢 [DB_DEBUG]   notes preview: {}", &notes[..std::cmp::min(50, notes.len())]);
+        println!(
+            "🟢 [DB_DEBUG]   notes preview: {}",
+            &notes[..std::cmp::min(50, notes.len())]
+        );
         println!("🟢 [DB_DEBUG]   timestamp: {}", now);
 
         // Execute the update
@@ -2596,10 +3077,13 @@ impl DatabaseManager {
             "UPDATE cards
              SET notes = ?, last_modified = ?
              WHERE id = ? AND is_solution = 1",
-            params![notes, now, card_id]
+            params![notes, now, card_id],
         )?;
 
-        println!("🟢 [DB_DEBUG] UPDATE executed, rows affected: {}", rows_affected);
+        println!(
+            "🟢 [DB_DEBUG] UPDATE executed, rows affected: {}",
+            rows_affected
+        );
 
         if rows_affected == 0 {
             println!("🔴 [DB_DEBUG] WARNING: No rows were updated! Either card doesn't exist or is_solution != 1");
@@ -2611,12 +3095,10 @@ impl DatabaseManager {
     /// Check if a solution card exists for a problem
     pub fn solution_card_exists(&self, problem_id: &str) -> anyhow::Result<bool> {
         let mut stmt = self.connection.prepare(
-            "SELECT COUNT(*) as count FROM cards WHERE problem_id = ? AND is_solution = 1"
+            "SELECT COUNT(*) as count FROM cards WHERE problem_id = ? AND is_solution = 1",
         )?;
 
-        let count: i32 = stmt.query_row(params![problem_id], |row| {
-            row.get("count")
-        })?;
+        let count: i32 = stmt.query_row(params![problem_id], |row| row.get("count"))?;
 
         Ok(count > 0)
     }
@@ -2625,9 +3107,9 @@ impl DatabaseManager {
     /// This is useful for the normal card navigation to exclude solution cards
     pub fn get_regular_cards(&self, problem_id: &str) -> anyhow::Result<Vec<SolutionCard>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, problem_id, card_number, code, language, notes, status, 
+            "SELECT id, problem_id, card_number, code, language, notes, status,
                     total_duration, created_at, last_modified, COALESCE(is_solution, 0) as is_solution
-             FROM cards 
+             FROM cards
              WHERE problem_id = ? AND (is_solution IS NULL OR is_solution = 0)
              ORDER BY card_number ASC"
         )?;
@@ -2659,16 +3141,25 @@ impl DatabaseManager {
     /// Delete a problem and all its related data
     /// Performs cascading deletion in proper order to maintain referential integrity
     pub fn delete_problem(&mut self, problem_id: &str) -> anyhow::Result<()> {
-        println!("🗑️ [Database] Starting delete operation for problem: {}", problem_id);
-        
+        println!(
+            "🗑️ [Database] Starting delete operation for problem: {}",
+            problem_id
+        );
+
         // First, verify the problem exists
         let problem = self.get_problem_by_id(problem_id)?;
         if problem.is_none() {
-            return Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id));
+            return Err(anyhow::anyhow!(
+                "Problem with id '{}' not found",
+                problem_id
+            ));
         }
-        
+
         let problem = problem.unwrap();
-        println!("🗑️ [Database] Confirmed problem exists: '{}'", problem.title);
+        println!(
+            "🗑️ [Database] Confirmed problem exists: '{}'",
+            problem.title
+        );
 
         // Begin transaction for atomic deletion
         let tx = self.connection.unchecked_transaction()?;
@@ -2676,81 +3167,95 @@ impl DatabaseManager {
 
         // Step 1: Get all cards for this problem to delete their related data
         println!("🔍 [Database] Finding all cards for problem...");
-        let card_ids: Vec<String> = tx.prepare(
-            "SELECT id FROM cards WHERE problem_id = ?1"
-        )?
-        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let card_ids: Vec<String> = tx
+            .prepare("SELECT id FROM cards WHERE problem_id = ?1")?
+            .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         println!("🗑️ [Database] Found {} cards to delete", card_ids.len());
 
         // Step 2: Delete time sessions for all cards
         for card_id in &card_ids {
-            let sessions_deleted = tx.execute(
-                "DELETE FROM time_sessions WHERE card_id = ?1",
-                [card_id],
-            ).unwrap_or(0);
+            let sessions_deleted = tx
+                .execute("DELETE FROM time_sessions WHERE card_id = ?1", [card_id])
+                .unwrap_or(0);
             if sessions_deleted > 0 {
-                println!("🗑️ [Database] Deleted {} time sessions for card {}", sessions_deleted, card_id);
+                println!(
+                    "🗑️ [Database] Deleted {} time sessions for card {}",
+                    sessions_deleted, card_id
+                );
             }
         }
 
         // Step 3: Delete recordings for all cards
         for card_id in &card_ids {
-            let recordings_deleted = tx.execute(
-                "DELETE FROM recordings WHERE card_id = ?1",
-                [card_id],
-            ).unwrap_or(0);
+            let recordings_deleted = tx
+                .execute("DELETE FROM recordings WHERE card_id = ?1", [card_id])
+                .unwrap_or(0);
             if recordings_deleted > 0 {
-                println!("🗑️ [Database] Deleted {} recordings for card {}", recordings_deleted, card_id);
+                println!(
+                    "🗑️ [Database] Deleted {} recordings for card {}",
+                    recordings_deleted, card_id
+                );
             }
         }
 
         // Step 4: Delete connections where any of these cards are source or target
         for card_id in &card_ids {
-            let connections_deleted = tx.execute(
-                "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
-                [card_id],
-            ).unwrap_or(0);
+            let connections_deleted = tx
+                .execute(
+                    "DELETE FROM connections WHERE source_card_id = ?1 OR target_card_id = ?1",
+                    [card_id],
+                )
+                .unwrap_or(0);
             if connections_deleted > 0 {
-                println!("🗑️ [Database] Deleted {} connections for card {}", connections_deleted, card_id);
+                println!(
+                    "🗑️ [Database] Deleted {} connections for card {}",
+                    connections_deleted, card_id
+                );
             }
         }
 
         // Step 5: Delete card tags for all cards
         for card_id in &card_ids {
-            let card_tags_deleted = tx.execute(
-                "DELETE FROM card_tags WHERE card_id = ?1",
-                [card_id],
-            ).unwrap_or(0);
+            let card_tags_deleted = tx
+                .execute("DELETE FROM card_tags WHERE card_id = ?1", [card_id])
+                .unwrap_or(0);
             if card_tags_deleted > 0 {
-                println!("🗑️ [Database] Deleted {} card tags for card {}", card_tags_deleted, card_id);
+                println!(
+                    "🗑️ [Database] Deleted {} card tags for card {}",
+                    card_tags_deleted, card_id
+                );
             }
         }
 
         // Step 6: Delete all cards for this problem
-        let cards_deleted = tx.execute(
-            "DELETE FROM cards WHERE problem_id = ?1",
-            [problem_id],
-        )?;
+        let cards_deleted = tx.execute("DELETE FROM cards WHERE problem_id = ?1", [problem_id])?;
         println!("🗑️ [Database] Deleted {} cards for problem", cards_deleted);
 
         // Step 7: Delete problem images
-        let images_deleted = tx.execute(
-            "DELETE FROM problem_images WHERE problem_id = ?1",
-            [problem_id],
-        ).unwrap_or(0);
+        let images_deleted = tx
+            .execute(
+                "DELETE FROM problem_images WHERE problem_id = ?1",
+                [problem_id],
+            )
+            .unwrap_or(0);
         if images_deleted > 0 {
             println!("🗑️ [Database] Deleted {} problem images", images_deleted);
         }
 
         // Step 8: Delete problem tags relationships
-        let problem_tags_deleted = tx.execute(
-            "DELETE FROM problem_tags WHERE problem_id = ?1",
-            [problem_id],
-        ).unwrap_or(0);
+        let problem_tags_deleted = tx
+            .execute(
+                "DELETE FROM problem_tags WHERE problem_id = ?1",
+                [problem_id],
+            )
+            .unwrap_or(0);
         if problem_tags_deleted > 0 {
-            println!("🗑️ [Database] Deleted {} problem tag relationships", problem_tags_deleted);
+            println!(
+                "🗑️ [Database] Deleted {} problem tag relationships",
+                problem_tags_deleted
+            );
         }
 
         // Step 9: Remove this problem from other problems' related_problem_ids
@@ -2761,82 +3266,105 @@ impl DatabaseManager {
             let mut stmt = tx.prepare(
                 "SELECT id, related_problem_ids FROM problems WHERE related_problem_ids IS NOT NULL AND related_problem_ids LIKE ?"
             )?;
-            
+
             let problem_pattern = format!("%{}%", problem_id);
-            let problems_to_update: Vec<(String, String)> = stmt.query_map([&problem_pattern], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?.collect::<Result<Vec<_>, _>>()?;
+            let problems_to_update: Vec<(String, String)> = stmt
+                .query_map([&problem_pattern], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
 
             for (id, related_ids_json) in problems_to_update {
-                if let Ok(mut related_ids) = serde_json::from_str::<Vec<String>>(&related_ids_json) {
+                if let Ok(mut related_ids) = serde_json::from_str::<Vec<String>>(&related_ids_json)
+                {
                     if related_ids.contains(&problem_id.to_string()) {
                         related_ids.retain(|id| id != problem_id);
-                        let updated_json = serde_json::to_string(&related_ids).unwrap_or_else(|_| "[]".to_string());
-                        
+                        let updated_json = serde_json::to_string(&related_ids)
+                            .unwrap_or_else(|_| "[]".to_string());
+
                         tx.execute(
                             "UPDATE problems SET related_problem_ids = ?1 WHERE id = ?2",
-                            params![updated_json, id]
+                            params![updated_json, id],
                         )?;
-                        println!("🗑️ [Database] Removed problem reference from problem {}", id);
+                        println!(
+                            "🗑️ [Database] Removed problem reference from problem {}",
+                            id
+                        );
                     }
                 }
             }
         }
 
         // Step 10: Finally, delete the problem itself
-        let rows_affected = tx.execute(
-            "DELETE FROM problems WHERE id = ?1",
-            [problem_id],
-        )?;
+        let rows_affected = tx.execute("DELETE FROM problems WHERE id = ?1", [problem_id])?;
 
         if rows_affected == 0 {
             println!("❌ [Database] Failed to delete problem - no rows affected");
-            return Err(anyhow::anyhow!("Failed to delete problem - no rows affected"));
+            return Err(anyhow::anyhow!(
+                "Failed to delete problem - no rows affected"
+            ));
         }
 
         // Commit the transaction
         tx.commit()?;
-        println!("✅ [Database] Successfully deleted problem '{}' and all related data", problem.title);
-        
+        println!(
+            "✅ [Database] Successfully deleted problem '{}' and all related data",
+            problem.title
+        );
+
         Ok(())
     }
 
     pub fn delete_problem_with_files(&mut self, problem_id: &str) -> anyhow::Result<()> {
-        println!("🗑️ [Database] Starting delete operation with file cleanup for problem: {}", problem_id);
-        
+        println!(
+            "🗑️ [Database] Starting delete operation with file cleanup for problem: {}",
+            problem_id
+        );
+
         // First, verify the problem exists
         let problem = self.get_problem_by_id(problem_id)?;
         if problem.is_none() {
-            return Err(anyhow::anyhow!("Problem with id '{}' not found", problem_id));
+            return Err(anyhow::anyhow!(
+                "Problem with id '{}' not found",
+                problem_id
+            ));
         }
-        
+
         let problem = problem.unwrap();
-        println!("🗑️ [Database] Confirmed problem exists: '{}'", problem.title);
+        println!(
+            "🗑️ [Database] Confirmed problem exists: '{}'",
+            problem.title
+        );
 
         // Step 1: Get all files that need to be deleted before starting database transaction
         let mut files_to_delete = Vec::new();
-        
+
         // Get audio recording files
-        let recording_files: Vec<String> = self.connection.prepare(
-            "SELECT DISTINCT filepath FROM recordings r 
-             JOIN cards c ON r.card_id = c.id 
-             WHERE c.problem_id = ?1"
-        )?
-        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let recording_files: Vec<String> = self
+            .connection
+            .prepare(
+                "SELECT DISTINCT filepath FROM recordings r
+             JOIN cards c ON r.card_id = c.id
+             WHERE c.problem_id = ?1",
+            )?
+            .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         files_to_delete.extend(recording_files);
-        
+
         // Get problem image files
-        let image_files: Vec<String> = self.connection.prepare(
-            "SELECT image_path FROM problem_images WHERE problem_id = ?1"
-        )?
-        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let image_files: Vec<String> = self
+            .connection
+            .prepare("SELECT image_path FROM problem_images WHERE problem_id = ?1")?
+            .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         files_to_delete.extend(image_files);
-        
-        println!("🗑️ [Database] Found {} files to delete", files_to_delete.len());
+
+        println!(
+            "🗑️ [Database] Found {} files to delete",
+            files_to_delete.len()
+        );
 
         // Step 2: Delete files from filesystem
         for file_path in &files_to_delete {
@@ -2848,13 +3376,13 @@ impl DatabaseManager {
 
         // Step 3: Proceed with database deletion using existing method
         self.delete_problem(problem_id)?;
-        
+
         Ok(())
     }
 
     fn delete_file_safely(&self, file_path: &str) -> anyhow::Result<()> {
         use std::path::Path;
-        
+
         // Handle different path formats (dev-data, app-data, absolute paths)
         let absolute_path = if file_path.starts_with("dev-data/") {
             let current_dir = std::env::current_dir()?;
@@ -2871,28 +3399,37 @@ impl DatabaseManager {
             let current_dir = std::env::current_dir()?;
             current_dir.join(file_path)
         };
-        
+
         if absolute_path.exists() {
             std::fs::remove_file(&absolute_path)?;
             println!("✅ [Database] Deleted file: {:?}", absolute_path);
         } else {
-            println!("⚠️ [Database] File not found (may already be deleted): {:?}", absolute_path);
+            println!(
+                "⚠️ [Database] File not found (may already be deleted): {:?}",
+                absolute_path
+            );
         }
-        
+
         Ok(())
     }
 
     /// Get statistics about what data will be deleted with a problem
-    pub fn get_problem_delete_stats(&self, problem_id: &str) -> anyhow::Result<Option<crate::models::ProblemDeleteStats>> {
-        println!("📊 [Database] Getting delete stats for problem: {}", problem_id);
-        
+    pub fn get_problem_delete_stats(
+        &self,
+        problem_id: &str,
+    ) -> anyhow::Result<Option<crate::models::ProblemDeleteStats>> {
+        println!(
+            "📊 [Database] Getting delete stats for problem: {}",
+            problem_id
+        );
+
         // First verify the problem exists
         let problem_exists: i32 = self.connection.query_row(
             "SELECT COUNT(*) FROM problems WHERE id = ?1",
             [problem_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
-        
+
         if problem_exists == 0 {
             println!("❌ [Database] Problem not found: {}", problem_id);
             return Ok(None);
@@ -2900,42 +3437,51 @@ impl DatabaseManager {
 
         // Get card counts
         let (total_cards, main_cards, child_cards): (i32, i32, i32) = self.connection.query_row(
-            "SELECT 
+            "SELECT
                 COUNT(*) as total_cards,
                 COUNT(CASE WHEN parent_card_id IS NULL THEN 1 END) as main_cards,
                 COUNT(CASE WHEN parent_card_id IS NOT NULL THEN 1 END) as child_cards
-             FROM cards 
+             FROM cards
              WHERE problem_id = ?1",
             [problem_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
 
         // Get recordings count
-        let recordings_count: i32 = self.connection.query_row(
-            "SELECT COUNT(DISTINCT r.id) 
+        let recordings_count: i32 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(DISTINCT r.id)
              FROM recordings r
-             JOIN cards c ON r.card_id = c.id 
+             JOIN cards c ON r.card_id = c.id
              WHERE c.problem_id = ?1",
-            [problem_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
+                [problem_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // Get images count
-        let images_count: i32 = self.connection.query_row(
-            "SELECT COUNT(*) FROM problem_images WHERE problem_id = ?1",
-            [problem_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
+        let images_count: i32 = self
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM problem_images WHERE problem_id = ?1",
+                [problem_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         // Get total duration from time sessions
-        let total_duration: i32 = self.connection.query_row(
-            "SELECT COALESCE(SUM(duration), 0)
+        let total_duration: i32 = self
+            .connection
+            .query_row(
+                "SELECT COALESCE(SUM(duration), 0)
              FROM time_sessions ts
              JOIN cards c ON ts.card_id = c.id
              WHERE c.problem_id = ?1 AND ts.duration IS NOT NULL",
-            [problem_id],
-            |row| row.get(0)
-        ).unwrap_or(0);
+                [problem_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         let stats = crate::models::ProblemDeleteStats {
             total_cards,
@@ -2946,8 +3492,8 @@ impl DatabaseManager {
             total_duration,
         };
 
-        println!("📊 [Database] Delete stats for {}: {} cards ({} main, {} child), {} recordings, {} images, {}s total duration", 
-                 problem_id, stats.total_cards, stats.main_cards, stats.child_cards, 
+        println!("📊 [Database] Delete stats for {}: {} cards ({} main, {} child), {} recordings, {} images, {}s total duration",
+                 problem_id, stats.total_cards, stats.main_cards, stats.child_cards,
                  stats.recordings_count, stats.images_count, stats.total_duration);
 
         Ok(Some(stats))
@@ -2955,25 +3501,27 @@ impl DatabaseManager {
 
     /// Get recording file paths for a specific problem
     pub fn get_recording_files_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<String>> {
-        let recording_files: Vec<String> = self.connection.prepare(
-            "SELECT DISTINCT filepath FROM recordings r 
-             JOIN cards c ON r.card_id = c.id 
-             WHERE c.problem_id = ?1"
-        )?
-        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let recording_files: Vec<String> = self
+            .connection
+            .prepare(
+                "SELECT DISTINCT filepath FROM recordings r
+             JOIN cards c ON r.card_id = c.id
+             WHERE c.problem_id = ?1",
+            )?
+            .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         Ok(recording_files)
     }
 
     /// Get image file paths for a specific problem
     pub fn get_image_files_for_problem(&self, problem_id: &str) -> anyhow::Result<Vec<String>> {
-        let image_files: Vec<String> = self.connection.prepare(
-            "SELECT image_path FROM problem_images WHERE problem_id = ?1"
-        )?
-        .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let image_files: Vec<String> = self
+            .connection
+            .prepare("SELECT image_path FROM problem_images WHERE problem_id = ?1")?
+            .query_map([problem_id], |row| Ok(row.get::<_, String>(0)?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         Ok(image_files)
     }
 
@@ -2999,11 +3547,11 @@ impl DatabaseManager {
                 AND rws.duration_seconds > 0
             ) as all_sessions
         "#;
-        
-        let count: i32 = self.connection.query_row(sql, [today_str], |row| {
-            Ok(row.get::<_, i32>("count")?)
-        })?;
-        
+
+        let count: i32 = self
+            .connection
+            .query_row(sql, [today_str], |row| Ok(row.get::<_, i32>("count")?))?;
+
         Ok(count)
     }
 
@@ -3029,13 +3577,12 @@ impl DatabaseManager {
                 AND rws.duration_seconds > 0
             ) as all_sessions
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let problem_ids = stmt.query_map([today_str], |row| {
-            Ok(row.get::<_, String>("id")?)
-        })?
-        .collect::<Result<Vec<String>, _>>()?;
-        
+        let problem_ids = stmt
+            .query_map([today_str], |row| Ok(row.get::<_, String>("id")?))?
+            .collect::<Result<Vec<String>, _>>()?;
+
         Ok(problem_ids)
     }
 
@@ -3061,11 +3608,11 @@ impl DatabaseManager {
                 AND rws.duration_seconds > 0
             ) as all_sessions
         "#;
-        
+
         let total_duration: i32 = self.connection.query_row(sql, [today_str], |row| {
             Ok(row.get::<_, i32>("total_duration")?)
         })?;
-        
+
         Ok(total_duration)
     }
 
@@ -3094,14 +3641,14 @@ impl DatabaseManager {
                 COALESCE(SUM(duration_seconds), 0) as total_study_time_today
             FROM all_sessions
         "#;
-        
+
         let result = self.connection.query_row(sql, [today_str], |row| {
             Ok((
                 row.get::<_, i32>("problems_worked")?,
                 row.get::<_, i32>("total_study_time_today")?,
             ))
         })?;
-        
+
         Ok(DailyWorkStats {
             problems_worked: result.0,
             total_study_time_today: result.1,
@@ -3115,16 +3662,16 @@ impl DatabaseManager {
         let total_problems: i32 = self.connection.query_row(
             "SELECT COUNT(*) FROM problems",
             [],
-            |row| Ok(row.get(0)?)
+            |row| Ok(row.get(0)?),
         )?;
-        
+
         // Query for total study time across all problems (including both study and review time)
         let total_study_time: i32 = self.connection.query_row(
             "SELECT COALESCE(SUM(total_duration + COALESCE(review_duration, 0)), 0) FROM cards",
             [],
-            |row| Ok(row.get(0)?)
+            |row| Ok(row.get(0)?),
         )?;
-        
+
         // Query for problems worked today
         let problems_worked_today: i32 = self.connection.query_row(
             r#"
@@ -3148,12 +3695,12 @@ impl DatabaseManager {
             ) as all_sessions
             "#,
             [today_str],
-            |row| Ok(row.get(0)?)
+            |row| Ok(row.get(0)?),
         )?;
-        
+
         // For now, set completed_problems to 0 as the current system doesn't track completion status
         let completed_problems = 0;
-        
+
         Ok(DashboardStats {
             total_problems,
             total_study_time,
@@ -3167,33 +3714,45 @@ impl DatabaseManager {
     // ============================================================================
 
     /// Record a new work session when a study session begins
-    pub fn create_work_session(&self, problem_id: &str, card_id: &str, start_timestamp: DateTime<Utc>) -> anyhow::Result<String> {
+    pub fn create_work_session(
+        &self,
+        problem_id: &str,
+        card_id: &str,
+        start_timestamp: DateTime<Utc>,
+    ) -> anyhow::Result<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
         let session_date = start_timestamp.format("%Y-%m-%d").to_string();
         let hour_slot = start_timestamp.hour() as i32;
-        
+
         let sql = r#"
             INSERT INTO work_sessions (
-                id, problem_id, card_id, session_date, 
+                id, problem_id, card_id, session_date,
                 start_timestamp, hour_slot, created_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
         "#;
-        
-        self.connection.execute(sql, params![
-            session_id,
-            problem_id,
-            card_id,
-            session_date,
-            start_timestamp.to_rfc3339(),
-            hour_slot,
-            Utc::now().to_rfc3339()
-        ])?;
-        
+
+        self.connection.execute(
+            sql,
+            params![
+                session_id,
+                problem_id,
+                card_id,
+                session_date,
+                start_timestamp.to_rfc3339(),
+                hour_slot,
+                Utc::now().to_rfc3339()
+            ],
+        )?;
+
         Ok(session_id)
     }
-    
+
     /// Complete a work session when a study session ends
-    pub fn complete_work_session(&self, session_id: &str, end_timestamp: DateTime<Utc>) -> anyhow::Result<()> {
+    pub fn complete_work_session(
+        &self,
+        session_id: &str,
+        end_timestamp: DateTime<Utc>,
+    ) -> anyhow::Result<()> {
         // Get the start timestamp to calculate duration
         let start_timestamp: DateTime<Utc> = self.connection.query_row(
             "SELECT start_timestamp FROM work_sessions WHERE id = ?1",
@@ -3201,28 +3760,31 @@ impl DatabaseManager {
             |row| {
                 let timestamp_str: String = row.get("start_timestamp")?;
                 Ok(timestamp_str.parse().unwrap_or(Utc::now()))
-            }
+            },
         )?;
-        
+
         let duration_seconds = (end_timestamp - start_timestamp).num_seconds() as i32;
-        
+
         let sql = r#"
-            UPDATE work_sessions 
+            UPDATE work_sessions
             SET end_timestamp = ?1, duration_seconds = ?2
             WHERE id = ?3
         "#;
-        
-        self.connection.execute(sql, params![
-            end_timestamp.to_rfc3339(),
-            duration_seconds,
-            session_id
-        ])?;
-        
+
+        self.connection.execute(
+            sql,
+            params![end_timestamp.to_rfc3339(), duration_seconds, session_id],
+        )?;
+
         Ok(())
     }
-    
+
     /// Get work sessions for a specific date range
-    pub fn get_work_sessions_by_date_range(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
+    pub fn get_work_sessions_by_date_range(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
         let sql = r#"
             SELECT
                 all_sessions.id, all_sessions.problem_id, all_sessions.problem_title, all_sessions.card_id,
@@ -3247,53 +3809,58 @@ impl DatabaseManager {
             ) as all_sessions
             ORDER BY all_sessions.start_timestamp DESC
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let sessions = stmt.query_map(params![start_date, end_date], |row| {
-            Ok(WorkSessionWithProblem {
-                id: row.get("id")?,
-                problem_id: row.get("problem_id")?,
-                problem_title: row.get("problem_title")?,
-                card_id: row.get("card_id")?,
-                session_date: row.get("session_date")?,
-                start_timestamp: {
-                    let timestamp_str: String = row.get("start_timestamp")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
-                end_timestamp: {
-                    let timestamp_opt: Option<String> = row.get("end_timestamp")?;
-                    timestamp_opt.and_then(|s| s.parse().ok())
-                },
-                duration_seconds: row.get("duration_seconds")?,
-                hour_slot: row.get("hour_slot")?,
-                created_at: {
-                    let timestamp_str: String = row.get("created_at")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+        let sessions = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(WorkSessionWithProblem {
+                    id: row.get("id")?,
+                    problem_id: row.get("problem_id")?,
+                    problem_title: row.get("problem_title")?,
+                    card_id: row.get("card_id")?,
+                    session_date: row.get("session_date")?,
+                    start_timestamp: {
+                        let timestamp_str: String = row.get("start_timestamp")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                    end_timestamp: {
+                        let timestamp_opt: Option<String> = row.get("end_timestamp")?;
+                        timestamp_opt.and_then(|s| s.parse().ok())
+                    },
+                    duration_seconds: row.get("duration_seconds")?,
+                    hour_slot: row.get("hour_slot")?,
+                    created_at: {
+                        let timestamp_str: String = row.get("created_at")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(sessions)
     }
-    
+
     /// Get work sessions for today
     pub fn get_work_sessions_today(&self) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
         let today = Utc::now().format("%Y-%m-%d").to_string();
         self.get_work_sessions_by_date_range(&today, &today)
     }
-    
+
     /// Get work sessions for yesterday
     pub fn get_work_sessions_yesterday(&self) -> anyhow::Result<Vec<WorkSessionWithProblem>> {
-        let yesterday = (Utc::now() - chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+        let yesterday = (Utc::now() - chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
         self.get_work_sessions_by_date_range(&yesterday, &yesterday)
     }
-    
+
     /// Get work sessions summary for the last N days
     pub fn get_last_n_days_summary(&self, days: i32) -> anyhow::Result<DateRangeWorkSummary> {
         let end_date = Utc::now().format("%Y-%m-%d").to_string();
-        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
-        
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64))
+            .format("%Y-%m-%d")
+            .to_string();
+
         // Get overall summary stats combining both work sessions and review sessions
         let sql_summary = r#"
             SELECT
@@ -3308,25 +3875,26 @@ impl DatabaseManager {
                 WHERE session_date >= ?1 AND session_date <= ?2
             ) as all_sessions
         "#;
-        
-        let (unique_problems_count, total_sessions_count, total_duration_seconds) = 
-            self.connection.query_row(sql_summary, params![start_date, end_date], |row| {
+
+        let (unique_problems_count, total_sessions_count, total_duration_seconds) = self
+            .connection
+            .query_row(sql_summary, params![start_date, end_date], |row| {
                 Ok((
                     row.get::<_, i32>("unique_problems")?,
                     row.get::<_, i32>("total_sessions")?,
                     row.get::<_, i32>("total_duration")?,
                 ))
             })?;
-        
+
         // Get most productive hour
         let most_productive_hour = self.get_most_productive_hour(days)?;
-        
+
         // Get most worked problem
         let most_worked_problem = self.get_most_worked_problem(&start_date, &end_date)?;
-        
+
         // Get daily summaries - simplified version for now
         let daily_summaries = Vec::new(); // TODO: Implement detailed daily breakdowns
-        
+
         Ok(DateRangeWorkSummary {
             start_date,
             end_date,
@@ -3339,11 +3907,11 @@ impl DatabaseManager {
             most_worked_problem,
         })
     }
-    
+
     /// Get hourly breakdown for a specific date
     pub fn get_hourly_breakdown(&self, date: &str) -> anyhow::Result<Vec<HourlyWorkBreakdown>> {
         let sql = r#"
-            SELECT 
+            SELECT
                 ws.hour_slot as hour,
                 COALESCE(SUM(ws.duration_seconds), 0) as duration_seconds,
                 COUNT(*) as session_count,
@@ -3353,67 +3921,79 @@ impl DatabaseManager {
             GROUP BY ws.hour_slot
             ORDER BY ws.hour_slot ASC
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let breakdowns = stmt.query_map(params![date], |row| {
-            Ok(HourlyWorkBreakdown {
-                hour: row.get("hour")?,
-                duration_seconds: row.get("duration_seconds")?,
-                session_count: row.get("session_count")?,
-                unique_problems_count: row.get("unique_problems_count")?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+        let breakdowns = stmt
+            .query_map(params![date], |row| {
+                Ok(HourlyWorkBreakdown {
+                    hour: row.get("hour")?,
+                    duration_seconds: row.get("duration_seconds")?,
+                    session_count: row.get("session_count")?,
+                    unique_problems_count: row.get("unique_problems_count")?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(breakdowns)
     }
-    
+
     /// Get work sessions for a specific problem over the last N days
-    pub fn get_problem_work_history(&self, problem_id: &str, days: i32) -> anyhow::Result<Vec<WorkSession>> {
-        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+    pub fn get_problem_work_history(
+        &self,
+        problem_id: &str,
+        days: i32,
+    ) -> anyhow::Result<Vec<WorkSession>> {
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64))
+            .format("%Y-%m-%d")
+            .to_string();
         let end_date = Utc::now().format("%Y-%m-%d").to_string();
-        
+
         let sql = r#"
-            SELECT 
+            SELECT
                 id, problem_id, card_id, session_date,
                 start_timestamp, end_timestamp, duration_seconds,
                 hour_slot, created_at
             FROM work_sessions
-            WHERE problem_id = ?1 
+            WHERE problem_id = ?1
             AND session_date >= ?2 AND session_date <= ?3
             ORDER BY start_timestamp DESC
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let sessions = stmt.query_map(params![problem_id, start_date, end_date], |row| {
-            Ok(WorkSession {
-                id: row.get("id")?,
-                problem_id: row.get("problem_id")?,
-                card_id: row.get("card_id")?,
-                session_date: row.get("session_date")?,
-                start_timestamp: {
-                    let timestamp_str: String = row.get("start_timestamp")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
-                end_timestamp: {
-                    let timestamp_opt: Option<String> = row.get("end_timestamp")?;
-                    timestamp_opt.and_then(|s| s.parse().ok())
-                },
-                duration_seconds: row.get("duration_seconds")?,
-                hour_slot: row.get("hour_slot")?,
-                created_at: {
-                    let timestamp_str: String = row.get("created_at")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+        let sessions = stmt
+            .query_map(params![problem_id, start_date, end_date], |row| {
+                Ok(WorkSession {
+                    id: row.get("id")?,
+                    problem_id: row.get("problem_id")?,
+                    card_id: row.get("card_id")?,
+                    session_date: row.get("session_date")?,
+                    start_timestamp: {
+                        let timestamp_str: String = row.get("start_timestamp")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                    end_timestamp: {
+                        let timestamp_opt: Option<String> = row.get("end_timestamp")?;
+                        timestamp_opt.and_then(|s| s.parse().ok())
+                    },
+                    duration_seconds: row.get("duration_seconds")?,
+                    hour_slot: row.get("hour_slot")?,
+                    created_at: {
+                        let timestamp_str: String = row.get("created_at")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(sessions)
     }
-    
+
     /// Get daily work aggregates for visualization combining both study and review sessions
-    pub fn get_daily_aggregates(&self, start_date: &str, end_date: &str) -> anyhow::Result<Vec<DailyWorkSummary>> {
+    pub fn get_daily_aggregates(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> anyhow::Result<Vec<DailyWorkSummary>> {
         let sql = r#"
             SELECT
                 all_sessions.session_date,
@@ -3430,28 +4010,31 @@ impl DatabaseManager {
             GROUP BY all_sessions.session_date
             ORDER BY all_sessions.session_date ASC
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let summaries = stmt.query_map(params![start_date, end_date], |row| {
-            Ok(DailyWorkSummary {
-                date: row.get("session_date")?,
-                total_duration_seconds: row.get("total_duration_seconds")?,
-                unique_problems_count: row.get("unique_problems_count")?,
-                total_sessions_count: row.get("total_sessions_count")?,
-                problem_breakdowns: Vec::new(), // Filled separately if needed
-                hourly_breakdown: Vec::new(),   // Filled separately if needed
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+        let summaries = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(DailyWorkSummary {
+                    date: row.get("session_date")?,
+                    total_duration_seconds: row.get("total_duration_seconds")?,
+                    unique_problems_count: row.get("unique_problems_count")?,
+                    total_sessions_count: row.get("total_sessions_count")?,
+                    problem_breakdowns: Vec::new(), // Filled separately if needed
+                    hourly_breakdown: Vec::new(),   // Filled separately if needed
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(summaries)
     }
-    
+
     /// Get most productive hour over the last N days
     pub fn get_most_productive_hour(&self, days: i32) -> anyhow::Result<Option<i32>> {
-        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64))
+            .format("%Y-%m-%d")
+            .to_string();
         let end_date = Utc::now().format("%Y-%m-%d").to_string();
-        
+
         let sql = r#"
             SELECT ws.hour_slot, SUM(ws.duration_seconds) as total_duration
             FROM work_sessions ws
@@ -3460,18 +4043,25 @@ impl DatabaseManager {
             ORDER BY total_duration DESC
             LIMIT 1
         "#;
-        
-        let result: Option<i32> = self.connection.query_row(sql, params![start_date, end_date], |row| {
-            Ok(row.get("hour_slot")?)
-        }).optional()?;
-        
+
+        let result: Option<i32> = self
+            .connection
+            .query_row(sql, params![start_date, end_date], |row| {
+                Ok(row.get("hour_slot")?)
+            })
+            .optional()?;
+
         Ok(result)
     }
-    
+
     /// Get most worked problem in a date range
-    pub fn get_most_worked_problem(&self, start_date: &str, end_date: &str) -> anyhow::Result<Option<ProblemWorkBreakdown>> {
+    pub fn get_most_worked_problem(
+        &self,
+        start_date: &str,
+        end_date: &str,
+    ) -> anyhow::Result<Option<ProblemWorkBreakdown>> {
         let sql = r#"
-            SELECT 
+            SELECT
                 ws.problem_id, p.title as problem_title,
                 SUM(ws.duration_seconds) as total_duration_seconds,
                 COUNT(*) as session_count,
@@ -3484,34 +4074,39 @@ impl DatabaseManager {
             ORDER BY total_duration_seconds DESC
             LIMIT 1
         "#;
-        
-        let result = self.connection.query_row(sql, params![start_date, end_date], |row| {
-            Ok(ProblemWorkBreakdown {
-                problem_id: row.get("problem_id")?,
-                problem_title: row.get("problem_title")?,
-                total_duration_seconds: row.get("total_duration_seconds")?,
-                session_count: row.get("session_count")?,
-                first_session_time: {
-                    let timestamp_str: String = row.get("first_session_time")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
-                last_session_time: {
-                    let timestamp_str: String = row.get("last_session_time")?;
-                    timestamp_str.parse().unwrap_or(Utc::now())
-                },
+
+        let result = self
+            .connection
+            .query_row(sql, params![start_date, end_date], |row| {
+                Ok(ProblemWorkBreakdown {
+                    problem_id: row.get("problem_id")?,
+                    problem_title: row.get("problem_title")?,
+                    total_duration_seconds: row.get("total_duration_seconds")?,
+                    session_count: row.get("session_count")?,
+                    first_session_time: {
+                        let timestamp_str: String = row.get("first_session_time")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                    last_session_time: {
+                        let timestamp_str: String = row.get("last_session_time")?;
+                        timestamp_str.parse().unwrap_or(Utc::now())
+                    },
+                })
             })
-        }).optional()?;
-        
+            .optional()?;
+
         Ok(result)
     }
-    
+
     /// Get productivity pattern analysis for the last N days
     pub fn get_productivity_by_hour(&self, days: i32) -> anyhow::Result<Vec<HourlyWorkBreakdown>> {
-        let start_date = (Utc::now() - chrono::Duration::days(days as i64)).format("%Y-%m-%d").to_string();
+        let start_date = (Utc::now() - chrono::Duration::days(days as i64))
+            .format("%Y-%m-%d")
+            .to_string();
         let end_date = Utc::now().format("%Y-%m-%d").to_string();
-        
+
         let sql = r#"
-            SELECT 
+            SELECT
                 ws.hour_slot as hour,
                 COALESCE(SUM(ws.duration_seconds), 0) as duration_seconds,
                 COUNT(*) as session_count,
@@ -3521,18 +4116,19 @@ impl DatabaseManager {
             GROUP BY ws.hour_slot
             ORDER BY ws.hour_slot ASC
         "#;
-        
+
         let mut stmt = self.connection.prepare(sql)?;
-        let breakdowns = stmt.query_map(params![start_date, end_date], |row| {
-            Ok(HourlyWorkBreakdown {
-                hour: row.get("hour")?,
-                duration_seconds: row.get("duration_seconds")?,
-                session_count: row.get("session_count")?,
-                unique_problems_count: row.get("unique_problems_count")?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-        
+        let breakdowns = stmt
+            .query_map(params![start_date, end_date], |row| {
+                Ok(HourlyWorkBreakdown {
+                    hour: row.get("hour")?,
+                    duration_seconds: row.get("duration_seconds")?,
+                    session_count: row.get("session_count")?,
+                    unique_problems_count: row.get("unique_problems_count")?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
         Ok(breakdowns)
     }
 
@@ -3542,16 +4138,19 @@ impl DatabaseManager {
                    INNER JOIN problem_tags pt ON p.id = pt.problem_id
                    WHERE pt.tag_id = ?1";
 
-        let count = self.connection.query_row(sql, [tag_id], |row| {
-            Ok(row.get::<_, i32>(0)?)
-        })?;
+        let count = self
+            .connection
+            .query_row(sql, [tag_id], |row| Ok(row.get::<_, i32>(0)?))?;
 
         Ok(count)
     }
 
     /// Execute a raw SQL query for debugging purposes
     /// Returns results as JSON-like structure
-    pub fn execute_query(&self, query: &str) -> anyhow::Result<Vec<std::collections::HashMap<String, serde_json::Value>>> {
+    pub fn execute_query(
+        &self,
+        query: &str,
+    ) -> anyhow::Result<Vec<std::collections::HashMap<String, serde_json::Value>>> {
         let mut stmt = self.connection.prepare(query)?;
         let column_count = stmt.column_count();
         let column_names: Vec<String> = (0..column_count)
@@ -3563,13 +4162,22 @@ impl DatabaseManager {
             for (i, column_name) in column_names.iter().enumerate() {
                 let value: Result<String, _> = row.get(i);
                 match value {
-                    Ok(s) => { map.insert(column_name.clone(), serde_json::Value::String(s)); }
+                    Ok(s) => {
+                        map.insert(column_name.clone(), serde_json::Value::String(s));
+                    }
                     Err(_) => {
                         // Try as integer
                         let int_value: Result<i64, _> = row.get(i);
                         match int_value {
-                            Ok(n) => { map.insert(column_name.clone(), serde_json::Value::Number(n.into())); }
-                            Err(_) => { map.insert(column_name.clone(), serde_json::Value::Null); }
+                            Ok(n) => {
+                                map.insert(
+                                    column_name.clone(),
+                                    serde_json::Value::Number(n.into()),
+                                );
+                            }
+                            Err(_) => {
+                                map.insert(column_name.clone(), serde_json::Value::Null);
+                            }
                         }
                     }
                 }
@@ -3588,7 +4196,10 @@ impl DatabaseManager {
     // Review Timer Session Methods
 
     /// Start a new review timer session for a card
-    pub fn start_review_timer_session(&self, card_id: &str) -> anyhow::Result<(ReviewSession, String)> {
+    pub fn start_review_timer_session(
+        &self,
+        card_id: &str,
+    ) -> anyhow::Result<(ReviewSession, String)> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
         let date = now.format("%Y-%m-%d").to_string();
@@ -3598,7 +4209,7 @@ impl DatabaseManager {
         let problem_id: String = self.connection.query_row(
             "SELECT problem_id FROM cards WHERE id = ?1",
             [card_id],
-            |row| row.get(0)
+            |row| row.get(0),
         )?;
 
         // Create review session
@@ -3633,7 +4244,11 @@ impl DatabaseManager {
     }
 
     /// End a review timer session
-    pub fn end_review_timer_session(&self, session_id: &str, work_session_id: Option<&str>) -> anyhow::Result<()> {
+    pub fn end_review_timer_session(
+        &self,
+        session_id: &str,
+        work_session_id: Option<&str>,
+    ) -> anyhow::Result<()> {
         let now = Utc::now();
         let now_str = now.to_rfc3339();
 
@@ -3644,7 +4259,7 @@ impl DatabaseManager {
             |row| {
                 let start_str: String = row.get(0)?;
                 Ok(start_str.parse().unwrap_or_else(|_| Utc::now()))
-            }
+            },
         )?;
 
         let duration = (now - session_start).num_seconds() as i32;
@@ -3652,7 +4267,7 @@ impl DatabaseManager {
         // End the review session
         self.connection.execute(
             "UPDATE review_sessions SET end_time = ?1, duration = ?2, is_active = 0 WHERE id = ?3",
-            params![now_str, duration, session_id]
+            params![now_str, duration, session_id],
         )?;
 
         // End the work session if provided
@@ -3683,15 +4298,22 @@ impl DatabaseManager {
             Ok(ReviewSession {
                 id: row.get(0)?,
                 card_id: row.get(1)?,
-                start_time: row.get::<_, String>(2)?.parse().unwrap_or_else(|_| Utc::now()),
-                end_time: row.get::<_, Option<String>>(3)?
+                start_time: row
+                    .get::<_, String>(2)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
+                end_time: row
+                    .get::<_, Option<String>>(3)?
                     .map(|s| s.parse().unwrap_or_else(|_| Utc::now())),
                 duration: row.get(4)?,
                 date: row.get(5)?,
                 is_active: row.get::<_, i32>(6)? == 1,
                 notes: row.get(7)?,
                 original_session_id: row.get(8)?,
-                created_at: row.get::<_, String>(9)?.parse().unwrap_or_else(|_| Utc::now()),
+                created_at: row
+                    .get::<_, String>(9)?
+                    .parse()
+                    .unwrap_or_else(|_| Utc::now()),
             })
         })?;
 
@@ -3706,11 +4328,14 @@ impl DatabaseManager {
     /// Delete a review session
     pub fn delete_review_session(&self, session_id: &str) -> anyhow::Result<()> {
         // Get session duration to subtract from card's review_duration
-        let duration: Option<i32> = self.connection.query_row(
-            "SELECT duration FROM review_sessions WHERE id = ?1",
-            [session_id],
-            |row| Ok(row.get(0)?)
-        ).optional()?;
+        let duration: Option<i32> = self
+            .connection
+            .query_row(
+                "SELECT duration FROM review_sessions WHERE id = ?1",
+                [session_id],
+                |row| Ok(row.get(0)?),
+            )
+            .optional()?;
 
         if let Some(dur) = duration {
             // Update card's review_duration
@@ -3728,17 +4353,19 @@ impl DatabaseManager {
         )?;
 
         // Delete the review session
-        self.connection.execute(
-            "DELETE FROM review_sessions WHERE id = ?1",
-            [session_id]
-        )?;
+        self.connection
+            .execute("DELETE FROM review_sessions WHERE id = ?1", [session_id])?;
 
         Ok(())
     }
 
     /// TEMPORARY TEST METHOD - TO BE REMOVED LATER
     /// Update timer session start time in database for testing
-    pub fn update_timer_session_start_time(&self, session_id: &str, new_start_time: &chrono::DateTime<chrono::Utc>) -> anyhow::Result<()> {
+    pub fn update_timer_session_start_time(
+        &self,
+        session_id: &str,
+        new_start_time: &chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<()> {
         self.connection.execute(
             "UPDATE time_sessions SET start_time = ?1 WHERE id = ?2",
             params![new_start_time.to_rfc3339(), session_id],
@@ -3748,7 +4375,11 @@ impl DatabaseManager {
 
     /// TEMPORARY TEST METHOD - TO BE REMOVED LATER
     /// Update review session start time in database for testing
-    pub fn update_review_session_start_time(&self, session_id: &str, new_start_time: &chrono::DateTime<chrono::Utc>) -> anyhow::Result<()> {
+    pub fn update_review_session_start_time(
+        &self,
+        session_id: &str,
+        new_start_time: &chrono::DateTime<chrono::Utc>,
+    ) -> anyhow::Result<()> {
         self.connection.execute(
             "UPDATE review_sessions SET start_time = ?1 WHERE id = ?2",
             params![new_start_time.to_rfc3339(), session_id],

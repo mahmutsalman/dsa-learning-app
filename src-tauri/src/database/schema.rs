@@ -58,8 +58,11 @@ CREATE TABLE IF NOT EXISTS recordings (
     filename TEXT NOT NULL,
     filepath TEXT NOT NULL,
     file_size INTEGER,
+    recording_type TEXT NOT NULL DEFAULT 'card' CHECK(recording_type IN ('card', 'review')),
+    problem_id TEXT,
     FOREIGN KEY (card_id) REFERENCES cards(id),
-    FOREIGN KEY (time_session_id) REFERENCES time_sessions(id)
+    FOREIGN KEY (time_session_id) REFERENCES time_sessions(id),
+    FOREIGN KEY (problem_id) REFERENCES problems(id)
 );
 
 -- Recording highlight metadata for user-defined color coding
@@ -151,6 +154,8 @@ CREATE INDEX IF NOT EXISTS idx_cards_problem_id ON cards(problem_id);
 CREATE INDEX IF NOT EXISTS idx_time_sessions_card_id ON time_sessions(card_id);
 CREATE INDEX IF NOT EXISTS idx_time_sessions_date ON time_sessions(date);
 CREATE INDEX IF NOT EXISTS idx_recordings_card_id ON recordings(card_id);
+CREATE INDEX IF NOT EXISTS idx_recordings_type ON recordings(recording_type);
+CREATE INDEX IF NOT EXISTS idx_recordings_problem_type ON recordings(problem_id, recording_type);
 CREATE INDEX IF NOT EXISTS idx_recording_highlights_color ON recording_highlights(color);
 CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_card_id);
 CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_card_id);
