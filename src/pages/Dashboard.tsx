@@ -318,6 +318,55 @@ function cleanupOldDailyData(): void {
   }
 }
 
+// Smart sync function to align localStorage with database for daily goals
+async function smartSyncDailyGoals(
+  problems: ProblemWithStudyTime[],
+  dailyStudyIds: string[],
+  today: string,
+  setCompletedTodayIds: (ids: string[]) => void
+): Promise<void> {
+  try {
+    console.log(`🧠 [Smart Sync] Starting database-localStorage sync for ${today}`);
+
+    // Find problems that should be marked as completed based on database
+    const databaseCompletedInStudySet = problems
+      .filter(problem =>
+        dailyStudyIds.includes(problem.id) && // Problem is in today's study set
+        problem.totalStudyTime >= DAILY_STUDY_MIN_SECONDS // Has 10+ minutes of study
+      )
+      .map(problem => problem.id);
+
+    console.log(`🧠 [Smart Sync] Found ${databaseCompletedInStudySet.length} problems completed according to database:`, databaseCompletedInStudySet);
+
+    // Check what's currently in localStorage
+    const currentCompletedIds = readCompletedTodayIds(today);
+    console.log(`🧠 [Smart Sync] Current localStorage completed IDs:`, currentCompletedIds);
+
+    // Create the merged completed list (database + localStorage, deduplicated)
+    const mergedCompletedIds = [...new Set([...currentCompletedIds, ...databaseCompletedInStudySet])];
+
+    // Only update if there are changes
+    if (mergedCompletedIds.length !== currentCompletedIds.length ||
+        !mergedCompletedIds.every(id => currentCompletedIds.includes(id))) {
+
+      console.log(`🧠 [Smart Sync] Syncing ${mergedCompletedIds.length} completed IDs to localStorage and React state`);
+
+      // Update localStorage
+      saveCompletedTodayIds(today, mergedCompletedIds);
+
+      // Update React state
+      setCompletedTodayIds(mergedCompletedIds);
+
+      console.log(`✅ [Smart Sync] Successfully synced completed IDs:`, mergedCompletedIds);
+    } else {
+      console.log(`✅ [Smart Sync] No sync needed - localStorage and database already aligned`);
+    }
+
+  } catch (error) {
+    console.error('❌ [Smart Sync] Failed to sync daily goals:', error);
+  }
+}
+
 export type SortOption = 'created_at' | 'lastUpdatedAt' | 'title' | 'studyTime';
 export type SortDirection = 'asc' | 'desc';
 
@@ -735,6 +784,7 @@ export default function Dashboard() {
     const completedIds = readCompletedTodayIds(today);
     const completedReviewIds = readCompletedReviewTodayIds(today);
     const originalReviewIds = readOriginalDailyReviewIds(today);
+    console.log(`🔍 [Initial Load] ${today} - completedIds from localStorage:`, completedIds);
     setCompletedTodayIds(completedIds);
     setCompletedReviewTodayIds(completedReviewIds);
     setOriginalDailyReviewIds(originalReviewIds);
@@ -770,27 +820,50 @@ export default function Dashboard() {
       const existingStudyIds = readDailySet(studyStorageKey);
       const existingReviewIds = readDailySet(reviewStorageKey);
 
-      // Handle Daily Study validation independently
-      let finalStudyIds: string[] = [];
-      if (existingStudyIds) {
-        // Validate existing Daily Study against current problems
-        const validStudyIds = existingStudyIds.filter(id => {
-          const problem = problemMap.get(id);
+      const completedToday = readCompletedTodayIds(today);
+      let syncedCompletedToday = [...completedToday];
+      const completedSet = new Set(syncedCompletedToday);
+
+      const updateCompletedTracking = (ids: string[], persist: boolean = true) => {
+        const normalized = Array.from(new Set(ids));
+        syncedCompletedToday = normalized;
+        completedSet.clear();
+        normalized.forEach(id => completedSet.add(id));
+        if (persist) {
+          saveCompletedTodayIds(today, normalized);
+        }
+        setCompletedTodayIds(prev => (arraysEqual(prev, normalized) ? prev : normalized));
+      };
+
+      const appendCompletedIds = (ids: string[]) => {
+        if (ids.length === 0) return;
+        updateCompletedTracking([...syncedCompletedToday, ...ids]);
+      };
+
+      // Handle Daily Study validation first
+      let finalStudyIds: string[] = existingStudyIds ?
+        existingStudyIds.filter(id => {
+          const problem = problems.find(p => p.id === id);
           return problem && isUnstudied(problem);
-        });
-        finalStudyIds = validStudyIds;
+        }) : [];
+
+      if (existingStudyIds && existingStudyIds.length > 0) {
+        const newlyCompletedStudyIds = existingStudyIds
+          .filter(id => !finalStudyIds.includes(id))
+          .filter(id => {
+            const problem = problems.find(p => p.id === id);
+            return problem && !isUnstudied(problem);
+          });
+
+        appendCompletedIds(newlyCompletedStudyIds);
       }
 
-      // Handle Daily Review validation independently
-      let finalReviewIds: string[] = [];
-      if (existingReviewIds) {
-        // Validate existing Daily Review against current problems
-        const validReviewIds = existingReviewIds.filter(id => {
-          const problem = problemMap.get(id);
+      // Handle Daily Review validation (depends on finalStudyIds)
+      let finalReviewIds: string[] = existingReviewIds ?
+        existingReviewIds.filter(id => {
+          const problem = problems.find(p => p.id === id);
           return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
-        });
-        finalReviewIds = validReviewIds;
-      }
+        }) : [];
 
       // If both sets exist and are valid, return them
       if (finalStudyIds.length > 0 && finalReviewIds.length > 0) {
@@ -817,7 +890,7 @@ export default function Dashboard() {
       if (finalStudyIds.length === 0 && !yesterdayCompleted && yesterdayStudyIds && yesterdayStudyIds.length > 0) {
         // Carry over yesterday's incomplete study set, but validate problems still exist
         const validCarryOverIds = yesterdayStudyIds.filter(id => {
-          const problem = problemMap.get(id);
+          const problem = problems.find(p => p.id === id);
           return problem && isUnstudied(problem);
         });
 
@@ -826,15 +899,19 @@ export default function Dashboard() {
 
           // Also carry over yesterday's completed IDs to maintain progress
           const yesterdayCompletedIds = readCompletedTodayIds(yesterday);
+          console.log(`🔄 [Carry-over] ${yesterday} → ${today} - yesterdayCompletedIds:`, yesterdayCompletedIds);
+          console.log(`🔍 [Debug] Checking localStorage key: dashboard-daily-completed-${yesterday}`);
+          console.log(`🔍 [Debug] Raw localStorage value:`, window.localStorage.getItem(`dashboard-daily-completed-${yesterday}`));
+          console.log(`🔍 [Debug] All localStorage keys:`, Object.keys(window.localStorage).filter(key => key.includes('dashboard-daily')));
+          updateCompletedTracking(yesterdayCompletedIds);
           if (yesterdayCompletedIds.length > 0) {
-            saveCompletedTodayIds(today, yesterdayCompletedIds);
-            setCompletedTodayIds(yesterdayCompletedIds);
+            console.log(`✅ [Carry-over] Synced React state with:`, yesterdayCompletedIds);
           }
 
           // Carry over review set too if it exists (only if we don't have valid existing review)
           if (finalReviewIds.length === 0 && yesterdayReviewIds && yesterdayReviewIds.length > 0) {
             const validReviewCarryOver = yesterdayReviewIds.filter(id => {
-              const problem = problemMap.get(id);
+              const problem = problems.find(p => p.id === id);
               return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
             });
             finalReviewIds = validReviewCarryOver;
@@ -853,7 +930,7 @@ export default function Dashboard() {
       if (!yesterdayReviewCompleted && yesterdayReviewIds && yesterdayReviewIds.length > 0 && finalReviewIds.length === 0) {
         // Carry over yesterday's incomplete review set, but validate problems still exist
         const validReviewCarryOverIds = yesterdayReviewIds.filter(id => {
-          const problem = problemMap.get(id);
+          const problem = problems.find(p => p.id === id);
           return problem && (problem.totalStudyTime || 0) > 0 && !finalStudyIds.includes(id);
         });
 
@@ -892,8 +969,9 @@ export default function Dashboard() {
 
       // If no carry-over or carry-over is empty, create new sets
       if (finalStudyIds.length === 0) {
-        const completedToday = readCompletedTodayIds(today);
-        const completedSet = new Set(completedToday);
+        // Sync React state with localStorage data for proper display
+        console.log(`🔧 [New Daily Set] ${today} - syncing React state with localStorage:`, syncedCompletedToday);
+        updateCompletedTracking(syncedCompletedToday, false);
 
         // Create new study set
         const eligibleForStudy = problems.filter(p => isUnstudied(p) && !completedSet.has(p.id));
@@ -912,6 +990,9 @@ export default function Dashboard() {
       if (finalReviewIds.length === 0) {
         const completedReviewToday = readCompletedReviewTodayIds(today);
         const completedReviewSet = new Set(completedReviewToday);
+
+        // Sync React state with localStorage data for proper display
+        setCompletedReviewTodayIds(completedReviewToday);
 
         const eligibleForReview = problems.filter(p =>
           (p.totalStudyTime || 0) > 0 && !finalStudyIds.includes(p.id) && !completedReviewSet.has(p.id)
@@ -946,6 +1027,8 @@ export default function Dashboard() {
         }
       }
 
+      // STEP 8: FINAL - Uncommented save operations and ACTUAL return statement
+      // This enables the full functionality - returning actual finalStudyIds and finalReviewIds
       return { studyIds: finalStudyIds, reviewIds: finalReviewIds };
     };
 
@@ -954,14 +1037,21 @@ export default function Dashboard() {
     setDailyStudyIds(prev => (arraysEqual(prev, studyIds) ? prev : studyIds));
     setDailyReviewIds(prev => (arraysEqual(prev, reviewIds) ? prev : reviewIds));
 
+    // Run smart sync after daily study IDs are set to align database with localStorage
+    if (studyIds.length > 0) {
+      smartSyncDailyGoals(problems, studyIds, today, setCompletedTodayIds)
+        .catch(error => console.error('Smart sync failed:', error));
+    }
+
     // Update original Daily Review IDs when they are loaded
     const currentOriginalIds = readOriginalDailyReviewIds(today);
     setOriginalDailyReviewIds(prev => (arraysEqual(prev, currentOriginalIds) ? prev : currentOriginalIds));
-  }, [problems, problemMap, dailyStudySize, dailyReviewSize]);
+  }, [problems, dailyStudySize, dailyReviewSize]);
 
   // Effect to monitor study progress and remove completed problems from daily study
+  // Note: completedTodayIds removed from deps to prevent infinite loops when state updates
   useEffect(() => {
-    if (dailyStudyIds.length === 0) return;
+    if (dailyStudyIds.length === 0 || problems.length === 0) return;
 
     const today = new Date().toISOString().split('T')[0];
     let hasChanges = false;
@@ -969,13 +1059,22 @@ export default function Dashboard() {
     let newDailyStudyIds = [...dailyStudyIds];
 
     // Check each problem in daily study to see if it's completed (≥10 minutes)
+    console.log(`⏱️ [Completion Check] Effect triggered - checking ${dailyStudyIds.length} problems for 10+ minute completion`);
+    console.log(`⏱️ [Completion Check] Current completed count: ${completedTodayIds.length}`);
+    console.log(`⏱️ [Completion Check] Problems array last updated:`, problems.length > 0 ? new Date(problems[0].lastUpdatedAt || problems[0].created_at).toLocaleTimeString() : 'N/A');
+
     for (const problemId of dailyStudyIds) {
       const problem = problemMap.get(problemId);
-      if (problem && problem.totalStudyTime >= DAILY_STUDY_MIN_SECONDS) {
+      const studyTime = problem?.totalStudyTime || 0;
+      const isCompleted = problem && studyTime >= DAILY_STUDY_MIN_SECONDS;
+      console.log(`⏱️ [Problem ${problemId}] studyTime: ${studyTime}s, threshold: ${DAILY_STUDY_MIN_SECONDS}s, completed: ${isCompleted}, lastUpdated: ${problem?.lastUpdatedAt || 'never'}`);
+
+      if (isCompleted) {
         // Problem is completed - remove from daily study and mark as completed today
         if (!completedTodayIds.includes(problemId)) {
           newCompletedIds.push(problemId);
           hasChanges = true;
+          console.log(`✅ [Completion] Added ${problemId} to completed list. New completed count: ${newCompletedIds.length}`);
         }
 
         // Remove from daily study set
@@ -983,19 +1082,25 @@ export default function Dashboard() {
         if (studyIndex > -1) {
           newDailyStudyIds.splice(studyIndex, 1);
           hasChanges = true;
+          console.log(`➖ [Completion] Removed ${problemId} from daily study. Remaining: ${newDailyStudyIds.length}`);
         }
       }
     }
 
+    console.log(`📊 [Completion Summary] hasChanges: ${hasChanges}, newCompleted: ${newCompletedIds.length}, newStudyRemaining: ${newDailyStudyIds.length}`);
     if (hasChanges) {
       // Update state
+      console.log(`💾 [State Update] Setting completedTodayIds to:`, newCompletedIds);
+      console.log(`💾 [State Update] Setting dailyStudyIds to:`, newDailyStudyIds);
       setCompletedTodayIds(newCompletedIds);
       setDailyStudyIds(newDailyStudyIds);
 
       // Persist to localStorage
       saveCompletedTodayIds(today, newCompletedIds);
+      console.log(`🗄️ [localStorage] Saved completed IDs:`, newCompletedIds);
       const studyStorageKey = `${DAILY_STUDY_STORAGE_PREFIX}${today}`;
       saveDailySet(studyStorageKey, newDailyStudyIds);
+      console.log(`🗄️ [localStorage] Saved study IDs:`, newDailyStudyIds);
 
       // Check if daily study is now complete (all problems finished)
       if (newDailyStudyIds.length === 0 && newCompletedIds.length > 0) {
@@ -1058,7 +1163,7 @@ export default function Dashboard() {
         markDailyReviewCompleted(today);
       }
     }
-  }, [problems, problemMap, dailyReviewIds, completedReviewTodayIds]);
+  }, [problems, problemMap, dailyReviewIds]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1094,7 +1199,7 @@ export default function Dashboard() {
     }
   }, [activeDailySet, dailyStudyIds, dailyReviewIds]);
 
-  const loadProblems = async () => {
+  const loadProblems = useCallback(async () => {
     try {
       setLoading(true);
       const baseProblems = await invoke<Problem[]>('get_problems');
@@ -1144,7 +1249,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sortBy, sortDirection]);
 
   const createNewProblem = () => {
     setShowNewProblemModal(true);
@@ -1152,6 +1257,50 @@ export default function Dashboard() {
 
   const openImportModal = () => {
     setShowImportModal(true);
+  };
+
+  // Refresh daily sets function - clears all daily progress as if new day arrived
+  const refreshDailySets = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Clear localStorage keys for TODAY
+    const studyStorageKey = `${DAILY_STUDY_STORAGE_PREFIX}${today}`;
+    const reviewStorageKey = `${DAILY_REVIEW_STORAGE_PREFIX}${today}`;
+
+    localStorage.removeItem(studyStorageKey);
+    localStorage.removeItem(reviewStorageKey);
+    localStorage.removeItem(`${DAILY_COMPLETED_STORAGE_PREFIX}${today}`);
+    localStorage.removeItem(`${DAILY_REVIEW_COMPLETED_PREFIX}${today}`);
+    localStorage.removeItem(`original-daily-review-${today}`);
+    localStorage.removeItem(`daily-review-timestamps-${today}`);
+    localStorage.removeItem(`daily-study-completed-${today}`);
+
+    // Clear localStorage keys for YESTERDAY to prevent carry-over
+    const yesterdayStudyKey = `${DAILY_STUDY_STORAGE_PREFIX}${yesterday}`;
+    const yesterdayReviewKey = `${DAILY_REVIEW_STORAGE_PREFIX}${yesterday}`;
+
+    localStorage.removeItem(yesterdayStudyKey);
+    localStorage.removeItem(yesterdayReviewKey);
+    localStorage.removeItem(`${DAILY_COMPLETED_STORAGE_PREFIX}${yesterday}`);
+    localStorage.removeItem(`${DAILY_REVIEW_COMPLETED_PREFIX}${yesterday}`);
+    localStorage.removeItem(`original-daily-review-${yesterday}`);
+    localStorage.removeItem(`daily-review-timestamps-${yesterday}`);
+    localStorage.removeItem(`daily-study-completed-${yesterday}`);
+    localStorage.removeItem(`dashboard-daily-review-finished-${yesterday}`);
+
+    // Reset React state
+    setDailyStudyIds([]);
+    setDailyReviewIds([]);
+    setCompletedTodayIds([]);
+    setCompletedReviewTodayIds([]);
+    setOriginalDailyReviewIds([]);
+
+    // Force re-initialization by triggering the daily sets effect
+    // This will generate new daily sets as if it's a fresh day
+    loadProblems().catch(error => console.error('Refresh failed:', error));
+
+    console.log('🔄 Daily sets refreshed - cleared today and yesterday data to prevent carry-over');
   };
 
   const handleImportComplete = async (result: ImportResult) => {
@@ -1892,13 +2041,22 @@ export default function Dashboard() {
           
           <div className="flex items-center space-x-3">
             <button
+              onClick={refreshDailySets}
+              className="flex items-center px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+              title="Refresh daily sets (reset as if new day arrived)"
+            >
+              <ArrowPathIcon className="h-5 w-5 mr-2" />
+              Refresh Daily
+            </button>
+
+            <button
               onClick={createNewProblem}
               className="flex items-center px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
             >
               <PlusIcon className="h-5 w-5 mr-2" />
               New Problem
             </button>
-            
+
             <button
               onClick={openImportModal}
               className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
