@@ -131,6 +131,7 @@ async fn main() {
             commands::timer::get_timer_state,
             commands::timer::get_card_sessions,
             commands::timer::delete_session,
+            commands::timer::set_test_timer_time, // TEMPORARY TEST COMMAND
             // Review Timer commands
             commands::review_timer::start_review_timer_session,
             commands::review_timer::stop_review_timer_session,
@@ -139,6 +140,7 @@ async fn main() {
             commands::review_timer::get_review_timer_state,
             commands::review_timer::get_card_review_sessions,
             commands::review_timer::delete_review_session,
+            commands::review_timer::set_test_review_timer_time, // TEMPORARY TEST COMMAND
             // Image commands
             commands::images::save_problem_image,
             commands::images::get_problem_images,

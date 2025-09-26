@@ -822,6 +822,29 @@ export function WorkspaceHeader({
                     <ClockIcon className="h-4 w-4" />
                     <span>Session History</span>
                   </button>
+
+                  {/* TEMPORARY TEST BUTTON - TO BE REMOVED */}
+                  {activeTimerState.isRunning && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (isReviewMode) {
+                            await reviewTimer.setTestTime(598); // 9:58
+                          } else {
+                            await timer.setTestTime(598); // 9:58
+                          }
+                        } catch (err) {
+                          console.error('Test button error:', err);
+                        }
+                        setShowTimerDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-orange-50 dark:hover:bg-orange-900/30 transition-colors flex items-center space-x-2 text-orange-600 dark:text-orange-400"
+                      title="Set timer to 9:58 for testing completion (TEMPORARY)"
+                    >
+                      <span className="text-xs">🧪</span>
+                      <span>Test: Set to 9:58</span>
+                    </button>
+                  )}
                 </div>
               )}
               

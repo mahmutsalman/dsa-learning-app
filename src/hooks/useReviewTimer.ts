@@ -19,6 +19,8 @@ export interface UseReviewTimerReturn {
   refreshReviewTimerState: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  // Temporary test function - will be removed
+  setTestTime: (seconds: number) => Promise<void>;
 }
 
 export function useReviewTimer(cardId?: string): UseReviewTimerReturn {
@@ -166,6 +168,24 @@ export function useReviewTimer(cardId?: string): UseReviewTimerReturn {
     }
   }, []);
 
+  // TEMPORARY TEST FUNCTION - TO BE REMOVED LATER
+  // Sets the backend review timer to a specific time for testing completion logic
+  const setTestTime = useCallback(async (seconds: number) => {
+    if (reviewTimerState.isRunning) {
+      try {
+        const result = await invoke<string>('set_test_review_timer_time', { elapsedSeconds: seconds });
+        console.log(result);
+
+        // Refresh the timer state to show the updated time
+        await refreshReviewTimerState();
+      } catch (err) {
+        console.error('🧪 [TEST REVIEW ERROR] Failed to set test time:', err);
+      }
+    } else {
+      console.warn('🧪 [TEST REVIEW] Review timer is not running - cannot set test time');
+    }
+  }, [reviewTimerState.isRunning, refreshReviewTimerState]);
+
   // Initialize review timer state on mount and when cardId changes
   useEffect(() => {
     refreshReviewTimerState();
@@ -230,6 +250,7 @@ export function useReviewTimer(cardId?: string): UseReviewTimerReturn {
     resumeReviewTimer,
     refreshReviewTimerState,
     isLoading,
-    error
+    error,
+    setTestTime
   };
 }

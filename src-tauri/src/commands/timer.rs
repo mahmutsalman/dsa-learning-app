@@ -129,3 +129,33 @@ pub async fn delete_session(
     db.delete_time_session(&session_id).map_err(|e| e.to_string())?;
     Ok("Session deleted successfully".to_string())
 }
+
+// TEMPORARY TEST COMMAND - TO BE REMOVED LATER
+// Modifies the backend session start time for testing completion logic
+#[tauri::command]
+pub async fn set_test_timer_time(
+    state: State<'_, AppState>,
+    elapsed_seconds: i32,
+) -> Result<String, String> {
+    let mut current_timer = state.current_timer.lock().map_err(|e| e.to_string())?;
+
+    if let Some(ref mut timer_session) = *current_timer {
+        let now = Utc::now();
+        // Set start time to achieve desired elapsed time
+        let new_start_time = now - chrono::Duration::seconds(elapsed_seconds as i64);
+        timer_session.start_time = new_start_time;
+
+        // CRITICAL: Update the database record with the new start_time
+        {
+            let db = state.db.lock().map_err(|e| e.to_string())?;
+            db.update_timer_session_start_time(&timer_session.id, &new_start_time)
+                .map_err(|e| format!("Failed to update database: {}", e))?;
+        }
+
+        let minutes = elapsed_seconds / 60;
+        let seconds = elapsed_seconds % 60;
+        Ok(format!("🧪 [TEST BACKEND] Timer session start time modified in memory AND database to achieve {}:{:02} elapsed", minutes, seconds))
+    } else {
+        Err("No active timer session".to_string())
+    }
+}

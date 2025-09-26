@@ -19,6 +19,8 @@ export interface UseTimerReturn {
   refreshTimerState: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
+  // Temporary test function - will be removed
+  setTestTime: (seconds: number) => Promise<void>;
 }
 
 export function useTimer(cardId?: string): UseTimerReturn {
@@ -167,6 +169,24 @@ export function useTimer(cardId?: string): UseTimerReturn {
     }
   }, []);
 
+  // TEMPORARY TEST FUNCTION - TO BE REMOVED LATER
+  // Sets the backend timer to a specific time for testing completion logic
+  const setTestTime = useCallback(async (seconds: number) => {
+    if (timerState.isRunning) {
+      try {
+        const result = await invoke<string>('set_test_timer_time', { elapsedSeconds: seconds });
+        console.log(result);
+
+        // Refresh the timer state to show the updated time
+        await refreshTimerState();
+      } catch (err) {
+        console.error('🧪 [TEST ERROR] Failed to set test time:', err);
+      }
+    } else {
+      console.warn('🧪 [TEST] Timer is not running - cannot set test time');
+    }
+  }, [timerState.isRunning, refreshTimerState]);
+
   // Initialize timer state on mount and when cardId changes
   useEffect(() => {
     refreshTimerState();
@@ -231,6 +251,7 @@ export function useTimer(cardId?: string): UseTimerReturn {
     resumeTimer,
     refreshTimerState,
     isLoading,
-    error
+    error,
+    setTestTime
   };
 }

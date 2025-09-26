@@ -3735,4 +3735,24 @@ impl DatabaseManager {
 
         Ok(())
     }
+
+    /// TEMPORARY TEST METHOD - TO BE REMOVED LATER
+    /// Update timer session start time in database for testing
+    pub fn update_timer_session_start_time(&self, session_id: &str, new_start_time: &chrono::DateTime<chrono::Utc>) -> anyhow::Result<()> {
+        self.connection.execute(
+            "UPDATE time_sessions SET start_time = ?1 WHERE id = ?2",
+            params![new_start_time.to_rfc3339(), session_id],
+        )?;
+        Ok(())
+    }
+
+    /// TEMPORARY TEST METHOD - TO BE REMOVED LATER
+    /// Update review session start time in database for testing
+    pub fn update_review_session_start_time(&self, session_id: &str, new_start_time: &chrono::DateTime<chrono::Utc>) -> anyhow::Result<()> {
+        self.connection.execute(
+            "UPDATE review_sessions SET start_time = ?1 WHERE id = ?2",
+            params![new_start_time.to_rfc3339(), session_id],
+        )?;
+        Ok(())
+    }
 }
