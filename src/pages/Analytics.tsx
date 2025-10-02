@@ -5,22 +5,25 @@ import TodayCard from '../components/Analytics/TodayCard';
 import YesterdayCard from '../components/Analytics/YesterdayCard';
 import Last7DaysCard from '../components/Analytics/Last7DaysCard';
 import Last30DaysCard from '../components/Analytics/Last30DaysCard';
+import Last90DaysCard from '../components/Analytics/Last90DaysCard';
 import ProblemTotalsList from '../components/Analytics/ProblemTotalsList';
 import { WorkSessionService, ProblemTotalWork } from '../services/WorkSessionService';
 
 export default function Analytics() {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState<'7' | '30' | null>(null);
+  const [expanded, setExpanded] = useState<'7' | '30' | '90' | null>(null);
   const [sortBy, setSortBy] = useState<'duration' | 'recent'>('duration');
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
   const [sevenDayItems, setSevenDayItems] = useState<ProblemTotalWork[] | null>(null);
   const [thirtyDayItems, setThirtyDayItems] = useState<ProblemTotalWork[] | null>(null);
+  const [ninetyDayItems, setNinetyDayItems] = useState<ProblemTotalWork[] | null>(null);
   const {
     todayStats,
     yesterdayStats,
     last7DaysStats,
     last30DaysStats,
+    last90DaysStats,
     loading,
     errors,
     refresh,
@@ -33,10 +36,11 @@ export default function Analytics() {
       yesterdayStats,
       last7DaysStats,
       last30DaysStats,
+      last90DaysStats,
       loading,
       errors,
     });
-  }, [todayStats, yesterdayStats, last7DaysStats, last30DaysStats, loading, errors]);
+  }, [todayStats, yesterdayStats, last7DaysStats, last30DaysStats, last90DaysStats, loading, errors]);
 
   // Handle card click actions (for future drill-down functionality)
   const handleYesterdayClick = () => {
@@ -81,6 +85,24 @@ export default function Analytics() {
     }
   };
 
+  const handleLast90DaysClick = async () => {
+    const next = expanded === '90' ? null : '90';
+    setExpanded(next);
+    saveAnalyticsState(next);
+    if (next === '90' && !ninetyDayItems) {
+      try {
+        setListLoading(true);
+        setListError(null);
+        const items = await WorkSessionService.getProblemTotalsForLast90Days();
+        setNinetyDayItems(items);
+      } catch (e) {
+        setListError(e instanceof Error ? e.message : 'Failed to load 90-day breakdown');
+      } finally {
+        setListLoading(false);
+      }
+    }
+  };
+
   // If restored state sets expanded, auto-load the corresponding list
   useEffect(() => {
     const loadForExpanded = async () => {
@@ -104,6 +126,16 @@ export default function Analytics() {
         } finally {
           setListLoading(false);
         }
+      } else if (expanded === '90' && !ninetyDayItems && !listLoading) {
+        try {
+          setListLoading(true);
+          const items = await WorkSessionService.getProblemTotalsForLast90Days();
+          setNinetyDayItems(items);
+        } catch (e) {
+          setListError(e instanceof Error ? e.message : 'Failed to load 90-day breakdown');
+        } finally {
+          setListLoading(false);
+        }
       }
     };
     loadForExpanded();
@@ -116,7 +148,7 @@ export default function Analytics() {
   };
 
   // Persist/restore simple UI state for Analytics (expanded section + scroll)
-  const saveAnalyticsState = (nextExpanded: '7' | '30' | null = expanded) => {
+  const saveAnalyticsState = (nextExpanded: '7' | '30' | '90' | null = expanded) => {
     try {
       const state = {
         expanded: nextExpanded,
@@ -133,8 +165,8 @@ export default function Analytics() {
     try {
       const raw = sessionStorage.getItem('analyticsState');
       if (raw) {
-        const st = JSON.parse(raw) as { expanded?: '7' | '30' | null; scrollY?: number; sortBy?: 'duration' | 'recent' };
-        if (st.expanded === '7' || st.expanded === '30' || st.expanded === null) {
+        const st = JSON.parse(raw) as { expanded?: '7' | '30' | '90' | null; scrollY?: number; sortBy?: 'duration' | 'recent' };
+        if (st.expanded === '7' || st.expanded === '30' || st.expanded === '90' || st.expanded === null) {
           setExpanded(st.expanded ?? null);
         }
         if (st.sortBy === 'duration' || st.sortBy === 'recent') {
@@ -200,17 +232,17 @@ export default function Analytics() {
         {/* Refresh Button */}
         <button
           onClick={handleRefreshAll}
-          disabled={loading.today || loading.yesterday || loading.last7Days || loading.last30Days}
+          disabled={loading.today || loading.yesterday || loading.last7Days || loading.last30Days || loading.last90Days}
           className="
             inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md
-            text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 
+            text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2
             focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed
             transition-colors duration-200
           "
         >
-          <svg 
+          <svg
             className={`-ml-1 mr-2 h-4 w-4 ${
-              (loading.today || loading.yesterday || loading.last7Days || loading.last30Days) ? 'animate-spin' : ''
+              (loading.today || loading.yesterday || loading.last7Days || loading.last30Days || loading.last90Days) ? 'animate-spin' : ''
             }`} 
             fill="none" 
             stroke="currentColor" 
@@ -243,7 +275,7 @@ export default function Analytics() {
           error={errors.yesterday}
           onClick={handleYesterdayClick}
         />
-        
+
         {/* Last 7 Days Card */}
         <Last7DaysCard
           stats={last7DaysStats}
@@ -251,7 +283,7 @@ export default function Analytics() {
           error={errors.last7Days}
           onClick={handleLast7DaysClick}
         />
-        
+
         {/* Last 30 Days Card */}
         <Last30DaysCard
           stats={last30DaysStats}
@@ -261,8 +293,19 @@ export default function Analytics() {
         />
       </div>
 
+      {/* Second Row for 90 Days */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Last 90 Days Card */}
+        <Last90DaysCard
+          stats={last90DaysStats}
+          loading={loading.last90Days}
+          error={errors.last90Days}
+          onClick={handleLast90DaysClick}
+        />
+      </div>
+
       {/* Expandable Lists Section */}
-      {(expanded === '7' || expanded === '30') && (
+      {(expanded === '7' || expanded === '30' || expanded === '90') && (
         <div className="space-y-4">
           {/* List controls */}
           <div className="flex items-center justify-end gap-3">
@@ -294,6 +337,14 @@ export default function Analytics() {
             <ProblemTotalsList
               title="Problems worked in the last 30 days"
               items={sortItems(thirtyDayItems)}
+              onItemClick={openProblemFromAnalytics}
+              sortBy={sortBy}
+            />
+          )}
+          {!listLoading && !listError && expanded === '90' && (
+            <ProblemTotalsList
+              title="Problems worked in the last 90 days"
+              items={sortItems(ninetyDayItems)}
               onItemClick={openProblemFromAnalytics}
               sortBy={sortBy}
             />
@@ -340,6 +391,7 @@ export default function Analytics() {
                 yesterdayStats,
                 last7DaysStats,
                 last30DaysStats,
+                last90DaysStats,
                 loading,
                 errors,
               }, null, 2)}

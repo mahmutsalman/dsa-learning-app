@@ -148,7 +148,7 @@ export class WorkSessionService {
     const endDateStr = endDate.toISOString().split('T')[0];
 
     const cacheKey = `last-30-days-stats-${endDateStr}`;
-    
+
     return this.getCachedResult(cacheKey, async () => {
       // For 30 days, we might have duplicate problems across days,
       // so we need to get the actual unique problems count using the specialized endpoint
@@ -157,6 +157,32 @@ export class WorkSessionService {
         unique_problems_count: number;
         total_sessions_count: number;
       }>('get_last_n_days_summary', { days: 30 });
+
+      return {
+        total_duration_seconds: summary.total_duration_seconds,
+        unique_problems_count: summary.unique_problems_count,
+        total_sessions_count: summary.total_sessions_count
+      };
+    });
+  }
+
+  /**
+   * Get last 90 days work session statistics
+   */
+  static async getLast90DaysStats(): Promise<WorkSessionStats> {
+    const endDate = new Date();
+    const endDateStr = endDate.toISOString().split('T')[0];
+
+    const cacheKey = `last-90-days-stats-${endDateStr}`;
+
+    return this.getCachedResult(cacheKey, async () => {
+      // For 90 days, we might have duplicate problems across days,
+      // so we need to get the actual unique problems count using the specialized endpoint
+      const summary = await invoke<{
+        total_duration_seconds: number;
+        unique_problems_count: number;
+        total_sessions_count: number;
+      }>('get_last_n_days_summary', { days: 90 });
 
       return {
         total_duration_seconds: summary.total_duration_seconds,
@@ -240,6 +266,15 @@ export class WorkSessionService {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 29);
+    const startDateStr = startDate.toISOString().split('T')[0];
+    const endDateStr = endDate.toISOString().split('T')[0];
+    return this.getProblemTotalsForRange(startDateStr, endDateStr);
+  }
+
+  static async getProblemTotalsForLast90Days(): Promise<ProblemTotalWork[]> {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 89);
     const startDateStr = startDate.toISOString().split('T')[0];
     const endDateStr = endDate.toISOString().split('T')[0];
     return this.getProblemTotalsForRange(startDateStr, endDateStr);

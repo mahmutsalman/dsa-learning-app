@@ -5,23 +5,27 @@ interface UseWorkSessionStatsReturn {
   yesterdayStats: WorkSessionStats | null;
   last7DaysStats: WorkSessionStats | null;
   last30DaysStats: WorkSessionStats | null;
+  last90DaysStats: WorkSessionStats | null;
   todayStats: WorkSessionStats | null;
   loading: {
     yesterday: boolean;
     last7Days: boolean;
     last30Days: boolean;
+    last90Days: boolean;
     today: boolean;
   };
   errors: {
     yesterday: string | null;
     last7Days: string | null;
     last30Days: string | null;
+    last90Days: string | null;
     today: string | null;
   };
   refresh: () => Promise<void>;
   refreshYesterday: () => Promise<void>;
   refreshLast7Days: () => Promise<void>;
   refreshLast30Days: () => Promise<void>;
+  refreshLast90Days: () => Promise<void>;
   refreshToday: () => Promise<void>;
 }
 
@@ -33,19 +37,22 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
   const [yesterdayStats, setYesterdayStats] = useState<WorkSessionStats | null>(null);
   const [last7DaysStats, setLast7DaysStats] = useState<WorkSessionStats | null>(null);
   const [last30DaysStats, setLast30DaysStats] = useState<WorkSessionStats | null>(null);
+  const [last90DaysStats, setLast90DaysStats] = useState<WorkSessionStats | null>(null);
   const [todayStats, setTodayStats] = useState<WorkSessionStats | null>(null);
-  
+
   const [loading, setLoading] = useState({
     yesterday: true,
     last7Days: true,
     last30Days: true,
+    last90Days: true,
     today: true,
   });
-  
+
   const [errors, setErrors] = useState({
     yesterday: null as string | null,
     last7Days: null as string | null,
     last30Days: null as string | null,
+    last90Days: null as string | null,
     today: null as string | null,
   });
   
@@ -127,10 +134,10 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
   // Fetch last 30 days stats
   const fetchLast30DaysStats = useCallback(async () => {
     if (isUnmountedRef.current) return;
-    
+
     setLoading(prev => ({ ...prev, last30Days: true }));
     setErrors(prev => ({ ...prev, last30Days: null }));
-    
+
     try {
       const stats = await WorkSessionService.getLast30DaysStats();
       if (!isUnmountedRef.current) {
@@ -145,6 +152,31 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
     } finally {
       if (!isUnmountedRef.current) {
         setLoading(prev => ({ ...prev, last30Days: false }));
+      }
+    }
+  }, []);
+
+  // Fetch last 90 days stats
+  const fetchLast90DaysStats = useCallback(async () => {
+    if (isUnmountedRef.current) return;
+
+    setLoading(prev => ({ ...prev, last90Days: true }));
+    setErrors(prev => ({ ...prev, last90Days: null }));
+
+    try {
+      const stats = await WorkSessionService.getLast90DaysStats();
+      if (!isUnmountedRef.current) {
+        setLast90DaysStats(stats);
+      }
+    } catch (error) {
+      if (!isUnmountedRef.current) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch last 90 days stats';
+        setErrors(prev => ({ ...prev, last90Days: errorMessage }));
+        console.error('Error fetching last 90 days stats:', error);
+      }
+    } finally {
+      if (!isUnmountedRef.current) {
+        setLoading(prev => ({ ...prev, last90Days: false }));
       }
     }
   }, []);
@@ -180,9 +212,10 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
       fetchYesterdayStats(),
       fetchLast7DaysStats(),
       fetchLast30DaysStats(),
+      fetchLast90DaysStats(),
       fetchTodayStats(),
     ]);
-  }, [fetchYesterdayStats, fetchLast7DaysStats, fetchLast30DaysStats, fetchTodayStats]);
+  }, [fetchYesterdayStats, fetchLast7DaysStats, fetchLast30DaysStats, fetchLast90DaysStats, fetchTodayStats]);
 
   // Refresh functions
   const refresh = useCallback(async () => {
@@ -204,6 +237,11 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
     WorkSessionService.clearCacheForPattern('last-30-days');
     await fetchLast30DaysStats();
   }, [fetchLast30DaysStats]);
+
+  const refreshLast90Days = useCallback(async () => {
+    WorkSessionService.clearCacheForPattern('last-90-days');
+    await fetchLast90DaysStats();
+  }, [fetchLast90DaysStats]);
 
   const refreshToday = useCallback(async () => {
     WorkSessionService.clearCacheForPattern('today');
@@ -229,6 +267,7 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
     yesterdayStats,
     last7DaysStats,
     last30DaysStats,
+    last90DaysStats,
     todayStats,
     loading,
     errors,
@@ -236,6 +275,7 @@ export const useWorkSessionStats = (): UseWorkSessionStatsReturn => {
     refreshYesterday,
     refreshLast7Days,
     refreshLast30Days,
+    refreshLast90Days,
     refreshToday,
   };
 };
