@@ -56,11 +56,10 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Debug logging helper with card context - disabled to prevent memory leaks
-  const debugLog = (_message: string, _data?: any) => {
-    // Disabled to prevent memory leak when inspector is open
-    // Uncomment only when actively debugging
-    // console.log(`🎤 [Recording Debug Card:${cardId}] ${message}`, data ? data : '');
+  // Debug logging helper with card context
+  const debugLog = (message: string, data?: any) => {
+    // Enabled for debugging recording issues
+    console.log(`🎤 [useRecording Card:${cardId}] ${message}`, data ? data : '');
   };
 
   // Refresh recording state from backend
@@ -166,10 +165,14 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   // Pause recording session
   const pauseRecording = useCallback(async () => {
     try {
+      debugLog('⏸️ Pausing recording...');
       setError(null);
       await invoke('pause_recording');
+      debugLog('✅ Backend pause command completed');
       setRecordingState(prev => ({ ...prev, isPaused: true }));
+      debugLog('✅ State updated to paused');
     } catch (err) {
+      debugLog('❌ Pause recording error:', err);
       setError(err as string);
     }
   }, []);
@@ -177,10 +180,14 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   // Resume recording session
   const resumeRecording = useCallback(async () => {
     try {
+      debugLog('▶️ Resuming recording...');
       setError(null);
       await invoke('resume_recording');
+      debugLog('✅ Backend resume command completed');
       setRecordingState(prev => ({ ...prev, isPaused: false }));
+      debugLog('✅ State updated to resumed');
     } catch (err) {
+      debugLog('❌ Resume recording error:', err);
       setError(err as string);
     }
   }, []);

@@ -63,6 +63,8 @@ pub struct RecordingSession {
     pub recording_mode: RecordingMode,
     pub start_time: DateTime<Utc>,
     pub is_paused: bool,
+    pub pause_duration: i32,                   // Total seconds paused
+    pub pause_start_time: Option<DateTime<Utc>>, // When current pause began
     pub filename: String,
     pub filepath: String,
 }

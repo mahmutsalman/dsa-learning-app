@@ -28,6 +28,7 @@ import { useTimer } from '../hooks/useTimer';
 import { useReviewTimer } from '../hooks/useReviewTimer';
 import { useRecording } from '../hooks/useRecording';
 import { useReviewAudio } from '../hooks/useReviewAudio';
+import { useAudioInput } from '../hooks/useAudioInput';
 import { getSiblingCards } from '../utils/databaseAnalysis';
 import { useSolutionCard, solutionCardToCard, isShiftAction } from '../features/solution-card';
 import { FocusModeShortcutHandler } from '../components/FocusModeShortcutHandler';
@@ -86,6 +87,9 @@ export default function ProblemCard() {
 
   // Recording functionality - integrated with backend
   const recording = useRecording(currentCard?.id);
+
+  // Audio input management for recording device selection
+  const audioInput = useAudioInput();
 
   // Solution card functionality
   const solutionCard = useSolutionCard({
@@ -1617,44 +1621,77 @@ export default function ProblemCard() {
 
 
   const toggleRecording = async () => {
+    console.log('🎤 [toggleRecording] Called', {
+      currentCard: currentCard?.id,
+      recordingState: {
+        isRecording: recording.recordingState.isRecording,
+        isPaused: recording.recordingState.isPaused,
+        recordingMode: recording.recordingState.recordingMode,
+        cardId: recording.recordingState.cardId
+      }
+    });
+
     try {
       if (!currentCard) {
-        console.error('No card selected for recording');
+        console.error('🎤 [toggleRecording] ❌ No card selected for recording');
         return;
       }
 
       // Audio input check before starting a new recording
       if (!recording.recordingState.isRecording) {
+        console.log('🎤 [toggleRecording] Recording not active, checking audio input...');
         try {
-          const { useAudioInput } = await import('../hooks/useAudioInput');
-          const audio = useAudioInput();
           // If devices changed, or preferred missing, prompt
-          if (audio.changedSinceLastCheck) {
-            audio.resetChangedFlag();
+          if (audioInput.changedSinceLastCheck) {
+            audioInput.resetChangedFlag();
             const continueWith = window.confirm('A new audio input was detected. Use the new default device for recording?');
             if (continueWith) {
-              const next = audio.defaultName || audio.current;
-              if (next) await audio.chooseDevice(next);
+              const next = audioInput.defaultName || audioInput.current;
+              if (next) await audioInput.chooseDevice(next);
             } else {
               // keep preferred if set
-              if (audio.preferred) await audio.chooseDevice(audio.preferred);
+              if (audioInput.preferred) await audioInput.chooseDevice(audioInput.preferred);
             }
           } else {
             // Ensure preferred (if any) is selected
-            await audio.ensurePreferredSelected();
+            await audioInput.ensurePreferredSelected();
           }
         } catch (e) {
-          console.warn('Audio input check failed (non-fatal):', e);
+          console.warn('🎤 [toggleRecording] Audio input check failed (non-fatal):', e);
         }
       }
 
       if (recording.recordingState.isRecording) {
+        console.log('🎤 [toggleRecording] ⏹️ STOPPING recording for card:', currentCard.id);
         await recording.stopRecording(currentCard.id);
+        console.log('🎤 [toggleRecording] ✅ Stop recording completed');
       } else {
+        console.log('🎤 [toggleRecording] ▶️ STARTING recording for card:', currentCard.id);
         await recording.startRecording(currentCard.id);
+        console.log('🎤 [toggleRecording] ✅ Start recording completed');
       }
     } catch (err) {
-      console.error('Recording error:', err);
+      console.error('🎤 [toggleRecording] ❌ Recording error:', err);
+    }
+  };
+
+  const pauseRecording = async () => {
+    console.log('🎤 [pauseRecording] ⏸️ Called');
+    try {
+      await recording.pauseRecording();
+      console.log('🎤 [pauseRecording] ✅ Pause completed');
+    } catch (err) {
+      console.error('🎤 [pauseRecording] ❌ Failed to pause recording:', err);
+    }
+  };
+
+  const resumeRecording = async () => {
+    console.log('🎤 [resumeRecording] ▶️ Called');
+    try {
+      await recording.resumeRecording();
+      console.log('🎤 [resumeRecording] ✅ Resume completed');
+    } catch (err) {
+      console.error('🎤 [resumeRecording] ❌ Failed to resume recording:', err);
     }
   };
 
@@ -1748,6 +1785,8 @@ export default function ProblemCard() {
                 }}
                 onToggleTimer={toggleTimer}
                 onToggleRecording={toggleRecording}
+                onPauseRecording={pauseRecording}
+                onResumeRecording={resumeRecording}
                 onStartReviewRecording={startReviewRecording}
                 onStopReviewRecording={stopReviewRecording}
                 onNavigateCard={navigateToCard}
@@ -1939,6 +1978,8 @@ export default function ProblemCard() {
               }}
               onToggleTimer={toggleTimer}
               onToggleRecording={toggleRecording}
+              onPauseRecording={pauseRecording}
+              onResumeRecording={resumeRecording}
               onStartReviewRecording={startReviewRecording}
               onStopReviewRecording={stopReviewRecording}
               onNavigateCard={navigateToCard}

@@ -48,6 +48,8 @@ interface WorkspaceHeaderProps {
   recordingsCount?: number;
   onToggleTimer: () => void;
   onToggleRecording: () => void;
+  onPauseRecording: () => void;
+  onResumeRecording: () => void;
   onNavigateCard: (direction: 'prev' | 'next') => void;
   onDeleteCard: () => void;
   onOpenSessionHistory: () => void;
@@ -219,6 +221,8 @@ export function WorkspaceHeader({
   recordingsCount = 0,
   onToggleTimer,
   onToggleRecording,
+  onPauseRecording,
+  onResumeRecording,
   onNavigateCard,
   onDeleteCard,
   onOpenSessionHistory,
@@ -253,6 +257,30 @@ export function WorkspaceHeader({
   const reviewRecordingElapsed = reviewAudio.state.elapsedRecordingTime;
   const reviewRecordingSourceCardId = reviewAudio.state.sourceCardId;
   const isCardRecordingActive = recordingState.isRecording && recordingState.recordingMode !== 'review';
+
+  // Debug logging for recording state
+  useEffect(() => {
+    console.log('🎤 [Recording Debug] State Update:', {
+      recordingState: {
+        isRecording: recordingState.isRecording,
+        isPaused: recordingState.isPaused,
+        recordingMode: recordingState.recordingMode,
+        elapsedTime: recordingState.elapsedRecordingTime
+      },
+      reviewRecording: {
+        isGloballyActive: isReviewRecordingActive,
+        isForProblem: isReviewRecordingOnThisProblem,
+        isForCurrentCard: isReviewRecordingOnCurrentCard,
+        elapsedTime: reviewRecordingElapsed,
+        sourceCardId: reviewRecordingSourceCardId
+      },
+      buttonState: {
+        isViewingSolution,
+        isDisabled: isViewingSolution || isReviewRecordingActive,
+        canClick: !isViewingSolution && !isReviewRecordingActive
+      }
+    });
+  }, [recordingState, isReviewRecordingActive, isReviewRecordingOnThisProblem, isReviewRecordingOnCurrentCard, reviewRecordingElapsed, reviewRecordingSourceCardId, isViewingSolution]);
   const canStartReviewRecording = Boolean(
     currentCard &&
     !isViewingSolution &&
@@ -264,7 +292,9 @@ export function WorkspaceHeader({
   const recordingButtonTitle = isReviewRecordingActive
     ? 'Review recording in progress'
     : recordingState.isRecording
-      ? 'Stop recording'
+      ? recordingState.isPaused
+        ? 'Stop recording (paused)'
+        : 'Stop recording'
       : 'Start recording';
 
   // Detect if this ProblemCard was opened from Analytics
@@ -909,12 +939,6 @@ export function WorkspaceHeader({
             {/* Recording with integrated Recording History */}
             <div
               className="relative focus-minimize"
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                setShowRecordingDropdown(false);
-                setReviewMenuPosition({ x: event.clientX, y: event.clientY });
-              }}
               onMouseLeave={(e) => {
                 // Add small delay and check if mouse is moving to dropdown
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -935,14 +959,54 @@ export function WorkspaceHeader({
               <div className="flex items-center">
                 {/* Main Recording Button */}
                 <button
-                  onClick={onToggleRecording}
+                  onClick={(e) => {
+                    console.log('🎤 [Recording Debug] Button clicked!', {
+                      shiftKey: e.shiftKey,
+                      isRecording: recordingState.isRecording,
+                      isPaused: recordingState.isPaused,
+                      recordingMode: recordingState.recordingMode,
+                      isDisabled: isViewingSolution || isReviewRecordingActive,
+                      reviewMenuOpen: Boolean(reviewMenuPosition)
+                    });
+
+                    // Close any open context menu first
+                    if (reviewMenuPosition) {
+                      console.log('🎤 [Recording Debug] Closing context menu');
+                      setReviewMenuPosition(null);
+                    }
+
+                    // Shift+Click to pause/resume when recording
+                    if (e.shiftKey && recordingState.isRecording && recordingState.recordingMode !== 'review') {
+                      console.log('🎤 [Recording Debug] Shift+Click detected -', recordingState.isPaused ? 'RESUMING' : 'PAUSING');
+                      e.preventDefault();
+                      if (recordingState.isPaused) {
+                        onResumeRecording();
+                      } else {
+                        onPauseRecording();
+                      }
+                    } else {
+                      // Normal click - toggle recording
+                      console.log('🎤 [Recording Debug] Normal click -', recordingState.isRecording ? 'STOPPING' : 'STARTING');
+                      onToggleRecording();
+                    }
+                  }}
                   disabled={isViewingSolution || isReviewRecordingActive}
                   className={`header-scale-button header-timer-button with-icon transition-colors ${
                     recordingState.isRecording
-                      ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                      ? recordingState.isPaused
+                        ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+                        : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'
                       : 'bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title={recordingButtonTitle}
+                  title={
+                    isViewingSolution
+                      ? '⚠️ Recording disabled while viewing solution card'
+                      : isReviewRecordingActive
+                        ? '⚠️ Recording disabled - Review recording is active. Right-click to stop review recording.'
+                        : recordingState.isRecording
+                          ? (recordingState.isPaused ? '▶️ Shift+Click to resume | Click to stop' : '⏸️ Shift+Click to pause | Click to stop')
+                          : '🎤 Click to start recording'
+                  }
                   aria-label={recordingButtonTitle}
                   aria-pressed={recordingState.isRecording && recordingState.recordingMode !== 'review'}
                   onContextMenu={(event) => {
@@ -953,7 +1017,7 @@ export function WorkspaceHeader({
                   }}
                 >
                   {/* Mic Icon with Recording Badge */}
-                  <div className="flex-shrink-0 relative">
+                  <div className="flex-shrink-0 relative pointer-events-none">
                     <MicrophoneIcon className={`h-4 w-4 ${recordingsCount > 0 ? 'text-blue-500' : ''}`} />
                     {recordingsCount > 0 && (
                       <span className="absolute top-0 right-0 translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-[9px] rounded-full px-1 min-w-[14px] h-3.5 flex items-center justify-center leading-none font-medium shadow-sm">
@@ -961,14 +1025,22 @@ export function WorkspaceHeader({
                       </span>
                     )}
                   </div>
-                  
+
                   {/* Recording Timer Display - responsive */}
                   {recordingState.isRecording && recordingState.recordingMode !== 'review' && (
-                    <div className="flex flex-col items-center min-w-0">
-                      <span className={`text-xs font-mono text-red-600 dark:text-red-400 whitespace-nowrap ${
+                    <div className="flex flex-col items-center min-w-0 pointer-events-none">
+                      <span className={`text-xs font-mono whitespace-nowrap ${
                         screenSize === 'xs' ? 'hidden' : ''
+                      } ${
+                        recordingState.isPaused
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-red-600 dark:text-red-400'
                       }`}>
-                        {screenSize === 'sm' ? formatTimeDisplay(recordingState.elapsedRecordingTime, false) : `Recording: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`}
+                        {recordingState.isPaused ? (
+                          screenSize === 'sm' ? `${formatTimeDisplay(recordingState.elapsedRecordingTime, false)} (Paused)` : `Paused: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`
+                        ) : (
+                          screenSize === 'sm' ? formatTimeDisplay(recordingState.elapsedRecordingTime, false) : `Recording: ${formatTimeDisplay(recordingState.elapsedRecordingTime, false)}`
+                        )}
                       </span>
                     </div>
                   )}

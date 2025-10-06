@@ -42,8 +42,13 @@ export function useReviewAudio(problemId?: string, currentCardId?: string): UseR
       setError(null);
       const backendState = await invoke<any>('get_recording_state');
 
+      console.log('🔄 [Review Audio Debug] Backend state received:', backendState);
+
       const isReviewMode = backendState?.recordingMode === 'review';
+      console.log('🔄 [Review Audio Debug] Is review mode?', isReviewMode, 'Is recording?', backendState?.isRecording);
+
       if (!isReviewMode || !backendState?.isRecording) {
+        console.log('🔄 [Review Audio Debug] Setting to DEFAULT_STATE (not review or not recording)');
         setReviewRecordingState(DEFAULT_STATE);
         return;
       }
@@ -59,9 +64,10 @@ export function useReviewAudio(problemId?: string, currentCardId?: string): UseR
         problemId: typeof backendState.problemId === 'string' ? backendState.problemId : undefined,
       };
 
+      console.log('🔄 [Review Audio Debug] Setting sanitized review recording state:', sanitizedState);
       setReviewRecordingState(sanitizedState);
     } catch (err) {
-      console.error('Failed to refresh review recording state:', err);
+      console.error('❌ [Review Audio Debug] Failed to refresh review recording state:', err);
       setError(String(err));
       setReviewRecordingState(DEFAULT_STATE);
     }

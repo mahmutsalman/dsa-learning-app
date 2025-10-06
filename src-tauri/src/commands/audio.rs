@@ -191,19 +191,47 @@ fn audio_recording_thread(
                 let _ = response_sender.send(AudioResponse::Stopped);
             }
             AudioCommand::PauseRecording => {
+                // Update state flag for callback consistency
                 if let Some(ref state_arc) = current_state {
                     if let Ok(mut state_guard) = state_arc.lock() {
                         *state_guard = AudioStreamState::Paused;
                     }
                 }
+
+                // Use CPAL's native pause method to actually pause the stream
+                if let Some(ref stream) = current_stream {
+                    if let Err(e) = stream.pause() {
+                        eprintln!("Failed to pause audio stream: {}", e);
+                        let _ = response_sender.send(AudioResponse::Error(format!(
+                            "Failed to pause stream: {}",
+                            e
+                        )));
+                        continue; // Don't kill the audio thread, just skip to next command
+                    }
+                }
+
                 let _ = response_sender.send(AudioResponse::Paused);
             }
             AudioCommand::ResumeRecording => {
+                // Update state flag for callback consistency
                 if let Some(ref state_arc) = current_state {
                     if let Ok(mut state_guard) = state_arc.lock() {
                         *state_guard = AudioStreamState::Recording;
                     }
                 }
+
+                // Use CPAL's native play method to resume the stream
+                if let Some(ref stream) = current_stream {
+                    if let Err(e) = stream.play() {
+                        eprintln!("Failed to resume audio stream: {}", e);
+                        let _ = response_sender.send(AudioResponse::Error(format!(
+                            "Failed to resume stream: {}",
+                            e
+                        )));
+                        continue; // Don't kill the audio thread, just skip to next command
+                    }
+                }
+
                 let _ = response_sender.send(AudioResponse::Resumed);
             }
             AudioCommand::RefreshDevices => {
@@ -580,6 +608,8 @@ fn prepare_recording_session(
         recording_mode: mode,
         start_time: Utc::now(),
         is_paused: false,
+        pause_duration: 0,
+        pause_start_time: None,
         filename,
         filepath: filepath.to_string_lossy().to_string(),
     };
@@ -761,15 +791,16 @@ pub async fn stop_review_recording(state: State<'_, AppState>) -> Result<String,
 
 #[tauri::command]
 pub async fn pause_recording(state: State<'_, AppState>) -> Result<String, String> {
-    let recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
+    // Use a single mutable lock to avoid deadlock
+    let mut recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
 
     if recording_state.is_some() {
         // Update the RecordingSession state
-        let mut recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
         if let Some(ref mut session) = *recording_state {
             session.is_paused = true;
+            session.pause_start_time = Some(Utc::now()); // Record when pause began
         }
-        drop(recording_state);
+        drop(recording_state); // Release lock before sending command
 
         // Send pause command to audio thread
         let audio_sender_guard = state
@@ -790,15 +821,21 @@ pub async fn pause_recording(state: State<'_, AppState>) -> Result<String, Strin
 
 #[tauri::command]
 pub async fn resume_recording(state: State<'_, AppState>) -> Result<String, String> {
-    let recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
+    // Use a single mutable lock to avoid deadlock
+    let mut recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
 
     if recording_state.is_some() {
-        // Update the RecordingSession state
-        let mut recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
+        // Update the RecordingSession state and accumulate pause duration
         if let Some(ref mut session) = *recording_state {
+            // Calculate duration of this pause and add to total
+            if let Some(pause_start) = session.pause_start_time {
+                let pause_elapsed = (Utc::now() - pause_start).num_seconds() as i32;
+                session.pause_duration += pause_elapsed;
+                session.pause_start_time = None; // Clear pause start time
+            }
             session.is_paused = false;
         }
-        drop(recording_state);
+        drop(recording_state); // Release lock before sending command
 
         // Send resume command to audio thread
         let audio_sender_guard = state
@@ -822,7 +859,19 @@ pub async fn get_recording_state(state: State<'_, AppState>) -> Result<Recording
     let recording_state = state.recording_state.lock().map_err(|e| e.to_string())?;
 
     if let Some(ref session) = *recording_state {
-        let elapsed_time = (Utc::now() - session.start_time).num_seconds() as i32;
+        // Calculate elapsed time excluding paused duration
+        let elapsed_time = if session.is_paused {
+            // When paused, return the frozen recording time at the moment pause was pressed
+            if let Some(pause_start) = session.pause_start_time {
+                (pause_start - session.start_time).num_seconds() as i32 - session.pause_duration
+            } else {
+                // Fallback if pause_start_time is somehow None
+                (Utc::now() - session.start_time).num_seconds() as i32 - session.pause_duration
+            }
+        } else {
+            // When recording, subtract total pause duration from elapsed time
+            (Utc::now() - session.start_time).num_seconds() as i32 - session.pause_duration
+        };
 
         Ok(RecordingState {
             is_recording: true,
