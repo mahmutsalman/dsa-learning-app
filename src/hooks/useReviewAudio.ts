@@ -8,6 +8,7 @@ export interface ReviewRecordingState {
   elapsedRecordingTime: number;
   sourceCardId?: string;
   problemId?: string;
+  pauseDuration: number; // Total seconds paused (for timer calculation)
 }
 
 export interface UseReviewAudioReturn {
@@ -26,6 +27,7 @@ const DEFAULT_STATE: ReviewRecordingState = {
   isRecording: false,
   isPaused: false,
   elapsedRecordingTime: 0,
+  pauseDuration: 0,
   sourceCardId: undefined,
   problemId: undefined,
   recordingStartTime: undefined
@@ -60,6 +62,9 @@ export function useReviewAudio(problemId?: string, currentCardId?: string): UseR
         elapsedRecordingTime: typeof backendState.elapsedRecordingTime === 'number' && !isNaN(backendState.elapsedRecordingTime)
           ? backendState.elapsedRecordingTime
           : 0,
+        pauseDuration: typeof backendState.pauseDuration === 'number' && !isNaN(backendState.pauseDuration)
+          ? backendState.pauseDuration
+          : 0,
         sourceCardId: typeof backendState.cardId === 'string' ? backendState.cardId : undefined,
         problemId: typeof backendState.problemId === 'string' ? backendState.problemId : undefined,
       };
@@ -92,6 +97,7 @@ export function useReviewAudio(problemId?: string, currentCardId?: string): UseR
         isPaused: false,
         recordingStartTime: new Date(),
         elapsedRecordingTime: 0,
+        pauseDuration: 0,
         sourceCardId,
         problemId
       });
@@ -129,11 +135,18 @@ export function useReviewAudio(problemId?: string, currentCardId?: string): UseR
         if (isNaN(startTime.getTime()) || isNaN(now.getTime())) {
           return;
         }
-        const elapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000);
-        if (isNaN(elapsed) || elapsed < 0) {
-          return;
-        }
-        setReviewRecordingState(prev => ({ ...prev, elapsedRecordingTime: elapsed }));
+
+        // Calculate elapsed time and subtract pause duration
+        setReviewRecordingState(prev => {
+          const rawElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+          const elapsed = rawElapsed - prev.pauseDuration;
+
+          if (isNaN(elapsed) || elapsed < 0) {
+            return prev;
+          }
+
+          return { ...prev, elapsedRecordingTime: elapsed };
+        });
       }, 1000);
     } else if (intervalRef.current) {
       clearInterval(intervalRef.current);

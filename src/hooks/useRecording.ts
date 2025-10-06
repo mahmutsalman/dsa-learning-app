@@ -10,6 +10,7 @@ export interface RecordingState {
   recordingMode?: 'card' | 'review';
   cardId?: string;
   problemId?: string;
+  pauseDuration: number; // Total seconds paused (for timer calculation)
 }
 
 export interface RecordingInfo {
@@ -49,7 +50,8 @@ export function useRecording(cardId?: string): UseRecordingReturn {
   const [recordingState, setRecordingState] = useState<RecordingState>({
     isRecording: false,
     isPaused: false,
-    elapsedRecordingTime: 0
+    elapsedRecordingTime: 0,
+    pauseDuration: 0
   });
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,11 +76,14 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       // Validate and sanitize backend state
       const sanitizedState = {
         ...backendState,
-        elapsedRecordingTime: typeof backendState.elapsedRecordingTime === 'number' && !isNaN(backendState.elapsedRecordingTime) 
-          ? backendState.elapsedRecordingTime 
+        elapsedRecordingTime: typeof backendState.elapsedRecordingTime === 'number' && !isNaN(backendState.elapsedRecordingTime)
+          ? backendState.elapsedRecordingTime
           : 0,
-        recordingStartTime: backendState.recordingStartTime 
-          ? new Date(backendState.recordingStartTime) 
+        pauseDuration: typeof backendState.pauseDuration === 'number' && !isNaN(backendState.pauseDuration)
+          ? backendState.pauseDuration
+          : 0,
+        recordingStartTime: backendState.recordingStartTime
+          ? new Date(backendState.recordingStartTime)
           : undefined,
         // Ensure all boolean fields are properly set
         isRecording: Boolean(backendState.isRecording),
@@ -117,6 +122,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
         currentRecordingId: recordingInfo.filename,
         recordingStartTime: new Date(),
         elapsedRecordingTime: 0,
+        pauseDuration: 0,
         recordingMode: 'card',
         cardId: targetCardId,
         problemId: undefined
@@ -144,6 +150,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
         isRecording: false,
         isPaused: false,
         elapsedRecordingTime: 0,
+        pauseDuration: 0,
         recordingMode: undefined,
         cardId: undefined,
         problemId: undefined
@@ -171,11 +178,15 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       debugLog('✅ Backend pause command completed');
       setRecordingState(prev => ({ ...prev, isPaused: true }));
       debugLog('✅ State updated to paused');
+
+      // Refresh state to get updated pauseDuration from backend
+      await refreshRecordingState();
+      debugLog('✅ State refreshed with updated pauseDuration');
     } catch (err) {
       debugLog('❌ Pause recording error:', err);
       setError(err as string);
     }
-  }, []);
+  }, [refreshRecordingState]);
 
   // Resume recording session
   const resumeRecording = useCallback(async () => {
@@ -186,11 +197,15 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       debugLog('✅ Backend resume command completed');
       setRecordingState(prev => ({ ...prev, isPaused: false }));
       debugLog('✅ State updated to resumed');
+
+      // Refresh state to get updated pauseDuration from backend
+      await refreshRecordingState();
+      debugLog('✅ State refreshed with updated pauseDuration');
     } catch (err) {
       debugLog('❌ Resume recording error:', err);
       setError(err as string);
     }
-  }, []);
+  }, [refreshRecordingState]);
 
   // Load recordings for a card
   const loadRecordings = useCallback(async (targetCardId: string) => {
@@ -212,6 +227,7 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       isRecording: false,
       isPaused: false,
       elapsedRecordingTime: 0,
+      pauseDuration: 0,
       recordingMode: undefined,
       cardId: undefined,
       problemId: undefined
@@ -257,23 +273,27 @@ export function useRecording(cardId?: string): UseRecordingReturn {
       intervalRef.current = window.setInterval(() => {
         const now = new Date();
         const startTime = recordingState.recordingStartTime!;
-        
+
         // Validate dates before calculation
         if (!startTime || isNaN(startTime.getTime()) || isNaN(now.getTime())) {
           debugLog('Invalid date detected in recording calculation', { startTime, now });
           return;
         }
-        
-        const elapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000);
-        
-        // Validate elapsed time
-        if (isNaN(elapsed) || elapsed < 0) {
-          debugLog('Invalid elapsed time calculated', { elapsed, startTime, now });
-          return;
-        }
-        
-        debugLog(`Recording tick - elapsed: ${elapsed}s`);
-        setRecordingState(prev => ({ ...prev, elapsedRecordingTime: elapsed }));
+
+        // Calculate elapsed time and subtract pause duration
+        setRecordingState(prev => {
+          const rawElapsed = Math.floor((now.getTime() - startTime.getTime()) / 1000);
+          const elapsed = rawElapsed - prev.pauseDuration;
+
+          // Validate elapsed time
+          if (isNaN(elapsed) || elapsed < 0) {
+            debugLog('Invalid elapsed time calculated', { elapsed, rawElapsed, pauseDuration: prev.pauseDuration });
+            return prev;
+          }
+
+          debugLog(`Recording tick - raw: ${rawElapsed}s, pause: ${prev.pauseDuration}s, elapsed: ${elapsed}s`);
+          return { ...prev, elapsedRecordingTime: elapsed };
+        });
       }, 1000);
     } else {
       if (intervalRef.current) {

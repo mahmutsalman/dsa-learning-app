@@ -386,6 +386,8 @@ pub struct RecordingState {
     pub card_id: Option<String>,
     #[serde(rename = "problemId")]
     pub problem_id: Option<String>,
+    #[serde(rename = "pauseDuration")]
+    pub pause_duration: i32, // Total seconds paused (for frontend timer calculation)
 }
 
 #[derive(Debug, Serialize, Deserialize)]

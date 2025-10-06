@@ -882,6 +882,7 @@ pub async fn get_recording_state(state: State<'_, AppState>) -> Result<Recording
             recording_mode: Some(session.recording_mode),
             card_id: Some(session.card_id.clone()),
             problem_id: Some(session.problem_id.clone()),
+            pause_duration: session.pause_duration,
         })
     } else {
         Ok(RecordingState {
@@ -893,6 +894,7 @@ pub async fn get_recording_state(state: State<'_, AppState>) -> Result<Recording
             recording_mode: None,
             card_id: None,
             problem_id: None,
+            pause_duration: 0,
         })
     }
 }
